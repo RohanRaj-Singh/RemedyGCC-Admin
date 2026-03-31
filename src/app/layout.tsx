@@ -5,6 +5,7 @@
 
 import type { Metadata } from 'next';
 import './globals.css';
+import { DevBanner } from '@/components/layout/DevBanner';
 
 export const metadata: Metadata = {
   title: 'RemedyGCC | Super Admin',
@@ -19,6 +20,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
+        <DevBanner />
         <div className="min-h-screen">
           {children}
         </div>
