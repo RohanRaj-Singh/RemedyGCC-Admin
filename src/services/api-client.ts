@@ -2,8 +2,9 @@
  * API Client - Base HTTP client for making API requests
  * Follows the dependency injection pattern
  */
+import { getApiBaseUrl } from "./api-config";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = getApiBaseUrl();
 
 export interface ApiResponse<T> {
   data: T | null;
