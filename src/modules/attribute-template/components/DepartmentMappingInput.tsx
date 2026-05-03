@@ -1,146 +1,132 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Plus, ChevronDown, Network } from 'lucide-react';
-import { FieldOption, DepartmentOption } from '../types';
+import { ChevronDown, Network, Plus, X } from 'lucide-react';
+import { DepartmentOption, FunctionOption } from '../types';
 
 interface DepartmentMappingInputProps {
-  streams: FieldOption[];
+  functions: FunctionOption[];
   departments: DepartmentOption[];
   onChange: (departments: DepartmentOption[]) => void;
 }
 
 export function DepartmentMappingInput({
-  streams,
+  functions,
   departments,
   onChange,
 }: DepartmentMappingInputProps) {
-  const [newDept, setNewDept] = useState('');
-  const [selectedStreamId, setSelectedStreamId] = useState('');
+  const [newDepartment, setNewDepartment] = useState('');
+  const [selectedFunctionId, setSelectedFunctionId] = useState('');
 
-  const handleAdd = () => {
-    if (!newDept.trim() || !selectedStreamId) return;
-    
-    const id = newDept.toLowerCase().replace(/\s+/g, '-');
-    
-    const newDepartment: DepartmentOption = {
-      id,
-      label: newDept.trim(),
-      streamId: selectedStreamId,
-    };
-    
-    onChange([...departments, newDepartment]);
-    setNewDept('');
-    setSelectedStreamId('');
-  };
-
-  const handleRemove = (id: string) => {
-    onChange(departments.filter(d => d.id !== id));
-  };
-
-  // Group departments by stream for display
-  const groupedDepartments = streams.map(stream => ({
-    stream,
-    departments: departments.filter(d => d.streamId === stream.id),
-  }));
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleAdd();
+  function handleAdd() {
+    if (!newDepartment.trim() || !selectedFunctionId) {
+      return;
     }
-  };
+
+    onChange([
+      ...departments,
+      {
+        id: `${selectedFunctionId}-${newDepartment.toLowerCase().replace(/\s+/g, '-')}`,
+        label: newDepartment.trim(),
+        functionId: selectedFunctionId,
+      },
+    ]);
+
+    setNewDepartment('');
+    setSelectedFunctionId('');
+  }
+
+  function handleRemove(id: string) {
+    onChange(departments.filter((item) => item.id !== id));
+  }
+
+  const groupedDepartments = functions.map((func) => ({
+    func,
+    items: departments.filter((item) => item.functionId === func.id),
+  }));
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Network className="w-4 h-4 text-primary" />
-        <label className="block text-sm font-semibold text-gray-700">
-          Department Mapping
-        </label>
+        <Network className="h-4 w-4 text-primary" />
+        <label className="text-sm font-semibold text-gray-700">Department Mapping</label>
         <span className="text-xs text-gray-400">({departments.length})</span>
       </div>
-      
-      <p className="text-xs text-gray-500 mb-4">
-        Each department must be linked to a stream. Departments will be filtered based on selected stream.
+
+      <p className="text-xs text-gray-500">
+        Each department must be linked to one function, completing the required chain.
       </p>
 
-      {/* Existing departments grouped by stream */}
       <div className="grid gap-4">
-        {groupedDepartments.map(({ stream, departments: depts }) => (
-          depts.length > 0 && (
-            <div key={stream.id} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-xs font-bold text-primary uppercase tracking-wide bg-primary/10 px-2 py-1 rounded-md">
-                  {stream.label}
+        {groupedDepartments.map(({ func, items }) =>
+          items.length > 0 ? (
+            <div key={func.id} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-bold uppercase tracking-wide text-primary">
+                  {func.label}
                 </span>
-                <span className="text-xs text-gray-400">
-                  ({depts.length} departments)
-                </span>
+                <span className="text-xs text-gray-400">({items.length} departments)</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {depts.map((dept) => (
+                {items.map((item) => (
                   <div
-                    key={dept.id}
-                    className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-sm hover:border-primary/30 transition-colors"
+                    key={item.id}
+                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm"
                   >
-                    <span>{dept.label}</span>
+                    <span>{item.label}</span>
                     <button
-                      onClick={() => handleRemove(dept.id)}
-                      className="ml-1 hover:text-red-600 transition-colors"
+                      type="button"
+                      onClick={() => handleRemove(item.id)}
+                      className="ml-1 transition-colors hover:text-red-600"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 ))}
               </div>
             </div>
-          )
-        ))}
+          ) : null
+        )}
       </div>
 
       {departments.length === 0 && (
-        <div className="text-sm text-gray-400 italic py-2 bg-gray-50 rounded-lg px-4">
+        <div className="rounded-lg bg-gray-50 px-4 py-2 text-sm italic text-gray-400">
           No departments mapped yet
         </div>
       )}
 
-      {/* Add new department */}
-      <div className="flex flex-col sm:flex-row gap-3 pt-2">
-        {/* Stream selector */}
+      <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
           <select
-            value={selectedStreamId}
-            onChange={(e) => setSelectedStreamId(e.target.value)}
-            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm appearance-none bg-white cursor-pointer bg-gray-50/50"
+            value={selectedFunctionId}
+            onChange={(event) => setSelectedFunctionId(event.target.value)}
+            disabled={functions.length === 0}
+            className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-gray-100"
           >
-            <option value="">Select Stream...</option>
-            {streams.map((stream) => (
-              <option key={stream.id} value={stream.id}>
-                {stream.label}
+            <option value="">Select Function...</option>
+            {functions.map((func) => (
+              <option key={func.id} value={func.id}>
+                {func.label}
               </option>
             ))}
           </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         </div>
 
-        {/* Department name input */}
         <input
-          type="text"
-          value={newDept}
-          onChange={(e) => setNewDept(e.target.value)}
-          onKeyDown={handleKeyDown}
+          value={newDepartment}
+          onChange={(event) => setNewDepartment(event.target.value)}
           placeholder="Department name"
-          className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm bg-gray-50/50"
+          className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
 
-        {/* Add button */}
         <button
+          type="button"
           onClick={handleAdd}
-          disabled={!newDept.trim() || !selectedStreamId}
-          className="px-5 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 text-sm font-medium shadow-sm hover:shadow-md"
+          disabled={!newDepartment.trim() || !selectedFunctionId || functions.length === 0}
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="h-4 w-4" />
           Add
         </button>
       </div>

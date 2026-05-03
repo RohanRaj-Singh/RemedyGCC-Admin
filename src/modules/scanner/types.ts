@@ -1,65 +1,150 @@
 /**
  * Scanner Module Types
- * Defines survey scanner structures
+ * Strict admin-side scanner builder domain for RemedyGCC.
  */
 
 import { AttributeTemplate } from '../attribute-template/types';
 
-// Question in a scanner survey
-export interface Question {
-  id: string;
-  text: string;
-  options: string[];
-  weight: number;
+export interface LocalizedText {
+  en: string;
+  ar: string;
 }
 
-// Scanner status
 export type ScannerStatus = 'draft' | 'published' | 'archived';
+export type ScannerVersionStatus = 'draft' | 'published';
+export type CategoryPolarity = 'positive' | 'negative';
 
-// Scanner entity
-export interface Scanner {
+export interface QuestionOption {
   id: string;
-  name: string;
-  description?: string;
-  templateId: string;
-  templateName?: string; // Populated from template
+  label: LocalizedText;
+  scoreValue: number;
+}
+
+export interface FollowUpTriggerCondition {
+  questionId: string;
+  optionIds: string[];
+}
+
+export interface Question {
+  id: string;
+  subdomainId: string;
+  text: LocalizedText;
+  weight: number;
+  isFollowUp: boolean;
+  triggerCondition?: FollowUpTriggerCondition;
+  options: QuestionOption[];
+}
+
+export interface Subdomain {
+  id: string;
+  categoryId: string;
+  name: LocalizedText;
+  weight: number;
   questions: Question[];
-  status: ScannerStatus;
+}
+
+export interface Category {
+  id: string;
+  slot: 1 | 2 | 3 | 4 | 5;
+  name: LocalizedText;
+  polarity: CategoryPolarity;
+  weight: number;
+  subdomains: Subdomain[];
+}
+
+export interface ScannerVersion {
+  id: string;
+  scannerId: string;
+  versionNumber: number;
+  status: ScannerVersionStatus;
+  sourceVersionId: string | null;
+  attributeTemplateId: string;
+  attributeTemplateName?: string;
+  attributeTemplateSnapshot: AttributeTemplate | null;
+  categories: Category[];
+  responseCount: number;
+  publishedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
 
-// Create Scanner DTO
-export interface CreateScannerDto {
-  name: string;
-  description?: string;
-  templateId: string;
-  questions: Omit<Question, 'id'>[];
+export interface ScannerVersionSummary {
+  id: string;
+  versionNumber: number;
+  status: ScannerVersionStatus;
+  sourceVersionId: string | null;
+  responseCount: number;
+  publishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  isImmutable: boolean;
 }
 
-// Update Scanner DTO
-export interface UpdateScannerDto {
-  name?: string;
-  description?: string;
-  questions?: Omit<Question, 'id'>[];
-  status?: ScannerStatus;
+export interface Scanner {
+  id: string;
+  name: LocalizedText;
+  description?: LocalizedText;
+  status: ScannerStatus;
+  latestVersionNumber: number;
+  draftVersionId: string | null;
+  publishedVersionId: string | null;
+  attributeTemplateId: string | null;
+  attributeTemplateName?: string;
+  categoryCount: number;
+  subdomainCount: number;
+  questionCount: number;
+  hasResponses: boolean;
+  hasUnpublishedChanges: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
-// Template option for selector
+export interface ScannerDetail extends Scanner {
+  draftVersion: ScannerVersion | null;
+  publishedVersion: ScannerVersion | null;
+  versions: ScannerVersionSummary[];
+}
+
 export interface TemplateOption {
   id: string;
   name: string;
   description?: string;
-  fieldCount: number;
+  streamCount: number;
+  locationCount: number;
+  functionCount: number;
+  departmentCount: number;
 }
 
-// Weight validation result
-export interface WeightValidation {
+export type ValidationIssueLevel =
+  | 'scanner'
+  | 'category'
+  | 'subdomain'
+  | 'question'
+  | 'attribute-template';
+
+export interface ValidationIssue {
+  code: string;
+  level: ValidationIssueLevel;
+  entityId?: string;
+  path: string;
+  message: string;
+  blocking: boolean;
+}
+
+export interface ValidationResult {
   isValid: boolean;
-  total: number;
-  remaining: number;
-  hasError: boolean;
-  hasWarning: boolean;
-  error?: string;
-  warning?: string;
+  issues: ValidationIssue[];
+}
+
+export interface CreateScannerDto {
+  name: LocalizedText;
+  description?: LocalizedText;
+  attributeTemplateId: string;
+}
+
+export interface SaveScannerDraftDto {
+  name: LocalizedText;
+  description?: LocalizedText;
+  attributeTemplateId: string;
+  categories: Category[];
 }

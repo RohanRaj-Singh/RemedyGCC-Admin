@@ -1,11 +1,15 @@
-/**
- * Scanner Module Components
- */
-
 export { ScannerForm } from './ScannerForm';
+export { CategoryBuilder } from './CategoryBuilder';
+export { CategoryCard } from './CategoryCard';
+export { FollowUpTriggerEditor } from './FollowUpTriggerEditor';
+export { QuestionBuilder } from './QuestionBuilder';
+export { QuestionCard } from './QuestionCard';
+export { StepNavigation } from './StepNavigation';
+export { SubdomainBuilder } from './SubdomainBuilder';
+export { SubdomainCard } from './SubdomainCard';
 export { TemplateSelector } from './TemplateSelector';
 export { TemplatePreview } from './TemplatePreview';
-export { QuestionList } from './QuestionBuilder/QuestionList';
-export { QuestionItem } from './QuestionBuilder/QuestionItem';
-export { WeightInput } from './QuestionBuilder/WeightInput';
-export { WeightSummary } from './QuestionBuilder/WeightSummary';
+export { ValidationBanner } from './ValidationBanner';
+export { VersionHistory } from './VersionHistory';
+export { WeightSummary } from './WeightSummary';
+export { WeightSummaryPanel } from './WeightSummaryPanel';

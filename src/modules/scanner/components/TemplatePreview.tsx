@@ -1,11 +1,7 @@
-/**
- * Template Preview Component
- * Shows read-only summary of selected template
- */
-
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Building2, MapPinned, Network, Route } from 'lucide-react';
 import { AttributeTemplate } from '../../attribute-template/types';
 import { getTemplateById } from '../service';
 
@@ -15,105 +11,86 @@ interface TemplatePreviewProps {
 
 export function TemplatePreview({ templateId }: TemplatePreviewProps) {
   const [template, setTemplate] = useState<AttributeTemplate | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const loadTemplate = async () => {
+    async function loadTemplate() {
       if (!templateId) {
-        setLoading(false);
+        setTemplate(null);
         return;
       }
+
+      setLoading(true);
       try {
-        const data = await getTemplateById(templateId);
-        setTemplate(data);
-      } catch (error) {
-        console.error('Failed to load template:', error);
+        const result = await getTemplateById(templateId);
+        setTemplate(result);
       } finally {
         setLoading(false);
       }
-    };
-    loadTemplate();
+    }
+
+    void loadTemplate();
   }, [templateId]);
 
   if (!templateId) {
     return (
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <p className="text-gray-500 text-sm">Select a template to view details</p>
+      <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+        Select an attribute template to preview the assignment hierarchy.
       </div>
     );
   }
 
   if (loading) {
-    return (
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 animate-pulse">
-        <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-        <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-      </div>
-    );
+    return <div className="h-36 animate-pulse rounded-2xl bg-gray-100" />;
   }
 
   if (!template) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <p className="text-red-600 text-sm">Template not found</p>
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        The selected template could not be loaded.
       </div>
     );
   }
 
-  const fieldGroups = [
-    { label: 'Streams', items: template.stream },
-    { label: 'Locations', items: template.location },
-    { label: 'Departments', items: template.department },
-    { label: 'Seniority', items: template.seniority },
+  const cards = [
+    { label: 'Streams', count: template.stream.length, icon: Building2 },
+    { label: 'Locations', count: template.location.length, icon: MapPinned },
+    { label: 'Functions', count: template.function.length, icon: Route },
+    { label: 'Departments', count: template.department.length, icon: Network },
   ];
 
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-      <div className="flex items-start justify-between mb-3">
+    <div className="rounded-2xl border border-primary/10 bg-gradient-to-br from-primary/5 via-white to-primary/10 p-5">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h4 className="font-semibold text-blue-900">{template.name}</h4>
+          <h4 className="font-semibold text-gray-900">{template.name}</h4>
           {template.description && (
-            <p className="text-sm text-blue-700 mt-1">{template.description}</p>
+            <p className="mt-1 text-sm text-gray-600">{template.description}</p>
           )}
         </div>
-        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-          Read Only
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-primary shadow-sm">
+          Snapshot on Publish
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {fieldGroups.map((group) => (
-          group.items.length > 0 && (
-            <div key={group.label}>
-              <span className="text-xs font-medium text-blue-600 uppercase tracking-wider">
-                {group.label}
-              </span>
-              <div className="flex flex-wrap gap-1 mt-1">
-                {group.items.slice(0, 4).map((item) => (
-                  <span
-                    key={item.id}
-                    className="px-2 py-0.5 bg-white text-blue-800 text-xs rounded border border-blue-200"
-                  >
-                    {item.label}
-                  </span>
-                ))}
-                {group.items.length > 4 && (
-                  <span className="px-2 py-0.5 text-blue-600 text-xs">
-                    +{group.items.length - 4} more
-                  </span>
-                )}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <div key={card.label} className="rounded-xl border border-white/60 bg-white/80 p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <Icon className="h-4 w-4 text-primary" />
+                <span>{card.label}</span>
               </div>
+              <div className="mt-2 text-2xl font-semibold text-gray-900">{card.count}</div>
             </div>
-          )
-        ))}
+          );
+        })}
       </div>
 
-      <div className="mt-3 pt-3 border-t border-blue-200">
-        <p className="text-xs text-blue-600">
-          This template will be used to collect user attributes when they complete this survey.
-          Attributes are defined in the template and cannot be modified here.
-        </p>
-      </div>
+      <p className="mt-4 text-xs text-gray-600">
+        Templates define the required admin hierarchy used later for assignment validation.
+      </p>
     </div>
   );
 }

@@ -59,14 +59,19 @@ export const DEFAULT_QUESTION_TYPES: Record<FieldType, QuestionType> = {
   age: 'buttonRadio',
 };
 
-// Department option linked to a Stream
-export interface DepartmentOption extends FieldOption {
-  streamId: string; // Required: each department must be linked to a stream
+// Location option linked to a Stream
+export interface LocationOption extends FieldOption {
+  streamId: string; // Required: each location must be linked to a stream
 }
 
-// Function option linked to a Department
+// Function option linked to a Location
 export interface FunctionOption extends FieldOption {
-  departmentId: string; // Required: each function must be linked to a department
+  locationId: string; // Required: each function must be linked to a location
+}
+
+// Department option linked to a Function
+export interface DepartmentOption extends FieldOption {
+  functionId: string; // Required: each department must be linked to a function
 }
 
 // Complete template field definition
@@ -88,9 +93,9 @@ export interface AttributeTemplate {
   
   // Field configurations
   stream: FieldOption[];
-  location: FieldOption[];
-  function: FunctionOption[]; // Functions linked to departments
-  department: DepartmentOption[]; // Departments linked to streams
+  location: LocationOption[]; // Locations linked to streams
+  function: FunctionOption[]; // Functions linked to locations
+  department: DepartmentOption[]; // Departments linked to functions
   seniority: FieldOption[];
   
   // Fixed fields (not editable)
@@ -103,7 +108,7 @@ export interface CreateAttributeTemplateDto {
   name: string;
   description?: string;
   stream: FieldOption[];
-  location: FieldOption[];
+  location: LocationOption[];
   function: FunctionOption[];
   department: DepartmentOption[];
   seniority: FieldOption[];

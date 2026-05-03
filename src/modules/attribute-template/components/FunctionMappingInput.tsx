@@ -1,156 +1,135 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Plus, ChevronDown, Briefcase } from 'lucide-react';
-import { FieldOption, DepartmentOption, FunctionOption } from '../types';
+import { Briefcase, ChevronDown, Plus, X } from 'lucide-react';
+import { FunctionOption, LocationOption } from '../types';
 
 interface FunctionMappingInputProps {
-  departments: DepartmentOption[];
+  locations: LocationOption[];
   functions: FunctionOption[];
   onChange: (functions: FunctionOption[]) => void;
 }
 
 export function FunctionMappingInput({
-  departments,
+  locations,
   functions,
   onChange,
 }: FunctionMappingInputProps) {
   const [newFunction, setNewFunction] = useState('');
-  const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
+  const [selectedLocationId, setSelectedLocationId] = useState('');
 
-  const handleAdd = () => {
-    if (!newFunction.trim() || !selectedDepartmentId) return;
-    
-    const id = newFunction.toLowerCase().replace(/\s+/g, '-');
-    
-    const newFunc: FunctionOption = {
-      id,
-      label: newFunction.trim(),
-      departmentId: selectedDepartmentId,
-    };
-    
-    onChange([...functions, newFunc]);
-    setNewFunction('');
-    setSelectedDepartmentId('');
-  };
-
-  const handleRemove = (id: string) => {
-    onChange(functions.filter(f => f.id !== id));
-  };
-
-  // Group functions by department for display
-  const groupedFunctions = departments.map(dept => ({
-    department: dept,
-    funcs: functions.filter(f => f.departmentId === dept.id),
-  }));
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleAdd();
+  function handleAdd() {
+    if (!newFunction.trim() || !selectedLocationId) {
+      return;
     }
-  };
+
+    onChange([
+      ...functions,
+      {
+        id: `${selectedLocationId}-${newFunction.toLowerCase().replace(/\s+/g, '-')}`,
+        label: newFunction.trim(),
+        locationId: selectedLocationId,
+      },
+    ]);
+
+    setNewFunction('');
+    setSelectedLocationId('');
+  }
+
+  function handleRemove(id: string) {
+    onChange(functions.filter((item) => item.id !== id));
+  }
+
+  const groupedFunctions = locations.map((location) => ({
+    location,
+    items: functions.filter((item) => item.locationId === location.id),
+  }));
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Briefcase className="w-4 h-4 text-primary" />
-        <label className="block text-sm font-semibold text-gray-700">
-          Function Mapping
-        </label>
+        <Briefcase className="h-4 w-4 text-primary" />
+        <label className="text-sm font-semibold text-gray-700">Function Mapping</label>
         <span className="text-xs text-gray-400">({functions.length})</span>
       </div>
-      
-      <p className="text-xs text-gray-500 mb-4">
-        Each function must be linked to a department. Functions will be filtered based on selected department.
+
+      <p className="text-xs text-gray-500">
+        Each function must be linked to one location.
       </p>
 
-      {/* Existing functions grouped by department */}
       <div className="grid gap-4">
-        {groupedFunctions.map(({ department, funcs }) => (
-          funcs.length > 0 && (
-            <div key={department.id} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-xs font-bold text-primary uppercase tracking-wide bg-primary/10 px-2 py-1 rounded-md">
-                  {department.label}
+        {groupedFunctions.map(({ location, items }) =>
+          items.length > 0 ? (
+            <div key={location.id} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-bold uppercase tracking-wide text-primary">
+                  {location.label}
                 </span>
-                <span className="text-xs text-gray-400">
-                  ({funcs.length} functions)
-                </span>
+                <span className="text-xs text-gray-400">({items.length} functions)</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {funcs.map((func) => (
+                {items.map((item) => (
                   <div
-                    key={func.id}
-                    className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium shadow-sm hover:border-primary/30 transition-colors"
+                    key={item.id}
+                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm"
                   >
-                    <span>{func.label}</span>
+                    <span>{item.label}</span>
                     <button
-                      onClick={() => handleRemove(func.id)}
-                      className="ml-1 hover:text-red-600 transition-colors"
+                      type="button"
+                      onClick={() => handleRemove(item.id)}
+                      className="ml-1 transition-colors hover:text-red-600"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 ))}
               </div>
             </div>
-          )
-        ))}
+          ) : null
+        )}
       </div>
 
       {functions.length === 0 && (
-        <div className="text-sm text-gray-400 italic py-2 bg-gray-50 rounded-lg px-4">
+        <div className="rounded-lg bg-gray-50 px-4 py-2 text-sm italic text-gray-400">
           No functions mapped yet
         </div>
       )}
 
-      {/* Add new function */}
-      <div className="flex flex-col sm:flex-row gap-3 pt-2">
-        {/* Department selector */}
+      <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
           <select
-            value={selectedDepartmentId}
-            onChange={(e) => setSelectedDepartmentId(e.target.value)}
-            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm appearance-none bg-white cursor-pointer bg-gray-50/50"
-            disabled={departments.length === 0}
+            value={selectedLocationId}
+            onChange={(event) => setSelectedLocationId(event.target.value)}
+            disabled={locations.length === 0}
+            className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-gray-100"
           >
-            <option value="">Select Department...</option>
-            {departments.map((dept) => (
-              <option key={dept.id} value={dept.id}>
-                {dept.label}
+            <option value="">Select Location...</option>
+            {locations.map((location) => (
+              <option key={location.id} value={location.id}>
+                {location.label}
               </option>
             ))}
           </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         </div>
 
-        {/* Function name input */}
         <input
-          type="text"
           value={newFunction}
-          onChange={(e) => setNewFunction(e.target.value)}
-          onKeyDown={handleKeyDown}
+          onChange={(event) => setNewFunction(event.target.value)}
           placeholder="Function name"
-          className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm bg-gray-50/50"
+          className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
 
-        {/* Add button */}
         <button
+          type="button"
           onClick={handleAdd}
-          disabled={!newFunction.trim() || !selectedDepartmentId || departments.length === 0}
-          className="px-5 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 text-sm font-medium shadow-sm hover:shadow-md"
+          disabled={!newFunction.trim() || !selectedLocationId || locations.length === 0}
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="h-4 w-4" />
           Add
         </button>
       </div>
-
-      {departments.length === 0 && (
-        <p className="text-xs text-amber-600 bg-amber-50 p-3 rounded-lg">
-          ⚠️ Please add departments first before adding functions.
-        </p>
-      )}
     </div>
   );
 }

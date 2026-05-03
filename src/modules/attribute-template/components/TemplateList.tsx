@@ -82,7 +82,7 @@ export function TemplateList() {
               Attribute Templates
             </h1>
             <p className="text-gray-500 mt-1">
-              Manage user attribute templates for scanners
+              Manage linked attribute templates for scanner assignment rules
             </p>
           </div>
           
@@ -106,8 +106,8 @@ export function TemplateList() {
             <div className="text-sm text-gray-500">Total Streams</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-gray-900">{templates.reduce((acc, t) => acc + t.department.length, 0)}</div>
-            <div className="text-sm text-gray-500">Total Departments</div>
+            <div className="text-2xl font-bold text-gray-900">{templates.reduce((acc, t) => acc + t.function.length, 0)}</div>
+            <div className="text-sm text-gray-500">Total Functions</div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-gray-900">{templates.reduce((acc, t) => acc + t.location.length, 0)}</div>
@@ -167,12 +167,16 @@ export function TemplateList() {
                       <span>Streams</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-gray-600">
-                      <span className="font-medium">{template.department.length}</span>
-                      <span>Departments</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-gray-600">
                       <span className="font-medium">{template.location.length}</span>
                       <span>Locations</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-gray-600">
+                      <span className="font-medium">{template.function.length}</span>
+                      <span>Functions</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-gray-600">
+                      <span className="font-medium">{template.department.length}</span>
+                      <span>Departments</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-gray-600">
                       <span className="font-medium">{template.seniority.length}</span>

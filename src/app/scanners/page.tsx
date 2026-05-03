@@ -55,7 +55,7 @@ export default function ScannerListPage() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Scanners</h1>
               <p className="mt-1 text-sm text-gray-500">
-                Manage survey scanners for collecting feedback
+                Manage structured assessment scanners and publish immutable versions
               </p>
             </div>
             <Link
@@ -119,25 +119,38 @@ export default function ScannerListPage() {
                 {scanners.map((scanner) => (
                   <tr key={scanner.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">{scanner.name}</div>
-                      {scanner.description && (
+                      <div className="font-medium text-gray-900">{scanner.name.en}</div>
+                      {scanner.description?.en && (
                         <div className="text-sm text-gray-500 truncate max-w-xs">
-                          {scanner.description}
+                          {scanner.description.en}
                         </div>
                       )}
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-gray-600">
-                        {scanner.templateName || 'N/A'}
+                        {scanner.attributeTemplateName || 'N/A'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm text-gray-600">
-                        {scanner.questions.length} questions
-                      </span>
+                      <div className="text-sm text-gray-600">
+                        {scanner.questionCount} questions
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {scanner.subdomainCount} subdomains
+                      </div>
                     </td>
                     <td className="px-6 py-4">
-                      {getStatusBadge(scanner.status)}
+                      <div className="flex flex-col items-start gap-1">
+                        {getStatusBadge(scanner.status)}
+                        <span className="text-xs text-gray-500">
+                          v{scanner.latestVersionNumber}
+                        </span>
+                        {scanner.hasUnpublishedChanges && (
+                          <span className="text-xs text-amber-600">
+                            Draft pending
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <Link

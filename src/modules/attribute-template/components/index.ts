@@ -1,3 +1,4 @@
+export { LocationMappingInput } from './LocationMappingInput';
 export { OptionsBuilder } from './OptionsBuilder';
 export { DepartmentMappingInput } from './DepartmentMappingInput';
 export { FunctionMappingInput } from './FunctionMappingInput';

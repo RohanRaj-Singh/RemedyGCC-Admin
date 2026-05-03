@@ -239,11 +239,11 @@ export async function getAvailableScanners(): Promise<ScannerOption[]> {
   const scanners = await getScanners();
   
   return scanners
-    .filter((s: { status: string }) => s.status === 'published')
-    .map((s: { id: string; name: string; description?: string; status: string }) => ({
+    .filter((s: { publishedVersionId: string | null; status: string }) => Boolean(s.publishedVersionId) && s.status === 'published')
+    .map((s: { id: string; name: { en: string }; description?: { en: string }; status: string }) => ({
       id: s.id,
-      name: s.name,
-      description: s.description,
+      name: s.name.en,
+      description: s.description?.en,
       status: s.status,
     }));
 }
@@ -251,7 +251,7 @@ export async function getAvailableScanners(): Promise<ScannerOption[]> {
 export async function getScannerName(scannerId: string): Promise<string | null> {
   const { getScannerById } = await import('../scanner/service');
   const scanner = await getScannerById(scannerId);
-  return scanner?.name || null;
+  return scanner?.name.en || null;
 }
 
 export async function getTenantStats(): Promise<{

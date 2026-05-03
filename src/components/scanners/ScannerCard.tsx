@@ -40,16 +40,26 @@ export function ScannerCard({ scanner, onEdit, onDelete }: ScannerCardProps) {
             )} />
           </div>
           <div>
-            <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>{scanner.name}</h3>
-            <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>{scanner.description || 'No description'}</p>
+            <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>{scanner.name.en}</h3>
+            <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
+              {scanner.description?.en || 'No description'}
+            </p>
             <div className="flex items-center gap-4 mt-3">
               <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                {scanner.questions.length} questions
+                {scanner.questionCount} questions
               </span>
               <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                Template: {scanner.templateName || 'N/A'}
+                Template: {scanner.attributeTemplateName || 'N/A'}
+              </span>
+              <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                v{scanner.latestVersionNumber}
               </span>
             </div>
+            {scanner.hasUnpublishedChanges && (
+              <div className="mt-3 inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+                Draft changes pending publish
+              </div>
+            )}
           </div>
         </div>
         <Link
