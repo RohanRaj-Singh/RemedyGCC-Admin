@@ -1,306 +1,332 @@
 'use client';
 
-import { memo, useState, useEffect, useCallback } from 'react';
-import { Tenant, TenantStatus, ScannerOption } from '../types';
-import { getAvailableScanners } from '../service';
-import { Scan, X, Loader2 } from 'lucide-react';
+import { memo, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Link2 } from 'lucide-react';
+import type { RuntimeConfigOption, Tenant, TenantStatus } from '../types';
+import {
+  getTenantHostname,
+  getTenantStatusMeta,
+  isTenantSlugLocked,
+  normalizeTenantSlugInput,
+  validateTenantSlug,
+} from '../utils';
 import { cn } from '@/lib/utils';
 
 interface TenantFormProps {
   tenant?: Tenant;
+  runtimeConfigs?: RuntimeConfigOption[];
   onSubmit: (data: {
     name: string;
-    subdomain: string;
+    slug: string;
     status: TenantStatus;
+    activeRuntimeConfigId: string | null;
   }) => void;
   onCancel: () => void;
   isLoading?: boolean;
   error?: string | null;
-  currentScannerId?: string;
-  currentScannerName?: string;
-  onAssignScanner?: (scannerId: string | null) => void;
 }
 
-const STATUS_OPTIONS: { value: TenantStatus; label: string }[] = [
-  { value: 'active', label: 'Active' },
-  { value: 'inactive', label: 'Inactive' },
-  { value: 'suspended', label: 'Suspended' },
-];
+const STATUS_OPTIONS: TenantStatus[] = ['draft', 'active', 'disabled', 'archived'];
 
-export const TenantForm = memo(function TenantForm({ 
-  tenant, 
-  onSubmit, 
-  onCancel, 
-  isLoading, 
+export const TenantForm = memo(function TenantForm({
+  tenant,
+  runtimeConfigs = [],
+  onSubmit,
+  onCancel,
+  isLoading,
   error,
-  currentScannerId,
-  currentScannerName,
-  onAssignScanner 
 }: TenantFormProps) {
   const [name, setName] = useState(tenant?.name || '');
-  const [subdomain, setSubdomain] = useState(tenant?.subdomain || '');
-  const [status, setStatus] = useState<TenantStatus>(tenant?.status || 'active');
-  const [subdomainError, setSubdomainError] = useState('');
-  
-  const [scanners, setScanners] = useState<ScannerOption[]>([]);
-  const [scannerLoading, setScannerLoading] = useState(false);
-  const [selectedScannerId, setSelectedScannerId] = useState<string>(currentScannerId || '');
+  const [slug, setSlug] = useState(tenant?.slug || '');
+  const [status, setStatus] = useState<TenantStatus>(tenant?.status || 'draft');
+  const [activeRuntimeConfigId, setActiveRuntimeConfigId] = useState<string | null>(
+    tenant?.activeRuntimeConfigId || null,
+  );
+  const [slugTouched, setSlugTouched] = useState(Boolean(tenant?.slug));
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
     setName(tenant?.name || '');
-    setSubdomain(tenant?.subdomain || '');
-    setStatus(tenant?.status || 'active');
+    setSlug(tenant?.slug || '');
+    setStatus(tenant?.status || 'draft');
+    setActiveRuntimeConfigId(tenant?.activeRuntimeConfigId || null);
+    setSlugTouched(Boolean(tenant?.slug));
+    setFormError('');
   }, [tenant]);
 
-  useEffect(() => {
-    setSelectedScannerId(currentScannerId || '');
-  }, [currentScannerId]);
+  const slugLocked = isTenantSlugLocked(tenant);
+  const tenantLocked = tenant?.status === 'archived';
 
-  const loadScanners = useCallback(async () => {
-    try {
-      setScannerLoading(true);
-      const availableScanners = await getAvailableScanners();
-      setScanners(availableScanners);
-    } catch (err) {
-      console.error('Failed to load scanners', err);
-    } finally {
-      setScannerLoading(false);
-    }
-  }, []);
+  const slugValidation = useMemo(() => validateTenantSlug(slug), [slug]);
+  const selectedRuntimeConfig = useMemo(
+    () =>
+      runtimeConfigs.find(
+        (runtimeConfig) => runtimeConfig.runtimeConfigId === activeRuntimeConfigId,
+      ) ?? null,
+    [activeRuntimeConfigId, runtimeConfigs],
+  );
 
-  useEffect(() => {
-    if (onAssignScanner) {
-      void loadScanners();
-    }
-  }, [loadScanners, onAssignScanner]);
+  const labelStyle = 'block text-sm font-medium';
+  const inputStyle =
+    'w-full rounded-lg border border-[var(--input)] px-4 py-2.5 focus:border-[var(--ring)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]';
+  const buttonStyle = 'rounded-lg px-6 py-2.5 font-medium transition-colors';
 
-  const handleScannerChange = (newScannerId: string) => {
-    setSelectedScannerId(newScannerId);
-    if (onAssignScanner) {
-      onAssignScanner(newScannerId || null);
+  const handleNameChange = (value: string) => {
+    setName(value);
+    if (!slugTouched && !slugLocked) {
+      setSlug(normalizeTenantSlugInput(value));
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const subdomainRegex = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
-    if (!subdomainRegex.test(subdomain)) {
-      setSubdomainError('Subdomain must be lowercase alphanumeric with hyphens (no leading/trailing hyphens)');
+  const handleSlugChange = (value: string) => {
+    setSlugTouched(true);
+    setSlug(normalizeTenantSlugInput(value));
+    setFormError('');
+  };
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (tenantLocked) {
       return;
     }
-    
-    setSubdomainError('');
-    onSubmit({ 
-      name, 
-      subdomain, 
+
+    if (slugValidation.errors.length > 0) {
+      setFormError(slugValidation.errors[0]);
+      return;
+    }
+
+    if (status === 'active' && !activeRuntimeConfigId) {
+      setFormError('Active tenants must link to a published runtime config.');
+      return;
+    }
+
+    setFormError('');
+    onSubmit({
+      name,
+      slug: slugValidation.normalized,
       status,
+      activeRuntimeConfigId,
     });
   };
 
-  const labelStyle = 'block text-sm font-medium';
-  const inputStyle = 'w-full px-4 py-2.5 rounded-lg border border-[var(--input)] focus:ring-2 focus:ring-[var(--ring)] focus:border-[var(--ring)] outline-none transition-all';
-  const errorStyle = 'p-4 rounded-lg border text-sm';
-  const buttonStyle = 'px-6 py-2.5 rounded-lg font-medium transition-colors';
-
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {error && (
-        <div 
-          className={errorStyle}
-          style={{ 
-            backgroundColor: 'hsl(0 84% 60% / 0.1)', 
-            borderColor: 'var(--destructive)', 
-            color: 'var(--destructive)' 
+      {(error || formError) && (
+        <div
+          className="rounded-lg border p-4 text-sm"
+          style={{
+            backgroundColor: 'hsl(0 84% 60% / 0.1)',
+            borderColor: 'var(--destructive)',
+            color: 'var(--destructive)',
           }}
         >
-          {error}
+          {error || formError}
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-6">
+      {tenantLocked && (
+        <div
+          className="rounded-lg border p-4 text-sm"
+          style={{
+            backgroundColor: 'rgba(82, 82, 91, 0.08)',
+            borderColor: 'rgba(82, 82, 91, 0.25)',
+            color: '#3f3f46',
+          }}
+        >
+          Archived tenants are protected. Identity, status, and runtime links are locked to preserve historical runtime references.
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div className="space-y-2">
           <label htmlFor="name" className={labelStyle} style={{ color: 'var(--foreground)' }}>
             Tenant Name <span style={{ color: 'var(--destructive)' }}>*</span>
           </label>
           <input
-            type="text"
             id="name"
+            type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(event) => handleNameChange(event.target.value)}
             required
+            disabled={tenantLocked}
             className={inputStyle}
-            placeholder="e.g., Acme Corporation"
+            placeholder="e.g., Acme Health"
           />
         </div>
 
         <div className="space-y-2">
-          <label htmlFor="subdomain" className={labelStyle} style={{ color: 'var(--foreground)' }}>
-            Subdomain <span style={{ color: 'var(--destructive)' }}>*</span>
+          <label htmlFor="slug" className={labelStyle} style={{ color: 'var(--foreground)' }}>
+            Tenant Slug <span style={{ color: 'var(--destructive)' }}>*</span>
           </label>
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
             <input
+              id="slug"
               type="text"
-              id="subdomain"
-              value={subdomain}
-              onChange={(e) => {
-                setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''));
-                setSubdomainError('');
-              }}
+              value={slug}
+              onChange={(event) => handleSlugChange(event.target.value)}
               required
+              disabled={slugLocked || tenantLocked}
               className={cn(
                 inputStyle,
-                "rounded-r-none",
-                subdomainError && "border-[var(--destructive)]"
+                slugValidation.errors.length > 0 && 'border-[var(--destructive)]',
               )}
-              placeholder="e.g., acme"
-              disabled={!!tenant}
+              placeholder="e.g., acme-health"
             />
-            <span 
-              className="px-4 py-2.5 border border-l-0 rounded-r-lg text-sm"
-              style={{ 
-                backgroundColor: 'var(--muted)', 
-                borderColor: 'var(--input)',
-                color: 'var(--muted-foreground)'
-              }}
-            >
-              .remedygcc.com
-            </span>
           </div>
-          {subdomainError && (
-            <p className="text-sm" style={{ color: 'var(--destructive)' }}>{subdomainError}</p>
+          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+            Runtime hostname: <code>{getTenantHostname(slugValidation.normalized || 'tenant')}</code>
+          </p>
+          {slugLocked && (
+            <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+              Slug is locked after runtime publish or once the tenant leaves draft.
+            </p>
           )}
+          {slugValidation.warnings.map((warning) => (
+            <p key={warning} className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+              {warning}
+            </p>
+          ))}
         </div>
       </div>
 
-      <div className="space-y-2">
-        <label className={labelStyle} style={{ color: 'var(--foreground)' }}>Status</label>
-        <div className="flex gap-4">
+      <div className="space-y-3">
+        <label className={labelStyle} style={{ color: 'var(--foreground)' }}>
+          Tenant Status
+        </label>
+        <div className="grid gap-3 md:grid-cols-2">
           {STATUS_OPTIONS.map((option) => {
-            const statusColors: Record<string, { dot: string }> = {
-              active: { dot: 'hsl(142 76% 36%)' },
-              inactive: { dot: 'hsl(0 0% 63%)' },
-              suspended: { dot: 'hsl(0 84% 60%)' },
-            };
-            const colors = statusColors[option.value] || statusColors.inactive;
+            const meta = getTenantStatusMeta(option);
+            const isSelected = status === option;
+
             return (
               <button
-                key={option.value}
+                key={option}
                 type="button"
-                onClick={() => setStatus(option.value)}
+                onClick={() => setStatus(option)}
+                disabled={tenantLocked}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all",
-                  status === option.value
-                    ? "border-[var(--primary)] bg-[var(--primary)]/5"
-                    : "border-[var(--border)] hover:border-[var(--primary)]/50"
+                  'rounded-xl border p-4 text-left transition-all',
+                  isSelected
+                    ? 'border-[var(--primary)] bg-[var(--primary)]/5'
+                    : 'border-[var(--border)] hover:border-[var(--primary)]/50',
+                  tenantLocked && 'cursor-not-allowed opacity-70',
                 )}
               >
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.dot }} />
-                <span className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>{option.label}</span>
+                <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+                  {meta.label}
+                </p>
+                <p className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                  {meta.description}
+                </p>
               </button>
             );
           })}
         </div>
       </div>
 
-      {onAssignScanner && (
-        <div className="space-y-2">
-          <label className={labelStyle} style={{ color: 'var(--foreground)' }}>
-            Assigned Scanner
-          </label>
-          
-          {scannerLoading ? (
-            <div className="flex items-center gap-2 p-4" style={{ color: 'var(--muted-foreground)' }}>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm">Loading available scanners...</span>
-            </div>
-          ) : (
-            <>
-              {currentScannerId && (
-                <div 
-                  className="flex items-center gap-3 p-3 rounded-lg border mb-3"
-                  style={{ 
-                    backgroundColor: 'hsl(142 76% 36% / 0.1)', 
-                    borderColor: 'var(--primary)' 
-                  }}
-                >
-                  <div 
-                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                    style={{ backgroundColor: 'hsl(142 76% 36% / 0.2)' }}
-                  >
-                    <Scan className="w-4 h-4" style={{ color: 'var(--primary)' }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>
-                      {currentScannerName || 'Assigned Scanner'}
-                    </p>
-                    <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                      ID: {currentScannerId}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleScannerChange('')}
-                    disabled={isLoading}
-                    className="p-1.5 rounded-lg transition-colors"
-                    style={{ color: 'var(--muted-foreground)' }}
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-
-              <select
-                value={selectedScannerId}
-                onChange={(e) => handleScannerChange(e.target.value)}
-                disabled={isLoading}
-                className={cn(
-                  inputStyle,
-                  isLoading && "opacity-50 cursor-not-allowed"
-                )}
-              >
-                <option value="">-- Select a Scanner --</option>
-                {scanners.map((scanner) => (
-                  <option 
-                    key={scanner.id} 
-                    value={scanner.id}
-                    disabled={scanner.id === currentScannerId}
-                  >
-                    {scanner.name} {scanner.description ? `- ${scanner.description}` : ''}
-                  </option>
-                ))}
-              </select>
-
-              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                Each tenant can only be assigned one scanner. Select a published scanner from the list above.
-              </p>
-            </>
-          )}
+      <div
+        className="space-y-4 rounded-xl border p-5"
+        style={{ borderColor: 'var(--border)', backgroundColor: 'hsl(0 0% 99%)' }}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-xl"
+            style={{ backgroundColor: 'rgba(15, 118, 110, 0.1)' }}
+          >
+            <Link2 className="h-4 w-4" style={{ color: 'var(--primary)' }} />
+          </div>
+          <div>
+            <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>
+              Runtime Config Linking
+            </h3>
+            <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
+              Tenants activate published immutable runtime snapshots. Scanner and attribute versions are read-only through the linked runtime config.
+            </p>
+          </div>
         </div>
-      )}
 
-      <div className="flex justify-end gap-3 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+        {runtimeConfigs.length > 0 ? (
+          <div className="space-y-3">
+            <label className={labelStyle} style={{ color: 'var(--foreground)' }}>
+              Active Runtime Config
+            </label>
+            <select
+              value={activeRuntimeConfigId ?? ''}
+              onChange={(event) => setActiveRuntimeConfigId(event.target.value || null)}
+              disabled={tenantLocked}
+              className={inputStyle}
+            >
+              <option value="">No active runtime config</option>
+              {runtimeConfigs.map((runtimeConfig) => (
+                <option key={runtimeConfig.runtimeConfigId} value={runtimeConfig.runtimeConfigId}>
+                  {runtimeConfig.label}
+                </option>
+              ))}
+            </select>
+
+            {selectedRuntimeConfig && (
+              <div
+                className="rounded-xl border p-4 text-sm"
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}
+              >
+                <p className="font-medium" style={{ color: 'var(--foreground)' }}>
+                  {selectedRuntimeConfig.runtimeConfigId}
+                </p>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  <p style={{ color: 'var(--muted-foreground)' }}>
+                    Scanner: <code>{selectedRuntimeConfig.versionRefs.scannerVersionId}</code>
+                  </p>
+                  <p style={{ color: 'var(--muted-foreground)' }}>
+                    Attributes: <code>{selectedRuntimeConfig.versionRefs.attributeTemplateVersionId}</code>
+                  </p>
+                  <p style={{ color: 'var(--muted-foreground)' }}>
+                    Calculation: <code>{selectedRuntimeConfig.versionRefs.calculationVersionId}</code>
+                  </p>
+                  <p style={{ color: 'var(--muted-foreground)' }}>
+                    Branding: <code>{selectedRuntimeConfig.versionRefs.brandingVersionId}</code>
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div
+            className="rounded-xl border p-4 text-sm"
+            style={{ borderColor: 'rgba(245, 158, 11, 0.25)', backgroundColor: 'rgba(245, 158, 11, 0.08)' }}
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4" style={{ color: '#b45309' }} />
+              <p style={{ color: '#92400e' }}>
+                No published runtime configs are available for this tenant yet. Keep the tenant in draft or disabled until publish is completed.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-3 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
         <button
           type="button"
           onClick={onCancel}
           className={buttonStyle}
-          style={{ 
-            border: '1px solid var(--border)', 
+          style={{
+            border: '1px solid var(--border)',
             color: 'var(--foreground)',
-            backgroundColor: 'transparent'
+            backgroundColor: 'transparent',
           }}
         >
           Cancel
         </button>
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isLoading || tenantLocked}
           className={buttonStyle}
-          style={{ 
+          style={{
             backgroundColor: 'var(--primary)',
             color: 'var(--primary-foreground)',
-            opacity: isLoading ? 0.5 : 1,
-            cursor: isLoading ? 'not-allowed' : 'pointer'
+            opacity: isLoading || tenantLocked ? 0.55 : 1,
+            cursor: isLoading || tenantLocked ? 'not-allowed' : 'pointer',
           }}
         >
           {isLoading ? 'Saving...' : tenant ? 'Update Tenant' : 'Create Tenant'}

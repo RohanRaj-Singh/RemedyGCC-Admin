@@ -26,8 +26,8 @@ function isLocalizedTextComplete(value?: LocalizedText): boolean {
   return Boolean(value?.en.trim() && value?.ar.trim());
 }
 
-function sumWeights(items: Array<{ weight: number }>): number {
-  return items.reduce((total, item) => total + item.weight, 0);
+function sumWeights(items: Array<{ weight?: number }>): number {
+  return items.reduce((total, item) => total + (item.weight || 0), 0);
 }
 
 function validateLocalizedText(
@@ -86,7 +86,7 @@ function validateQuestion(
     );
   });
 
-  if (question.weight <= 0) {
+  if (!question.weight || question.weight <= 0) {
     pushIssue(issues, {
       code: 'QUESTION_WEIGHT_REQUIRED',
       level: 'question',
@@ -112,7 +112,7 @@ function validateQuestion(
     const normalQuestions = siblingQuestions.filter((item) => !item.isFollowUp && item.id !== question.id);
     if (
       normalQuestions.length > 0 &&
-      normalQuestions.some((item) => question.weight <= item.weight)
+      normalQuestions.some((item) => (question.weight || 0) <= (item.weight || 0))
     ) {
       pushIssue(issues, {
         code: 'FOLLOW_UP_WEIGHT_RULE',

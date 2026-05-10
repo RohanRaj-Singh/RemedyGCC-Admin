@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { TenantStatus, BrandingConfig } from '@/modules/tenant/types';
+import { BrandingConfig, TenantStatus } from '@/modules/tenant/types';
 import { createTenant } from '@/modules/tenant/service';
 import { TenantForm } from '@/modules/tenant/components';
 import { BrandingPanel } from '@/components/tenants';
@@ -17,8 +17,9 @@ export default function NewTenantPage() {
 
   const handleSubmit = async (data: {
     name: string;
-    subdomain: string;
+    slug: string;
     status: TenantStatus;
+    activeRuntimeConfigId: string | null;
   }) => {
     try {
       setIsLoading(true);
@@ -26,7 +27,7 @@ export default function NewTenantPage() {
       
       await createTenant({
         name: data.name,
-        subdomain: data.subdomain,
+        slug: data.slug,
         status: data.status,
         branding,
       });
@@ -71,6 +72,7 @@ export default function NewTenantPage() {
               onCancel={() => router.push('/tenants')}
               isLoading={isLoading}
               error={error}
+              runtimeConfigs={[]}
             />
           </div>
         </div>

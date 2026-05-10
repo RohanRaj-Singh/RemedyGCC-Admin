@@ -3,8 +3,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Tenant, TenantStatus, BrandingConfig } from '@/modules/tenant/types';
-import { getTenantById, updateTenant } from '@/modules/tenant/service';
+import {
+  BrandingConfig,
+  RuntimeConfigOption,
+  Tenant,
+  TenantStatus,
+} from '@/modules/tenant/types';
+import {
+  getRuntimeConfigOptionsForTenant,
+  getTenantById,
+  updateTenant,
+} from '@/modules/tenant/service';
 import { TenantForm } from '@/modules/tenant/components';
 import { BrandingPanel, BrandingPreviewCard } from '@/components/tenants';
 import { ArrowLeft, Loader2 } from 'lucide-react';
@@ -19,6 +28,7 @@ export default function EditTenantPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [branding, setBranding] = useState<Partial<BrandingConfig>>({});
+  const [runtimeConfigs, setRuntimeConfigs] = useState<RuntimeConfigOption[]>([]);
   const brandingRef = useRef(branding);
 
   useEffect(() => {
@@ -37,6 +47,13 @@ export default function EditTenantPage() {
       
       setTenant(data);
       setBranding(data.branding || {});
+      const availableRuntimeConfigs = await getRuntimeConfigOptionsForTenant(data.id);
+      setRuntimeConfigs(
+        availableRuntimeConfigs.map((runtimeConfig) => ({
+          ...runtimeConfig,
+          isActive: runtimeConfig.runtimeConfigId === data.activeRuntimeConfigId,
+        })),
+      );
     } catch (err) {
       setError('Failed to load tenant');
       console.error(err);
@@ -51,8 +68,9 @@ export default function EditTenantPage() {
 
   const handleSubmit = useCallback(async (data: {
     name: string;
-    subdomain: string;
+    slug: string;
     status: TenantStatus;
+    activeRuntimeConfigId: string | null;
   }) => {
     try {
       setIsSaving(true);
@@ -60,7 +78,9 @@ export default function EditTenantPage() {
       
       await updateTenant(tenantId, {
         name: data.name,
+        slug: data.slug,
         status: data.status,
+        activeRuntimeConfigId: data.activeRuntimeConfigId,
         branding: brandingRef.current,
       });
       
@@ -71,23 +91,6 @@ export default function EditTenantPage() {
       setIsSaving(false);
     }
   }, [router, tenantId]);
-
-  const handleScannerAssign = useCallback(async (scannerId: string | null) => {
-    try {
-      setIsSaving(true);
-      setError(null);
-      
-      await updateTenant(tenantId, {
-        assignedScannerId: scannerId,
-      });
-      
-      await loadTenant();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to assign scanner');
-    } finally {
-      setIsSaving(false);
-    }
-  }, [loadTenant, tenantId]);
 
   const handleCancel = useCallback(() => {
     router.push('/tenants');
@@ -164,22 +167,28 @@ export default function EditTenantPage() {
           >
             <TenantForm
               tenant={tenant}
+              runtimeConfigs={runtimeConfigs}
               onSubmit={handleSubmit}
               onCancel={handleCancel}
               isLoading={isSaving}
               error={null}
-              currentScannerId={tenant.assignedScannerId}
-              currentScannerName={tenant.assignedScannerName}
-              onAssignScanner={handleScannerAssign}
             />
           </div>
 
-          <BrandingPanel
-            branding={branding}
-            onChange={setBranding}
-            title="Branding Configuration"
-            showPreviewSection={false}
-          />
+          {tenant.status === 'archived' ? (
+            <BrandingPreviewCard
+              branding={branding}
+              title="Archived Branding Snapshot"
+              description="Archived tenants keep their current branding visible here, but changes are blocked to preserve historical runtime references."
+            />
+          ) : (
+            <BrandingPanel
+              branding={branding}
+              onChange={setBranding}
+              title="Branding Configuration"
+              showPreviewSection={false}
+            />
+          )}
         </div>
 
         <div className="relative hidden lg:block self-start">
@@ -190,7 +199,7 @@ export default function EditTenantPage() {
             <BrandingPreviewCard
               branding={branding}
               title="Tenant Preview"
-              description="Keep this in view while editing the form and branding settings."
+              description="Resolved with runtime-safe fallbacks while you edit the tenant draft."
             />
           </div>
         </div>

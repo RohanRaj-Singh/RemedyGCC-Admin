@@ -1,10 +1,25 @@
 'use client';
 
-import { CheckCircle2, MessageSquareText, Plus } from 'lucide-react';
+import { useState } from 'react';
+import { MessageSquareText, Plus } from 'lucide-react';
 import { Category, Question, Subdomain } from '../types';
 import { createEmptyQuestion } from '../utils/builder';
-import { getSubdomainMetrics } from '../utils/metrics';
-import { QuestionCard } from './QuestionCard';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { SortableQuestionCard } from './SortableQuestionCard';
 
 interface QuestionBuilderProps {
   category?: Category;
@@ -18,21 +33,20 @@ interface QuestionBuilderProps {
 export function QuestionBuilder({
   category,
   subdomain,
-  selectedSubdomainId,
   disabled = false,
-  onSelectSubdomain,
   onSubdomainChange,
 }: QuestionBuilderProps) {
+  const [openQuestionId, setOpenQuestionId] = useState<string | undefined>(undefined);
+
   if (!category || !subdomain) {
     return (
       <div className="rounded-[1.75rem] border border-dashed border-gray-200 bg-white p-10 text-center text-sm text-gray-500">
-        Select a category and subdomain first to manage questions.
+        Select a subdomain from the sidebar to manage questions.
       </div>
     );
   }
 
   const activeSubdomain = subdomain;
-  const metrics = getSubdomainMetrics(activeSubdomain);
 
   function updateQuestion(updatedQuestion: Question) {
     onSubdomainChange({
@@ -55,10 +69,59 @@ export function QuestionBuilder({
   }
 
   function addQuestion() {
+    const newQuestion = createEmptyQuestion(activeSubdomain.id);
     onSubdomainChange({
       ...activeSubdomain,
-      questions: [...activeSubdomain.questions, createEmptyQuestion(activeSubdomain.id)],
+      questions: [...activeSubdomain.questions, newQuestion],
     });
+    setOpenQuestionId(newQuestion.id);
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = activeSubdomain.questions.findIndex((q) => q.id === active.id);
+      const newIndex = activeSubdomain.questions.findIndex((q) => q.id === over.id);
+
+      let newQuestions = arrayMove(activeSubdomain.questions, oldIndex, newIndex);
+
+      // Validation logic: if a trigger question is moved away from its dependent follow-up question
+      // we need to make sure follow-up questions always have a preceding question.
+      // And we also update their triggerCondition.questionId to the newly preceding question.
+      newQuestions = newQuestions.map((q, idx) => {
+        if (q.isFollowUp) {
+          const prev = newQuestions[idx - 1];
+          if (prev && q.triggerCondition?.questionId !== prev.id) {
+            // Update trigger ID, but we might want to clear optionIds if the trigger changed
+            return {
+              ...q,
+              triggerCondition: {
+                questionId: prev.id,
+                optionIds: [], // Reset options because the trigger changed
+              }
+            };
+          }
+        }
+        return q;
+      });
+
+      onSubdomainChange({
+        ...activeSubdomain,
+        questions: newQuestions,
+      });
+    }
   }
 
   return (
@@ -74,23 +137,11 @@ export function QuestionBuilder({
               {activeSubdomain.name.en || 'Selected subdomain'}
             </h3>
             <p className="mt-1 text-sm text-gray-600">
-              Keep each question short and easy to score. Follow-up questions stay inside
-              the same weight system and inherit this subdomain as their parent.
+              Add questions and their options. Weights will be assigned in the next step.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div
-              className={`rounded-full px-3 py-2 text-xs font-semibold ${
-                metrics.balance.isExact
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : metrics.balance.overflow > 0
-                    ? 'bg-rose-50 text-rose-700'
-                    : 'bg-amber-50 text-amber-700'
-              }`}
-            >
-              {metrics.questionWeightTotal} / {activeSubdomain.weight}% assigned
-            </div>
             <button
               type="button"
               disabled={disabled}
@@ -102,107 +153,59 @@ export function QuestionBuilder({
             </button>
           </div>
         </div>
+      </div>
 
-        <div className="mt-5 grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-          <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
-              Subdomains in this category
-            </div>
-            <div className="mt-4 space-y-2">
-              {category.subdomains.map((item, index) => {
-                const isSelected = item.id === selectedSubdomainId;
-                const itemMetrics = getSubdomainMetrics(item);
+      {activeSubdomain.questions.length === 0 ? (
+        <div className="space-y-5">
+          <div className="rounded-[1.75rem] border border-dashed border-gray-200 bg-white p-12 text-center flex flex-col items-center justify-center">
+            <MessageSquareText className="h-10 w-10 text-gray-300 mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">No questions yet</h3>
+            <p className="text-sm text-gray-500 mb-6">Add your first question to {activeSubdomain.name.en || 'this subdomain'}.</p>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={addQuestion}
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
+              Add Question
+            </button>
+          </div>
+        </div>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={activeSubdomain.questions.map((q) => q.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-4">
+              {activeSubdomain.questions.map((question, index) => {
+                const isInvalidFollowUp = question.isFollowUp && index === 0;
 
                 return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => onSelectSubdomain?.(item.id)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
-                      isSelected
-                        ? 'border-primary bg-primary/5 shadow-sm'
-                        : 'border-gray-200 bg-gray-50 hover:border-primary/30 hover:bg-white'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                          Subdomain {index + 1}
-                        </div>
-                        <div className="mt-1 font-medium text-gray-900">
-                          {item.name.en || `Subdomain ${index + 1}`}
-                        </div>
-                      </div>
-                      {itemMetrics.balance.isExact && (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                      )}
-                    </div>
-                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-gray-500">
-                      <span>{item.questions.length} questions</span>
-                      <span>
-                        {itemMetrics.questionWeightTotal} / {item.weight}%
-                      </span>
-                    </div>
-                  </button>
+                  <SortableQuestionCard
+                    key={question.id}
+                    question={question}
+                    index={index}
+                    siblingQuestions={activeSubdomain.questions}
+                    disabled={disabled}
+                    canRemove={activeSubdomain.questions.length > 1}
+                    isOpen={openQuestionId === question.id || (activeSubdomain.questions.length === 1)}
+                    dragError={isInvalidFollowUp}
+                    onToggle={() => setOpenQuestionId(openQuestionId === question.id ? undefined : question.id)}
+                    onUpdate={updateQuestion}
+                    onRemove={removeQuestion}
+                  />
                 );
               })}
             </div>
-          </div>
-
-          <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="font-medium text-gray-700">Question weight</span>
-              <span className="font-semibold text-gray-900">
-                {metrics.questionWeightTotal} / {activeSubdomain.weight}%
-              </span>
-            </div>
-            <div className="mt-3 h-3 overflow-hidden rounded-full bg-gray-100">
-              <div
-                className={`h-full rounded-full ${
-                  metrics.balance.isExact
-                    ? 'bg-emerald-500'
-                    : metrics.balance.overflow > 0
-                      ? 'bg-rose-500'
-                      : 'bg-amber-500'
-                }`}
-                style={{
-                  width: `${Math.min(
-                    (metrics.questionWeightTotal / Math.max(activeSubdomain.weight || 1, 1)) * 100,
-                    100
-                  )}%`,
-                }}
-              />
-            </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
-              <span>{metrics.questionCount} questions</span>
-              <span>{metrics.followUpCount} follow-up questions</span>
-              <span>
-                {metrics.balance.isExact
-                  ? 'Ready for review'
-                  : metrics.balance.overflow > 0
-                    ? `${metrics.balance.overflow}% overflow`
-                    : `${metrics.balance.remaining}% remaining`}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        {activeSubdomain.questions.map((question, index) => (
-          <QuestionCard
-            key={question.id}
-            question={question}
-            index={index}
-            parentWeight={activeSubdomain.weight}
-            siblingQuestions={activeSubdomain.questions}
-            disabled={disabled}
-            canRemove={activeSubdomain.questions.length > 1}
-            onUpdate={updateQuestion}
-            onRemove={removeQuestion}
-          />
-        ))}
-      </div>
+          </SortableContext>
+        </DndContext>
+      )}
     </div>
   );
 }

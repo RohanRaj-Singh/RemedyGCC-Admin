@@ -22,18 +22,17 @@ import {
 } from '../service';
 import { ScannerDetail, ScannerStatus } from '../types';
 import { createDefaultCategories, emptyText } from '../utils/builder';
+import { FIXED_CATEGORIES } from '../constants/categories';
 import { getCategoryMetrics, getScannerCounts, getSubdomainMetrics, sumWeights } from '../utils/metrics';
 import { validateScannerDraft } from '../utils/validation';
-import { CategoryBuilder } from './CategoryBuilder';
-import { CategoryCard } from './CategoryCard';
-import { QuestionBuilder } from './QuestionBuilder';
+import { StructureBuilder } from './StructureBuilder';
+import { ContentBuilder } from './ContentBuilder';
+import { WeightBuilder } from './WeightBuilder';
+import { FloatingIssueButton } from './FloatingIssueButton';
 import { StepNavigation } from './StepNavigation';
-import { SubdomainBuilder } from './SubdomainBuilder';
+import { StickyHeader } from './StickyHeader';
 import { TemplatePreview } from './TemplatePreview';
 import { TemplateSelector } from './TemplateSelector';
-import { ValidationBanner } from './ValidationBanner';
-import { VersionHistory } from './VersionHistory';
-import { WeightSummaryPanel } from './WeightSummaryPanel';
 
 interface ScannerFormProps {
   scanner?: ScannerDetail | null;
@@ -45,16 +44,16 @@ const steps = [
     description: 'Name the scanner, describe the methodology, and attach the attribute template.',
   },
   {
-    title: 'Categories',
-    description: 'Configure the five fixed categories with weights and polarity.',
+    title: 'Structure',
+    description: 'Build the subdomain hierarchy for the 5 fixed categories.',
   },
   {
-    title: 'Subdomains',
-    description: 'Open one category at a time and divide its weight across subdomains.',
+    title: 'Content',
+    description: 'Add multiple-choice questions to each subdomain.',
   },
   {
-    title: 'Questions',
-    description: 'Add weighted multiple-choice questions and optional follow-up triggers.',
+    title: 'Weights',
+    description: 'Assign weights at the category, subdomain, and question levels.',
   },
   {
     title: 'Review & Publish',
@@ -73,11 +72,18 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
       ?? scanner?.publishedVersion?.attributeTemplateId
       ?? ''
   );
-  const [categories, setCategories] = useState(
-    scanner?.draftVersion?.categories
-      ?? scanner?.publishedVersion?.categories
-      ?? createDefaultCategories()
-  );
+  const [categories, setCategories] = useState(() => {
+    let initial = scanner?.draftVersion?.categories ?? scanner?.publishedVersion?.categories;
+    if (!initial || initial.length !== 5) {
+      initial = createDefaultCategories();
+    } else {
+      initial = initial.map((cat, i) => ({
+        ...cat,
+        name: { en: FIXED_CATEGORIES[i], ar: FIXED_CATEGORIES[i] }
+      }));
+    }
+    return initial;
+  });
   const [versions, setVersions] = useState(scanner?.versions ?? []);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>(categories[0]?.id);
   const [selectedSubdomainId, setSelectedSubdomainId] = useState<string | undefined>(categories[0]?.subdomains[0]?.id);
@@ -154,11 +160,16 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
         ?? detail.publishedVersion?.attributeTemplateId
         ?? ''
     );
-    setCategories(
-      detail.draftVersion?.categories
-        ?? detail.publishedVersion?.categories
-        ?? createDefaultCategories()
-    );
+    let nextCategories = detail.draftVersion?.categories ?? detail.publishedVersion?.categories;
+    if (!nextCategories || nextCategories.length !== 5) {
+      nextCategories = createDefaultCategories();
+    } else {
+      nextCategories = nextCategories.map((cat, i) => ({
+        ...cat,
+        name: { en: FIXED_CATEGORIES[i], ar: FIXED_CATEGORIES[i] }
+      }));
+    }
+    setCategories(nextCategories);
     setVersions(detail.versions);
     setTemplate(
       detail.draftVersion?.attributeTemplateSnapshot
@@ -273,612 +284,258 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
     });
   }
 
+  function handleSelectSubdomain(subdomainId: string) {
+    const category = categories.find(c => c.subdomains.some(s => s.id === subdomainId));
+    if (category && category.id !== selectedCategoryId) {
+      setSelectedCategoryId(category.id);
+    }
+    setSelectedSubdomainId(subdomainId);
+  }
+
   function goToPreviousStep() {
     setActiveStep((current) => Math.max(0, current - 1));
   }
 
+  const canProceed = () => {
+    if (activeStep === 1) {
+      return categories.every(cat => cat.subdomains.length > 0);
+    }
+    if (activeStep === 2) {
+      return categories.every(cat => cat.subdomains.every(sub => sub.questions.length > 0));
+    }
+    if (activeStep === 3) {
+      if (scannerWeight !== 100) return false;
+      return categories.every(cat => {
+        const catMetrics = getCategoryMetrics(cat);
+        if (catMetrics.subdomainWeightTotal !== cat.weight) return false;
+        return cat.subdomains.every(sub => {
+          const subMetrics = getSubdomainMetrics(sub);
+          return subMetrics.questionWeightTotal === sub.weight;
+        });
+      });
+    }
+    return true;
+  };
+
   function goToNextStep() {
+    if (!canProceed()) return;
     setActiveStep((current) => Math.min(steps.length - 1, current + 1));
   }
 
   return (
-    <div className="space-y-6">
-      {error && (
-        <div className="rounded-[1.75rem] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+    <div className="relative min-h-screen bg-gray-50/50 pb-32">
+      <StickyHeader 
+        activeStep={activeStep} 
+        steps={steps as unknown as { title: string; description: string }[]} 
+        categories={categories} 
+        validation={validation} 
+      />
 
-      {!hasDraftVersion && (
-        <div className="rounded-[1.75rem] border border-blue-200 bg-blue-50 p-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div className="text-sm font-semibold text-blue-900">
-                {hasResponses ? 'Editing will create a new version' : 'This published version is locked'}
-              </div>
-              <p className="mt-1 text-sm text-blue-700">
-                {hasResponses
-                  ? 'Responses already exist for the published version, so structural edits must happen in a new draft.'
-                  : 'Published versions stay immutable. Create a new draft version to make structural changes.'}
-              </p>
-            </div>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-6">
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {!hasDraftVersion && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <span>{hasResponses ? 'Editing will create a new version. Structural edits must happen in a new draft.' : 'This published version is locked. Create a new draft to make edits.'}</span>
             <button
               type="button"
               onClick={handleCreateNewVersion}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-medium text-blue-700 shadow-sm transition hover:text-blue-900 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-blue-700 shadow-sm transition hover:text-blue-900 disabled:opacity-50"
             >
               <CopyPlus className="h-4 w-4" />
               Create New Version
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {hasDraftVersion && hasResponses && (
-        <div className="rounded-[1.75rem] border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          You are editing a draft while published response history remains preserved in older versions.
-        </div>
-      )}
-
-      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="space-y-6">
-          <div className="rounded-[2rem] border border-gray-200 bg-[linear-gradient(135deg,rgba(239,248,244,1)_0%,rgba(255,255,255,1)_50%,rgba(248,250,252,1)_100%)] p-6 shadow-sm">
-            <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-              <div className="max-w-3xl">
-                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
-                  <span>Scanner Builder</span>
-                  <span className="text-gray-300">/</span>
-                  <span className="text-primary">
-                    {status === 'published' ? 'Published methodology' : 'Draft methodology'}
-                  </span>
-                </div>
-                <h1 className="mt-3 text-3xl font-semibold text-gray-900">
-                  Guided assessment builder
-                </h1>
-                <p className="mt-2 max-w-2xl text-sm text-gray-600">
-                  Move through the hierarchy in order: scanner details, five categories,
-                  category subdomains, and weighted questions. Every screen keeps the
-                  publish rules visible so non-technical admins always know what is left.
-                </p>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[320px] xl:grid-cols-2">
-                <div className="rounded-2xl border border-white bg-white/90 p-4 shadow-sm">
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                    Status
-                  </div>
-                  <div className="mt-2 text-lg font-semibold text-gray-900">{status}</div>
-                </div>
-                <div className="rounded-2xl border border-white bg-white/90 p-4 shadow-sm">
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                    Categories
-                  </div>
-                  <div className="mt-2 text-lg font-semibold text-gray-900">{counts.categoryCount}</div>
-                </div>
-                <div className="rounded-2xl border border-white bg-white/90 p-4 shadow-sm">
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                    Subdomains
-                  </div>
-                  <div className="mt-2 text-lg font-semibold text-gray-900">{counts.subdomainCount}</div>
-                </div>
-                <div className="rounded-2xl border border-white bg-white/90 p-4 shadow-sm">
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                    Questions
-                  </div>
-                  <div className="mt-2 text-lg font-semibold text-gray-900">{counts.questionCount}</div>
-                </div>
-              </div>
-            </div>
+        {hasDraftVersion && hasResponses && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Editing draft. Published response history remains preserved in older versions.
           </div>
+        )}
 
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <StepNavigation
             steps={steps.map((step) => ({ title: step.title, description: step.description }))}
             activeStep={activeStep}
-            onStepChange={setActiveStep}
+            canProceed={canProceed()}
+            onStepChange={(stepIndex) => {
+              if (stepIndex > activeStep && !canProceed()) return;
+              setActiveStep(stepIndex);
+            }}
             onPrevious={goToPreviousStep}
             onNext={goToNextStep}
           />
 
-          <ValidationBanner issues={validation.issues} />
-
-          {activeStep === 0 && (
-            <div className="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-              <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-                <div className="space-y-6">
-                  <div className="rounded-[1.75rem] border border-gray-200 bg-gray-50 p-5">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-2xl bg-primary/10 p-3 text-primary">
-                        <Languages className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-semibold text-gray-900">Scanner basics</h3>
-                        <p className="mt-1 text-sm text-gray-600">
-                          Start with the name and description in both languages. This information
-                          appears before any tenant assignment or assessment delivery.
-                        </p>
-                      </div>
+          <div className="p-6 sm:p-8">
+            {activeStep === 0 && (
+              <div className="space-y-8">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-blue-50 p-3 text-blue-600">
+                      <Languages className="h-5 w-5" />
                     </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-900">Scanner basics</h3>
+                      <p className="mt-1 text-sm text-gray-600">
+                        Provide the name and description in both languages.
+                      </p>
+                    </div>
+                  </div>
 
-                    <div className="mt-5 grid gap-5 lg:grid-cols-2">
-                      <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
-                        <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">
-                          Name in English
-                        </label>
+                  <div className="grid gap-5 lg:grid-cols-2">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500">Name in English</label>
                         <input
                           value={name.en}
                           disabled={!hasDraftVersion || saving}
-                          onChange={(event) => setName({ ...name, en: event.target.value })}
-                          className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-gray-100"
-                          placeholder="Scanner name in English"
-                        />
-
-                        <label className="mb-2 mt-4 block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">
-                          Description in English
-                        </label>
-                        <textarea
-                          rows={5}
-                          value={description.en}
-                          disabled={!hasDraftVersion || saving}
-                          onChange={(event) =>
-                            setDescription({ ...description, en: event.target.value })
-                          }
-                          className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-gray-100"
-                          placeholder="Describe what this scanner assesses"
+                          onChange={(e) => setName({ ...name, en: e.target.value })}
+                          className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                          placeholder="Scanner name"
                         />
                       </div>
+                      <div>
+                        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500">Description in English</label>
+                        <textarea
+                          rows={4}
+                          value={description.en}
+                          disabled={!hasDraftVersion || saving}
+                          onChange={(e) => setDescription({ ...description, en: e.target.value })}
+                          className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                        />
+                      </div>
+                    </div>
 
-                      <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
-                        <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">
-                          Name in Arabic
-                        </label>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500">Name in Arabic</label>
                         <input
                           value={name.ar}
                           dir="rtl"
                           disabled={!hasDraftVersion || saving}
-                          onChange={(event) => setName({ ...name, ar: event.target.value })}
-                          className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-gray-100"
-                          placeholder="Name in Arabic"
+                          onChange={(e) => setName({ ...name, ar: e.target.value })}
+                          className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
                         />
-
-                        <label className="mb-2 mt-4 block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">
-                          Description in Arabic
-                        </label>
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500">Description in Arabic</label>
                         <textarea
-                          rows={5}
+                          rows={4}
                           dir="rtl"
                           value={description.ar}
                           disabled={!hasDraftVersion || saving}
-                          onChange={(event) =>
-                            setDescription({ ...description, ar: event.target.value })
-                          }
-                          className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-gray-100"
-                          placeholder="Description in Arabic"
+                          onChange={(e) => setDescription({ ...description, ar: e.target.value })}
+                          className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
                         />
                       </div>
                     </div>
                   </div>
-
-                  <div className="rounded-[1.75rem] border border-gray-200 bg-gray-50 p-5">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-2xl bg-primary/10 p-3 text-primary">
-                        <ListTree className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-semibold text-gray-900">Attribute template</h3>
-                        <p className="mt-1 text-sm text-gray-600">
-                          Choose the template that defines the strict assignment hierarchy for
-                          this scanner version.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-5 grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
-                      <TemplateSelector
-                        selectedTemplateId={attributeTemplateId}
-                        disabled={!hasDraftVersion || saving}
-                        onSelect={setAttributeTemplateId}
-                      />
-                      <TemplatePreview templateId={attributeTemplateId} />
-                    </div>
-                  </div>
                 </div>
 
-                <div className="rounded-[1.75rem] border border-gray-200 bg-gray-50 p-5">
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
-                    What happens next
+                <div className="pt-8 border-t border-gray-100">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="rounded-2xl bg-purple-50 p-3 text-purple-600">
+                      <ListTree className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-900">Attribute template</h3>
+                      <p className="mt-1 text-sm text-gray-600">Choose the strict assignment hierarchy for this version.</p>
+                    </div>
                   </div>
-                  <div className="mt-3 text-lg font-semibold text-gray-900">
-                    Set the five scoring pillars
-                  </div>
-                  <p className="mt-2 text-sm text-gray-600">
-                    After the basic information is complete, move to categories and assign the
-                    first layer of weights and polarity.
-                  </p>
-
-                  <div className="mt-5 space-y-3">
-                    {steps.slice(1).map((step, index) => (
-                      <div
-                        key={step.title}
-                        className="rounded-2xl border border-white bg-white px-4 py-3 shadow-sm"
-                      >
-                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                          Step {index + 2}
-                        </div>
-                        <div className="mt-1 font-medium text-gray-900">{step.title}</div>
-                        <div className="mt-1 text-sm text-gray-500">{step.description}</div>
-                      </div>
-                    ))}
+                  <div className="grid gap-6 md:grid-cols-[300px_minmax(0,1fr)]">
+                    <TemplateSelector
+                      selectedTemplateId={attributeTemplateId}
+                      disabled={!hasDraftVersion || saving}
+                      onSelect={setAttributeTemplateId}
+                    />
+                    <TemplatePreview templateId={attributeTemplateId} />
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {activeStep === 1 && (
-            <div className="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-              <div className="mb-6 flex items-center gap-3">
-                <div className="rounded-2xl bg-primary/10 p-3 text-primary">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-900">Five category cards</h3>
-                  <p className="mt-1 text-sm text-gray-600">
-                    This step keeps the top level flat and easy to compare. Use these cards to
-                    decide how much of the scanner belongs to each category.
-                  </p>
-                </div>
-              </div>
-
-              <CategoryBuilder
+            {activeStep === 1 && (
+              <StructureBuilder
                 categories={categories}
-                selectedCategoryId={selectedCategoryId}
                 disabled={!hasDraftVersion || saving}
-                onSelectCategory={setSelectedCategoryId}
                 onCategoryChange={updateCategory}
               />
-            </div>
-          )}
+            )}
 
-          {activeStep === 2 && (
-            <div className="space-y-6">
-              <div className="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
-                      Choose a category
-                    </div>
-                    <h3 className="mt-2 text-xl font-semibold text-gray-900">Open one category at a time</h3>
-                    <p className="mt-1 text-sm text-gray-600">
-                      Pick a category below to reveal its subdomains and keep the hierarchy visually focused.
-                    </p>
-                  </div>
-                  {selectedCategory && (
-                    <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                      {selectedCategory.name.en || `Category ${selectedCategory.slot}`} selected
-                    </div>
-                  )}
+            {activeStep === 2 && (
+              <ContentBuilder
+                categories={categories}
+                selectedSubdomainId={selectedSubdomainId}
+                disabled={!hasDraftVersion || saving}
+                onSelectSubdomain={handleSelectSubdomain}
+                onCategoryChange={updateCategory}
+              />
+            )}
+
+            {activeStep === 3 && (
+              <WeightBuilder
+                categories={categories}
+                disabled={!hasDraftVersion || saving}
+                onCategoryChange={updateCategory}
+              />
+            )}
+
+            {activeStep === 4 && (
+              <div className="space-y-6 max-w-4xl mx-auto">
+                <div className="text-center space-y-2 mb-8">
+                  <h3 className="text-2xl font-bold text-gray-900">Final Review</h3>
+                  <p className="text-gray-600">Ensure everything is correctly weighted before publishing.</p>
                 </div>
 
-                <div className="mt-5 overflow-x-auto pb-2">
-                  <div className="grid min-w-[920px] grid-flow-col auto-cols-[minmax(220px,1fr)] gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
+                    <div className="text-2xl font-bold text-gray-900">{counts.categoryCount}</div>
+                    <div className="text-xs uppercase tracking-wider font-semibold text-gray-500 mt-1">Categories</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
+                    <div className="text-2xl font-bold text-gray-900">{counts.subdomainCount}</div>
+                    <div className="text-xs uppercase tracking-wider font-semibold text-gray-500 mt-1">Subdomains</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
+                    <div className="text-2xl font-bold text-gray-900">{counts.questionCount}</div>
+                    <div className="text-xs uppercase tracking-wider font-semibold text-gray-500 mt-1">Questions</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
+                    <div className={`text-2xl font-bold ${scannerWeight === 100 ? 'text-emerald-600' : 'text-rose-600'}`}>{scannerWeight}%</div>
+                    <div className="text-xs uppercase tracking-wider font-semibold text-gray-500 mt-1">Total Weight</div>
+                  </div>
+                </div>
+
+                <div className="mt-8">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4">Structure & Weights</h4>
+                  <div className="space-y-4">
                     {categories.map((category) => (
-                      <CategoryCard
-                        key={category.id}
-                        category={category}
-                        variant="selector"
-                        selected={category.id === selectedCategoryId}
-                        onSelect={setSelectedCategoryId}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-                <SubdomainBuilder
-                  category={selectedCategory}
-                  selectedSubdomainId={selectedSubdomainId}
-                  disabled={!hasDraftVersion || saving}
-                  onSelectSubdomain={setSelectedSubdomainId}
-                  onCategoryChange={updateCategory}
-                  onAdvanceToQuestions={() => setActiveStep(3)}
-                />
-              </div>
-            </div>
-          )}
-
-          {activeStep === 3 && (
-            <div className="space-y-6">
-              <div className="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
-                      Question workspace
-                    </div>
-                    <h3 className="mt-2 text-xl font-semibold text-gray-900">
-                      Focus on one subdomain at a time
-                    </h3>
-                    <p className="mt-1 text-sm text-gray-600">
-                      Questions stay visually nested inside their subdomain, with option editing
-                      inline and follow-up logic kept close to the question itself.
-                    </p>
-                  </div>
-                  {selectedCategory && (
-                    <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                      {selectedCategory.name.en || `Category ${selectedCategory.slot}`}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-5 overflow-x-auto pb-2">
-                  <div className="grid min-w-[920px] grid-flow-col auto-cols-[minmax(220px,1fr)] gap-3">
-                    {categories.map((category) => (
-                      <CategoryCard
-                        key={category.id}
-                        category={category}
-                        variant="selector"
-                        selected={category.id === selectedCategoryId}
-                        onSelect={setSelectedCategoryId}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-                <QuestionBuilder
-                  category={selectedCategory}
-                  subdomain={selectedSubdomain}
-                  selectedSubdomainId={selectedSubdomainId}
-                  disabled={!hasDraftVersion || saving}
-                  onSelectSubdomain={setSelectedSubdomainId}
-                  onSubdomainChange={updateSelectedSubdomain}
-                />
-              </div>
-            </div>
-          )}
-
-          {activeStep === 4 && (
-            <div className="space-y-6">
-              <div className="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
-                      Final review
-                    </div>
-                    <h3 className="mt-2 text-xl font-semibold text-gray-900">Hierarchy and publish status</h3>
-                    <p className="mt-1 text-sm text-gray-600">
-                      Review every level before publishing. The publish button stays disabled
-                      until all blocking rules pass.
-                    </p>
-                  </div>
-
-                  <div
-                    className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
-                      validation.isValid
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-rose-50 text-rose-700'
-                    }`}
-                  >
-                    {validation.isValid ? (
-                      <CheckCircle2 className="h-4 w-4" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4" />
-                    )}
-                    <span>{validation.isValid ? 'Ready to publish' : 'Publish blocked'}</span>
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-4 md:grid-cols-4">
-                  <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                      Categories
-                    </div>
-                    <div className="mt-2 text-2xl font-semibold text-gray-900">{counts.categoryCount}</div>
-                  </div>
-                  <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                      Subdomains
-                    </div>
-                    <div className="mt-2 text-2xl font-semibold text-gray-900">{counts.subdomainCount}</div>
-                  </div>
-                  <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                      Questions
-                    </div>
-                    <div className="mt-2 text-2xl font-semibold text-gray-900">{counts.questionCount}</div>
-                  </div>
-                  <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                      Scanner weight
-                    </div>
-                    <div className="mt-2 text-2xl font-semibold text-gray-900">{scannerWeight} / 100%</div>
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-[1.75rem] border border-gray-200 bg-gray-50 p-5">
-                  <div className="text-sm font-semibold text-gray-900">Blocking issues</div>
-                  {blockingIssues.length === 0 ? (
-                    <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                      All hierarchy, weight, and template checks are passing.
-                    </div>
-                  ) : (
-                    <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                      {blockingIssues.map((issue) => (
-                        <div
-                          key={`${issue.code}-${issue.path}-${issue.entityId ?? 'root'}`}
-                          className="rounded-2xl border border-red-100 bg-white px-4 py-3 text-sm text-gray-700 shadow-sm"
-                        >
-                          <div className="font-medium text-gray-900">{issue.message}</div>
-                          <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">
-                            {issue.level.replace('-', ' ')}
-                          </div>
+                      <div key={category.id} className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                        <div className="bg-gray-50 p-4 flex justify-between items-center border-b border-gray-100">
+                          <span className="font-semibold text-gray-900">{category.name.en || `Category ${category.slot}`}</span>
+                          <span className={`font-semibold ${category.weight > 0 ? 'text-gray-900' : 'text-rose-600'}`}>{category.weight}%</span>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-sm">
-                <div className="space-y-5">
-                  {categories.map((category) => {
-                    const categoryMetrics = getCategoryMetrics(category);
-
-                    return (
-                      <div
-                        key={category.id}
-                        className="rounded-[1.75rem] border border-gray-200 bg-gray-50 p-5"
-                      >
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                          <div>
-                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                              Category {category.slot}
-                            </div>
-                            <div className="mt-2 text-lg font-semibold text-gray-900">
-                              {category.name.en || `Category ${category.slot}`}
-                            </div>
-                            <div className="mt-1 text-sm text-gray-500">
-                              {category.name.ar || 'Arabic name pending'}
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-3">
-                            <div className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm">
-                              {category.weight}% weight
-                            </div>
-                            <div
-                              className={`rounded-full px-3 py-2 text-xs font-semibold ${
-                                category.polarity === 'negative'
-                                  ? 'bg-rose-100 text-rose-700'
-                                  : 'bg-emerald-100 text-emerald-700'
-                              }`}
-                            >
-                              {category.polarity}
-                            </div>
-                            <div
-                              className={`rounded-full px-3 py-2 text-xs font-semibold ${
-                                categoryMetrics.balance.isExact
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : categoryMetrics.balance.overflow > 0
-                                    ? 'bg-rose-50 text-rose-700'
-                                    : 'bg-amber-50 text-amber-700'
-                              }`}
-                            >
-                              {categoryMetrics.subdomainWeightTotal} / {category.weight}%
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 h-2 overflow-hidden rounded-full bg-white">
-                          <div
-                            className={`h-full rounded-full ${
-                              categoryMetrics.balance.isExact
-                                ? 'bg-emerald-500'
-                                : categoryMetrics.balance.overflow > 0
-                                  ? 'bg-rose-500'
-                                  : 'bg-amber-500'
-                            }`}
-                            style={{
-                              width: `${Math.min(
-                                (categoryMetrics.subdomainWeightTotal / Math.max(category.weight || 1, 1)) * 100,
-                                100
-                              )}%`,
-                            }}
-                          />
-                        </div>
-
-                        <div className="mt-4 space-y-4">
-                          {category.subdomains.map((subdomain, index) => {
-                            const subdomainMetrics = getSubdomainMetrics(subdomain);
-
+                        <div className="p-4 space-y-4">
+                          {category.subdomains.map((subdomain, sIndex) => {
+                            const subMetrics = getSubdomainMetrics(subdomain);
+                            const isSubBalanced = subMetrics.balance.isExact;
                             return (
-                              <div
-                                key={subdomain.id}
-                                className="rounded-[1.4rem] border border-white bg-white p-4 shadow-sm"
-                              >
-                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                  <div>
-                                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                                      Subdomain {index + 1}
-                                    </div>
-                                    <div className="mt-1 font-semibold text-gray-900">
-                                      {subdomain.name.en || 'Untitled subdomain'}
-                                    </div>
-                                    <div className="mt-1 text-sm text-gray-500">
-                                      {subdomain.name.ar || 'Arabic name pending'}
-                                    </div>
-                                  </div>
-
-                                  <div
-                                    className={`rounded-full px-3 py-2 text-xs font-semibold ${
-                                      subdomainMetrics.balance.isExact
-                                        ? 'bg-emerald-50 text-emerald-700'
-                                        : subdomainMetrics.balance.overflow > 0
-                                          ? 'bg-rose-50 text-rose-700'
-                                          : 'bg-amber-50 text-amber-700'
-                                    }`}
-                                  >
-                                    {subdomainMetrics.questionWeightTotal} / {subdomain.weight}%
-                                  </div>
+                              <div key={subdomain.id} className="pl-4 border-l-2 border-gray-200 space-y-3">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-medium text-gray-700 text-sm">Subdomain: {subdomain.name.en || `Subdomain ${sIndex + 1}`}</span>
+                                  <span className={`text-sm font-medium ${isSubBalanced ? 'text-gray-700' : 'text-rose-600'}`}>{subdomain.weight}%</span>
                                 </div>
-
-                                <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
-                                  <div
-                                    className={`h-full rounded-full ${
-                                      subdomainMetrics.balance.isExact
-                                        ? 'bg-emerald-500'
-                                        : subdomainMetrics.balance.overflow > 0
-                                          ? 'bg-rose-500'
-                                          : 'bg-amber-500'
-                                    }`}
-                                    style={{
-                                      width: `${Math.min(
-                                        (subdomainMetrics.questionWeightTotal / Math.max(subdomain.weight || 1, 1)) * 100,
-                                        100
-                                      )}%`,
-                                    }}
-                                  />
-                                </div>
-
-                                <div className="mt-4 space-y-3">
-                                  {subdomain.questions.map((question, questionIndex) => (
-                                    <div
-                                      key={question.id}
-                                      className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3"
-                                    >
-                                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                        <div>
-                                          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                                            Question {questionIndex + 1}
-                                          </div>
-                                          <div className="mt-1 font-medium text-gray-900">
-                                            {question.text.en || 'Untitled question'}
-                                          </div>
-                                          <div className="mt-1 text-sm text-gray-500">
-                                            {question.text.ar || 'Arabic text pending'}
-                                          </div>
-                                        </div>
-
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <div className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-gray-700">
-                                            {question.weight}% weight
-                                          </div>
-                                          <div
-                                            className={`rounded-full px-3 py-2 text-xs font-semibold ${
-                                              question.isFollowUp
-                                                ? 'bg-amber-100 text-amber-700'
-                                                : 'bg-gray-200 text-gray-700'
-                                            }`}
-                                          >
-                                            {question.isFollowUp ? 'follow-up' : 'primary'}
-                                          </div>
-                                          <div className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-gray-700">
-                                            {question.options.length} options
-                                          </div>
-                                        </div>
-                                      </div>
+                                <div className="space-y-2 pl-4 border-l border-gray-100">
+                                  {subdomain.questions.map((q, qIndex) => (
+                                    <div key={q.id} className="flex justify-between items-center text-sm">
+                                      <span className="text-gray-600 truncate mr-4">Q{qIndex + 1}: {q.text.en || 'Untitled'}</span>
+                                      <span className={`text-gray-500 font-medium whitespace-nowrap ${(q.weight ?? 0) === 0 ? 'text-rose-500' : ''}`}>{q.weight || 0}%</span>
                                     </div>
                                   ))}
                                 </div>
@@ -887,31 +544,30 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
                           })}
                         </div>
                       </div>
-                    );
-                  })}
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-4 rounded-[2rem] border border-gray-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+            )}
+          </div>
+          
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
             <button
               type="button"
               onClick={() => router.push('/scanners')}
-              className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+              className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to Scanners
+              Exit Builder
             </button>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={handleSaveDraft}
                 disabled={!hasDraftVersion || saving}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
-                <Save className="h-4 w-4" />
                 {saving ? 'Saving...' : 'Save Draft'}
               </button>
 
@@ -919,7 +575,7 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
                 type="button"
                 onClick={handlePublish}
                 disabled={!hasDraftVersion || saving || !validation.isValid}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
                 <CheckCircle2 className="h-4 w-4" />
                 {saving ? 'Publishing...' : 'Publish Version'}
@@ -927,23 +583,9 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
             </div>
           </div>
         </div>
-
-        <div className="space-y-6 2xl:sticky 2xl:top-6 2xl:self-start">
-          <WeightSummaryPanel
-            categories={categories}
-            issues={validation.issues}
-            selectedCategoryId={selectedCategoryId}
-            selectedSubdomainId={selectedSubdomainId}
-          />
-
-          <VersionHistory
-            versions={versions}
-            canCreateVersion={Boolean(scannerId) && !hasDraftVersion}
-            onCreateVersion={handleCreateNewVersion}
-            loading={saving}
-          />
-        </div>
       </div>
+
+      <FloatingIssueButton issues={validation.issues} />
     </div>
   );
 }

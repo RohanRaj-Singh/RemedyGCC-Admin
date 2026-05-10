@@ -1,45 +1,55 @@
 /**
- * Tenant Service - Business logic for tenant operations
- * Separates data fetching from business logic
+ * Tenant service wrapper for shared hooks and pages.
  */
 
-import { Tenant, DashboardStats, BrandingConfig } from '@/types';
-import { DEFAULT_BRANDING } from '@/types/branding';
-import { apiClient, ApiResponse } from './api-client';
-import { dashboardStats, tenants as mockTenants } from '@/data/mockData';
+import type {
+  BrandingConfig,
+  CreateTenantDto,
+  DashboardStats,
+  Tenant,
+  TenantStatus,
+  UpdateTenantDto,
+} from '@/types';
+import { apiClient, type ApiResponse } from './api-client';
+import {
+  createTenant as createTenantRecord,
+  deleteTenant as deleteTenantRecord,
+  getAllTenants,
+  getTenantById,
+  getTenantStats,
+  updateTenant as updateTenantRecord,
+  updateTenantBranding as updateTenantBrandingRecord,
+} from '@/modules/tenant/service';
 
 const USE_MOCK_DATA = true;
 
 export interface TenantFilters {
-  status?: 'active' | 'inactive' | 'suspended';
+  status?: TenantStatus;
   search?: string;
-}
-
-export interface UpdateBrandingParams {
-  logoUrl?: string;
-  faviconUrl?: string;
-  colorScheme?: Partial<BrandingConfig['colorScheme']>;
-  fontFamily?: string;
 }
 
 class TenantService {
   async getAll(filters?: TenantFilters): Promise<ApiResponse<Tenant[]>> {
     if (USE_MOCK_DATA) {
-      let filtered = [...mockTenants];
-      
+      let tenants = await getAllTenants();
+
       if (filters?.status) {
-        filtered = filtered.filter(t => t.status === filters.status);
+        tenants = tenants.filter((tenant) => tenant.status === filters.status);
       }
+
       if (filters?.search) {
         const search = filters.search.toLowerCase();
-        filtered = filtered.filter(t => 
-          t.name.toLowerCase().includes(search) ||
-          t.domain.toLowerCase().includes(search) ||
-          t.slug.toLowerCase().includes(search)
-        );
+        tenants = tenants.filter((tenant) => {
+          const runtimeConfigId = tenant.activeRuntimeConfigId ?? '';
+          return (
+            tenant.name.toLowerCase().includes(search) ||
+            tenant.slug.toLowerCase().includes(search) ||
+            runtimeConfigId.toLowerCase().includes(search)
+          );
+        });
       }
-      
-      return { data: filtered, error: null };
+
+      return { data: tenants, error: null };
     }
 
     return apiClient.get<Tenant[]>('/api/super-admin/tenants');
@@ -47,52 +57,68 @@ class TenantService {
 
   async getById(id: string): Promise<ApiResponse<Tenant>> {
     if (USE_MOCK_DATA) {
-      const tenant = mockTenants.find(t => t.id === id);
+      const tenant = await getTenantById(id);
       if (!tenant) {
         return { data: null, error: 'Tenant not found' };
       }
+
       return { data: tenant, error: null };
     }
 
     return apiClient.get<Tenant>(`/api/super-admin/tenants/${id}`);
   }
 
-  async create(data: Omit<Tenant, 'id'>): Promise<ApiResponse<Tenant>> {
+  async create(
+    data: CreateTenantDto,
+  ): Promise<ApiResponse<Tenant>> {
     if (USE_MOCK_DATA) {
-      const newTenant: Tenant = {
-        ...data,
-        branding: data.branding ?? DEFAULT_BRANDING,
-        id: `tenant-${Date.now()}`,
-      };
-      return { data: newTenant, error: null };
+      try {
+        const tenant = await createTenantRecord(data);
+        return { data: tenant, error: null };
+      } catch (error) {
+        return {
+          data: null,
+          error: error instanceof Error ? error.message : 'Failed to create tenant',
+        };
+      }
     }
 
     return apiClient.post<Tenant>('/api/super-admin/tenants', data);
   }
 
-  async update(id: string, data: Partial<Tenant>): Promise<ApiResponse<Tenant>> {
+  async update(
+    id: string,
+    data: UpdateTenantDto,
+  ): Promise<ApiResponse<Tenant>> {
     if (USE_MOCK_DATA) {
-      const tenant = mockTenants.find(t => t.id === id);
-      if (!tenant) {
-        return { data: null, error: 'Tenant not found' };
+      try {
+        const tenant = await updateTenantRecord(id, data);
+        return { data: tenant, error: null };
+      } catch (error) {
+        return {
+          data: null,
+          error: error instanceof Error ? error.message : 'Failed to update tenant',
+        };
       }
-      return { data: { ...tenant, ...data }, error: null };
     }
 
     return apiClient.put<Tenant>(`/api/super-admin/tenants/${id}`, data);
   }
 
-  async updateBranding(id: string, branding: Partial<BrandingConfig>): Promise<ApiResponse<Tenant>> {
+  async updateBranding(
+    id: string,
+    branding: Partial<BrandingConfig>,
+  ): Promise<ApiResponse<Tenant>> {
     if (USE_MOCK_DATA) {
-      const tenant = mockTenants.find(t => t.id === id);
-      if (!tenant) {
-        return { data: null, error: 'Tenant not found' };
+      try {
+        const tenant = await updateTenantBrandingRecord(id, branding);
+        return { data: tenant, error: null };
+      } catch (error) {
+        return {
+          data: null,
+          error: error instanceof Error ? error.message : 'Failed to update branding',
+        };
       }
-      const updatedTenant: Tenant = {
-        ...tenant,
-        branding: { ...DEFAULT_BRANDING, ...tenant.branding, ...branding },
-      };
-      return { data: updatedTenant, error: null };
     }
 
     return apiClient.put<Tenant>(`/api/super-admin/tenants/${id}/branding`, branding);
@@ -100,7 +126,15 @@ class TenantService {
 
   async delete(id: string): Promise<ApiResponse<void>> {
     if (USE_MOCK_DATA) {
-      return { data: undefined, error: null };
+      try {
+        await deleteTenantRecord(id);
+        return { data: undefined, error: null };
+      } catch (error) {
+        return {
+          data: undefined,
+          error: error instanceof Error ? error.message : 'Failed to delete tenant',
+        };
+      }
     }
 
     return apiClient.delete<void>(`/api/super-admin/tenants/${id}`);
@@ -108,7 +142,37 @@ class TenantService {
 
   async getDashboardStats(): Promise<ApiResponse<DashboardStats>> {
     if (USE_MOCK_DATA) {
-      return { data: dashboardStats, error: null };
+      const stats = await getTenantStats();
+
+      return {
+        data: {
+          totalTenants: stats.total,
+          activeTenants: stats.active,
+          draftTenants: stats.draft,
+          disabledTenants: stats.disabled,
+          archivedTenants: stats.archived,
+          activeRuntimeConfigs: stats.activeRuntimeConfigs,
+          activeScanners: 4,
+          totalLogs: 156,
+          totalSubmissions: 5478,
+          avgScore: 4.2,
+          tenantsByBranding: {
+            custom: stats.byBranding.custom,
+            default: stats.byBranding.default,
+            withWarnings: stats.byBranding.warnings,
+          },
+          recentActivity: [
+            { date: '2026-05-04', submissions: 132, newTenants: 1 },
+            { date: '2026-05-05', submissions: 145, newTenants: 0 },
+            { date: '2026-05-06', submissions: 167, newTenants: 1 },
+            { date: '2026-05-07', submissions: 158, newTenants: 0 },
+            { date: '2026-05-08', submissions: 182, newTenants: 0 },
+            { date: '2026-05-09', submissions: 176, newTenants: 1 },
+            { date: '2026-05-10', submissions: 191, newTenants: 0 },
+          ],
+        },
+        error: null,
+      };
     }
 
     return apiClient.get<DashboardStats>('/api/super-admin/dashboard');
@@ -121,10 +185,7 @@ class TenantService {
 
   async getBrandingByTenantId(tenantId: string): Promise<BrandingConfig> {
     const { data } = await this.getById(tenantId);
-    if (!data) {
-      return DEFAULT_BRANDING;
-    }
-    return data.branding ?? DEFAULT_BRANDING;
+    return data?.branding ?? {};
   }
 }
 

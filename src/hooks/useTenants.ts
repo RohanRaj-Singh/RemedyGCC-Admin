@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Tenant } from '@/types';
+import { CreateTenantDto, Tenant, UpdateTenantDto } from '@/types';
 import { tenantService, TenantFilters } from '@/services';
 
 interface UseTenantsResult {
@@ -13,8 +13,8 @@ interface UseTenantsResult {
   filters: TenantFilters;
   setFilters: (filters: TenantFilters) => void;
   refresh: () => Promise<void>;
-  createTenant: (data: Omit<Tenant, 'id'>) => Promise<{ success: boolean; error?: string }>;
-  updateTenant: (id: string, data: Partial<Tenant>) => Promise<{ success: boolean; error?: string }>;
+  createTenant: (data: CreateTenantDto) => Promise<{ success: boolean; error?: string }>;
+  updateTenant: (id: string, data: UpdateTenantDto) => Promise<{ success: boolean; error?: string }>;
   deleteTenant: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -43,7 +43,7 @@ export function useTenants(): UseTenantsResult {
     fetchTenants();
   }, [fetchTenants]);
 
-  const createTenant = async (data: Omit<Tenant, 'id'>): Promise<{ success: boolean; error?: string }> => {
+  const createTenant = async (data: CreateTenantDto): Promise<{ success: boolean; error?: string }> => {
     const { error } = await tenantService.create(data);
     if (error) {
       return { success: false, error };
@@ -52,7 +52,7 @@ export function useTenants(): UseTenantsResult {
     return { success: true };
   };
 
-  const updateTenant = async (id: string, data: Partial<Tenant>): Promise<{ success: boolean; error?: string }> => {
+  const updateTenant = async (id: string, data: UpdateTenantDto): Promise<{ success: boolean; error?: string }> => {
     const { error } = await tenantService.update(id, data);
     if (error) {
       return { success: false, error };

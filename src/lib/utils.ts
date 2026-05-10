@@ -1,7 +1,11 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { BrandingConfig } from '@/types';
-import { DEFAULT_BRANDING } from '@/types/branding';
+import {
+  brandingToCSSVars,
+  isDefaultBranding,
+  resolveBrandingConfig,
+} from '@/types/branding';
 
 /**
  * Utility function to merge Tailwind CSS classes
@@ -49,12 +53,14 @@ export function formatNumber(num: number): string {
  */
 export function getStatusColor(status: string): string {
   switch (status) {
+    case 'draft':
+      return 'bg-amber-100 text-amber-900';
     case 'active':
       return 'bg-green-100 text-green-800';
-    case 'inactive':
-      return 'bg-gray-100 text-gray-800';
-    case 'suspended':
-      return 'bg-red-100 text-red-800';
+    case 'disabled':
+      return 'bg-slate-100 text-slate-700';
+    case 'archived':
+      return 'bg-zinc-200 text-zinc-700';
     default:
       return 'bg-gray-100 text-gray-800';
   }
@@ -80,7 +86,7 @@ export function getLogLevelColor(level: string): string {
  * Check if branding is custom (not default)
  */
 export function isCustomBranding(branding: BrandingConfig): boolean {
-  return JSON.stringify(branding) !== JSON.stringify(DEFAULT_BRANDING);
+  return !isDefaultBranding(branding);
 }
 
 /**
@@ -112,11 +118,11 @@ export function hslToCssVar(color: string): string {
  * Generate inline style object from branding
  */
 export function brandingToInlineStyle(branding: BrandingConfig): React.CSSProperties {
+  const resolved = resolveBrandingConfig(branding);
   return {
-    '--brand-primary': branding.colorScheme.primaryColor,
-    '--brand-secondary': branding.colorScheme.secondaryColor || branding.colorScheme.primaryColor,
-    '--brand-background': branding.colorScheme.backgroundColor || '0 0% 100%',
-    '--brand-text': branding.colorScheme.textColor || '0 0% 43%',
-    '--brand-accent': branding.colorScheme.accentColor || '212 100% 50%',
+    ...brandingToCSSVars(resolved),
+    '--brand-background': '#ffffff',
+    '--brand-text': '#111827',
+    '--brand-accent': resolved.secondaryColor,
   } as React.CSSProperties;
 }

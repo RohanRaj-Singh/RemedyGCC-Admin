@@ -1,8 +1,12 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode, useMemo } from 'react';
+import { createContext, useContext, ReactNode, useMemo } from 'react';
 import { BrandingConfig } from '@/types';
-import { DEFAULT_BRANDING } from '@/types/branding';
+import {
+  brandingToCSSVars,
+  isDefaultBranding,
+  resolveBrandingConfig,
+} from '@/types/branding';
 import { Tenant } from '@/types';
 
 interface ThemeContextValue {
@@ -20,31 +24,28 @@ interface ThemeProviderProps {
 }
 
 function generateCSSVariables(branding: BrandingConfig): React.CSSProperties {
+  const resolved = resolveBrandingConfig(branding);
   return {
-    '--brand-primary': branding.colorScheme.primaryColor,
-    '--brand-secondary': branding.colorScheme.secondaryColor || branding.colorScheme.primaryColor,
-    '--brand-background': branding.colorScheme.backgroundColor || '0 0% 100%',
-    '--brand-text': branding.colorScheme.textColor || '0 0% 43%',
-    '--brand-accent': branding.colorScheme.accentColor || '212 100% 50%',
-    '--brand-font': branding.fontFamily || 'Satoshi, Inter, sans-serif',
-    '--brand-logo': branding.logoUrl || '/default-logo.svg',
+    ...brandingToCSSVars(resolved),
+    '--brand-background': '#ffffff',
+    '--brand-text': '#111827',
+    '--brand-accent': resolved.secondaryColor,
   } as React.CSSProperties;
 }
 
 function isBrandingCustom(branding: BrandingConfig): boolean {
-  const defaultStr = JSON.stringify(DEFAULT_BRANDING);
-  const currentStr = JSON.stringify(branding);
-  return defaultStr !== currentStr;
+  return !isDefaultBranding(branding);
 }
 
 export function ThemeProvider({ children, tenant, defaultBranding }: ThemeProviderProps) {
-  const branding = tenant?.branding || defaultBranding || DEFAULT_BRANDING;
+  const branding = tenant?.branding || defaultBranding || {};
+  const resolvedBranding = useMemo(() => resolveBrandingConfig(branding), [branding]);
   
   const cssVariables = useMemo(() => generateCSSVariables(branding), [branding]);
   const isCustom = useMemo(() => isBrandingCustom(branding), [branding]);
 
   return (
-    <ThemeContext.Provider value={{ branding, cssVariables, isCustom }}>
+    <ThemeContext.Provider value={{ branding: resolvedBranding, cssVariables, isCustom }}>
       <div style={cssVariables} className="min-h-screen">
         {children}
       </div>

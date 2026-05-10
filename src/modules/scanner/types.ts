@@ -29,7 +29,7 @@ export interface Question {
   id: string;
   subdomainId: string;
   text: LocalizedText;
-  weight: number;
+  weight?: number;
   isFollowUp: boolean;
   triggerCondition?: FollowUpTriggerCondition;
   options: QuestionOption[];

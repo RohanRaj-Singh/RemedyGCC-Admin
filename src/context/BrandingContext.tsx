@@ -2,7 +2,11 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { BrandingConfig } from '@/types';
-import { DEFAULT_BRANDING } from '@/types/branding';
+import {
+  DEFAULT_BRANDING,
+  brandingToCSSVars,
+  resolveBrandingConfig,
+} from '@/types/branding';
 import { tenantService } from '@/services/tenant-service';
 
 interface BrandingContextValue {
@@ -33,7 +37,7 @@ export function BrandingProvider({ tenantId, children }: BrandingProviderProps) 
     try {
       setLoading(true);
       const brandingData = await tenantService.getBrandingByTenantId(tenantId);
-      setBranding(brandingData);
+      setBranding(resolveBrandingConfig(brandingData));
       setError(null);
     } catch (err) {
       setError('Failed to load branding');
@@ -49,7 +53,7 @@ export function BrandingProvider({ tenantId, children }: BrandingProviderProps) 
       setLoading(true);
       const { data } = await tenantService.updateBranding(tenantId, newBranding);
       if (data) {
-        setBranding(data.branding);
+        setBranding(resolveBrandingConfig(data.branding));
       }
       setError(null);
     } catch (err) {
@@ -87,7 +91,7 @@ export function useTenantBranding(tenantId: string): BrandingConfig {
     const fetchBranding = async () => {
       try {
         const brandingData = await tenantService.getBrandingByTenantId(tenantId);
-        setBranding(brandingData);
+        setBranding(resolveBrandingConfig(brandingData));
       } catch (err) {
         console.error('Failed to load branding', err);
       } finally {
@@ -104,11 +108,11 @@ export function useTenantBranding(tenantId: string): BrandingConfig {
 }
 
 export function applyBrandingToCSS(branding: BrandingConfig): Record<string, string> {
+  const resolved = resolveBrandingConfig(branding);
   return {
-    '--brand-primary': branding.colorScheme.primaryColor,
-    '--brand-secondary': branding.colorScheme.secondaryColor || branding.colorScheme.primaryColor,
-    '--brand-background': branding.colorScheme.backgroundColor || '0 0% 100%',
-    '--brand-text': branding.colorScheme.textColor || '0 0% 43%',
-    '--brand-accent': branding.colorScheme.accentColor || '212 100% 50%',
+    ...brandingToCSSVars(resolved),
+    '--brand-background': '#ffffff',
+    '--brand-text': '#111827',
+    '--brand-accent': resolved.secondaryColor,
   };
 }

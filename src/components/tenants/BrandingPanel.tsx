@@ -1,9 +1,21 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
-import { ImageOff } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
+import { AlertTriangle, ImageOff } from 'lucide-react';
 import { BrandingConfig } from '@/types';
-import { DEFAULT_BRANDING } from '@/types/branding';
+import {
+  DEFAULT_BRANDING,
+  getReadableTextColor,
+  resolveBrandingConfig,
+  validateBrandingConfig,
+} from '@/types/branding';
 import { ImageUploader } from './ImageUploader';
 import { ColorPicker } from './ColorPicker';
 
@@ -20,272 +32,121 @@ interface BrandingPreviewCardProps {
   description?: string;
 }
 
-interface BrandingPreviewProps {
+function PreviewLogo({
+  logoUrl,
+  fallbackColor,
+  fallbackText,
+}: {
   logoUrl?: string;
-  primaryColor: string;
-  secondaryColor: string;
-  accentColor: string;
-  textColor: string;
-  bgColor: string;
-  primaryValue: string;
-  secondaryValue: string;
-  accentValue: string;
-  textValue: string;
-  backgroundValue: string;
-}
-
-interface BrandingPreviewData {
-  logoUrl?: string;
-  primaryColor: string;
-  secondaryColor: string;
-  accentColor: string;
-  textColor: string;
-  bgColor: string;
-  primaryValue: string;
-  secondaryValue: string;
-  accentValue: string;
-  textValue: string;
-  backgroundValue: string;
-}
-
-function toCssColor(color: string | undefined, fallback: string): string {
-  const resolvedColor = color || fallback;
-  const match = resolvedColor.match(
-    /^(\d+)\s+(\d+%)\s+(\d+%)(?:\s*\/\s*(\d+(?:\.\d+)?%))?$/
-  );
-
-  if (match) {
-    const [, hue, saturation, lightness, alpha] = match;
-    const alphaValue = alpha
-      ? Number.parseFloat(alpha.replace('%', '')) / 100
-      : undefined;
-    return alpha
-      ? `hsla(${hue}, ${saturation}, ${lightness}, ${alphaValue})`
-      : `hsl(${hue}, ${saturation}, ${lightness})`;
-  }
-
-  return resolvedColor;
-}
-
-function PreviewLogo({ logoUrl, primaryColor }: { logoUrl?: string; primaryColor: string }) {
-  const [hasImageError, setHasImageError] = useState(false);
+  fallbackColor: string;
+  fallbackText: string;
+}) {
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    setHasImageError(false);
+    setHasError(false);
   }, [logoUrl]);
 
-  if (!logoUrl || hasImageError) {
+  if (!logoUrl || hasError) {
     return (
       <div
-        className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm border"
+        className="flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm"
         style={{
-          background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)`,
-          borderColor: 'hsl(0 0% 100% / 0.35)',
+          background: `linear-gradient(135deg, ${fallbackColor}, ${fallbackColor}cc)`,
+          color: fallbackText,
         }}
       >
-        {logoUrl ? (
-          <ImageOff className="w-5 h-5 text-white" />
-        ) : (
-          <span className="font-bold text-white">T</span>
-        )}
+        {logoUrl ? <ImageOff className="h-5 w-5" /> : <span className="font-bold">T</span>}
       </div>
     );
   }
 
   return (
-    <div className="w-12 h-12 rounded-2xl border overflow-hidden bg-white shadow-sm">
+    <div className="h-12 w-12 overflow-hidden rounded-2xl border bg-white shadow-sm">
       <img
         src={logoUrl}
         alt="Tenant branding logo preview"
-        className="w-full h-full object-contain"
-        onError={() => setHasImageError(true)}
+        className="h-full w-full object-contain"
+        onError={() => setHasError(true)}
       />
     </div>
   );
 }
 
-function getBrandingPreviewData(branding: Partial<BrandingConfig>): BrandingPreviewData {
-  const colorScheme = {
-    ...DEFAULT_BRANDING.colorScheme,
-    ...branding.colorScheme,
-  };
-
-  const primaryValue = colorScheme.primaryColor;
-  const secondaryValue = colorScheme.secondaryColor || DEFAULT_BRANDING.colorScheme.secondaryColor || '';
-  const accentValue = colorScheme.accentColor || DEFAULT_BRANDING.colorScheme.accentColor || '';
-  const textValue = colorScheme.textColor || DEFAULT_BRANDING.colorScheme.textColor || '0 0% 43%';
-  const backgroundValue = colorScheme.backgroundColor || DEFAULT_BRANDING.colorScheme.backgroundColor || '0 0% 100%';
-
-  return {
-    logoUrl: branding.logoUrl,
-    primaryColor: toCssColor(primaryValue, DEFAULT_BRANDING.colorScheme.primaryColor),
-    secondaryColor: toCssColor(secondaryValue, DEFAULT_BRANDING.colorScheme.secondaryColor || primaryValue),
-    accentColor: toCssColor(accentValue, DEFAULT_BRANDING.colorScheme.accentColor || primaryValue),
-    textColor: toCssColor(textValue, DEFAULT_BRANDING.colorScheme.textColor || '0 0% 43%'),
-    bgColor: toCssColor(backgroundValue, DEFAULT_BRANDING.colorScheme.backgroundColor || '0 0% 100%'),
-    primaryValue,
-    secondaryValue,
-    accentValue,
-    textValue,
-    backgroundValue,
-  };
+function GradientChip({ label, gradient }: { label: string; gradient: string }) {
+  return (
+    <div className="rounded-xl border p-2" style={{ borderColor: 'var(--border)' }}>
+      <div className="mb-2 h-10 rounded-lg" style={{ background: gradient }} />
+      <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--foreground)' }}>
+        {label}
+      </p>
+      <p className="mt-1 break-all text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+        {gradient}
+      </p>
+    </div>
+  );
 }
 
-function BrandingPreview({
-  logoUrl,
-  primaryColor,
-  secondaryColor,
-  accentColor,
-  textColor,
-  bgColor,
-  primaryValue,
-  secondaryValue,
-  accentValue,
-  textValue,
-  backgroundValue,
-}: BrandingPreviewProps) {
+function BrandingPreview({ branding }: { branding: Partial<BrandingConfig> }) {
+  const resolved = useMemo(() => resolveBrandingConfig(branding), [branding]);
+  const onPrimary = getReadableTextColor(resolved.primaryColor);
+
   return (
     <div
-      className="rounded-2xl border overflow-hidden shadow-sm"
-      style={{
-        backgroundColor: bgColor,
-        borderColor: 'var(--border)',
-      }}
+      className="overflow-hidden rounded-2xl border shadow-sm"
+      style={{ borderColor: 'var(--border)', backgroundColor: '#ffffff' }}
     >
-      <div
-        className="h-3 w-full"
-        style={{
-          background: `linear-gradient(90deg, ${primaryColor}, ${accentColor})`,
-        }}
-      />
+      <div className="h-3 w-full" style={{ background: resolved.gradients.brandGradient }} />
 
-      <div className="p-4 space-y-4">
+      <div className="space-y-4 p-4">
         <div
           className="rounded-2xl p-4"
           style={{
-            background: `linear-gradient(135deg, ${secondaryColor}, ${bgColor})`,
-            border: `1px solid ${primaryColor}22`,
+            background: resolved.gradients.heroGradient,
+            border: `1px solid ${resolved.primaryColor}22`,
           }}
         >
-          <div className="flex items-center gap-3 mb-4">
-            <PreviewLogo logoUrl={logoUrl} primaryColor={primaryColor} />
+          <div className="mb-4 flex items-center gap-3">
+            <PreviewLogo
+              logoUrl={resolved.logoUrl}
+              fallbackColor={resolved.primaryColor}
+              fallbackText={onPrimary}
+            />
             <div className="min-w-0">
-              <p className="text-sm font-semibold" style={{ color: textColor }}>
-                Tenant Name
+              <p className="truncate text-sm font-semibold" style={{ color: '#111827' }}>
+                {resolved.appName}
               </p>
-              <p className="text-xs" style={{ color: textColor }}>
-                Live branding preview
+              <p className="text-xs" style={{ color: '#4b5563' }}>
+                tenant.remedygcc.com
               </p>
             </div>
           </div>
 
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              className="px-4 py-2 rounded-xl text-sm font-semibold text-white"
-              style={{ backgroundColor: primaryColor }}
+              className="rounded-xl px-4 py-2 text-sm font-semibold"
+              style={{ backgroundColor: resolved.primaryColor, color: onPrimary }}
             >
               Primary
             </button>
             <button
               type="button"
-              className="px-4 py-2 rounded-xl text-sm font-semibold border"
+              className="rounded-xl border px-4 py-2 text-sm font-semibold"
               style={{
-                backgroundColor: secondaryColor,
-                borderColor: primaryColor,
-                color: textColor,
+                backgroundColor: resolved.secondaryColor,
+                borderColor: resolved.primaryColor,
+                color: getReadableTextColor(resolved.secondaryColor),
               }}
             >
               Secondary
             </button>
-            <span
-              className="px-3 py-2 rounded-xl text-xs font-semibold"
-              style={{
-                backgroundColor: accentColor,
-                color: '#fff',
-              }}
-            >
-              Accent
-            </span>
           </div>
         </div>
 
-        <div
-          className="rounded-2xl border p-3 space-y-2"
-          style={{
-            backgroundColor: bgColor,
-            borderColor: 'var(--border)',
-          }}
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: textColor }}>
-              Reading Preview
-            </p>
-            <span
-              className="text-[10px] px-2 py-1 rounded-full font-semibold"
-              style={{ backgroundColor: accentColor, color: '#fff' }}
-            >
-              Highlight
-            </span>
-          </div>
-          <p className="text-sm font-medium" style={{ color: textColor }}>
-            Clear text on the chosen background should stay easy to read.
-          </p>
-          <p className="text-xs" style={{ color: textColor }}>
-            Use background for page surfaces and text for titles, labels, and body copy.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl border p-2" style={{ borderColor: 'var(--border)' }}>
-            <div className="h-10 rounded-lg mb-2" style={{ backgroundColor: primaryColor }} />
-            <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: textColor }}>
-              Primary
-            </p>
-            <p className="text-[10px] font-mono mt-1 break-all" style={{ color: textColor }}>
-              {primaryValue}
-            </p>
-          </div>
-          <div className="rounded-xl border p-2" style={{ borderColor: 'var(--border)' }}>
-            <div className="h-10 rounded-lg mb-2" style={{ backgroundColor: secondaryColor }} />
-            <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: textColor }}>
-              Secondary
-            </p>
-            <p className="text-[10px] font-mono mt-1 break-all" style={{ color: textColor }}>
-              {secondaryValue}
-            </p>
-          </div>
-          <div className="rounded-xl border p-2" style={{ borderColor: 'var(--border)' }}>
-            <div className="h-10 rounded-lg mb-2" style={{ backgroundColor: accentColor }} />
-            <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: textColor }}>
-              Accent
-            </p>
-            <p className="text-[10px] font-mono mt-1 break-all" style={{ color: textColor }}>
-              {accentValue}
-            </p>
-          </div>
-          <div className="rounded-xl border p-2" style={{ borderColor: 'var(--border)', backgroundColor: bgColor }}>
-            <div className="h-10 rounded-lg mb-2 border" style={{ backgroundColor: bgColor, borderColor: secondaryColor }} />
-            <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: textColor }}>
-              Background
-            </p>
-            <p className="text-[10px] font-mono mt-1 break-all" style={{ color: textColor }}>
-              {backgroundValue}
-            </p>
-          </div>
-          <div className="rounded-xl border p-2" style={{ borderColor: 'var(--border)', backgroundColor: bgColor }}>
-            <div className="h-10 rounded-lg mb-2 flex items-center px-2" style={{ backgroundColor: secondaryColor }}>
-              <span className="text-xs font-semibold" style={{ color: textColor }}>
-                Aa
-              </span>
-            </div>
-            <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: textColor }}>
-              Text
-            </p>
-            <p className="text-[10px] font-mono mt-1 break-all" style={{ color: textColor }}>
-              {textValue}
-            </p>
-          </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <GradientChip label="Brand Gradient" gradient={resolved.gradients.brandGradient} />
+          <GradientChip label="Hero Gradient" gradient={resolved.gradients.heroGradient} />
         </div>
       </div>
     </div>
@@ -295,40 +156,23 @@ function BrandingPreview({
 export function BrandingPreviewCard({
   branding,
   title = 'Live Preview',
-  description = 'Updates instantly as you adjust the branding settings.',
+  description = 'Resolved with the same fallback rules expected by the runtime app.',
 }: BrandingPreviewCardProps) {
-  const previewData = useMemo(() => getBrandingPreviewData(branding), [branding]);
-
   return (
     <div
-      className="rounded-xl border shadow-sm p-5 h-fit w-full"
-      style={{
-        backgroundColor: 'hsl(0 0% 98%)',
-        borderColor: 'var(--border)',
-      }}
+      className="h-fit w-full rounded-xl border p-5 shadow-sm"
+      style={{ backgroundColor: 'hsl(0 0% 98%)', borderColor: 'var(--border)' }}
     >
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div>
-          <h3 className="font-semibold text-lg" style={{ color: 'var(--foreground)' }}>
-            {title}
-          </h3>
-          <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-            {description}
-          </p>
-        </div>
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+          {title}
+        </h3>
+        <p className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+          {description}
+        </p>
       </div>
 
-      <BrandingPreview
-        key={[
-          previewData.primaryValue,
-          previewData.secondaryValue,
-          previewData.accentValue,
-          previewData.textValue,
-          previewData.backgroundValue,
-          previewData.logoUrl || '',
-        ].join('|')}
-        {...previewData}
-      />
+      <BrandingPreview branding={branding} />
     </div>
   );
 }
@@ -339,185 +183,214 @@ export function BrandingPanel({
   title = 'Branding',
   showPreviewSection = true,
 }: BrandingPanelProps) {
-  const colorScheme = useMemo(() => ({
-    ...DEFAULT_BRANDING.colorScheme,
-    ...branding.colorScheme,
-  }), [branding.colorScheme]);
+  const resolved = useMemo(() => resolveBrandingConfig(branding), [branding]);
+  const validation = useMemo(() => validateBrandingConfig(branding), [branding]);
 
-  const primaryColorValue = colorScheme.primaryColor;
-  const secondaryColorValue = colorScheme.secondaryColor || DEFAULT_BRANDING.colorScheme.secondaryColor || '';
-  const accentColorValue = colorScheme.accentColor || DEFAULT_BRANDING.colorScheme.accentColor || '';
-  const textColorValue = colorScheme.textColor || DEFAULT_BRANDING.colorScheme.textColor || '0 0% 43%';
-  const backgroundColorValue = colorScheme.backgroundColor || DEFAULT_BRANDING.colorScheme.backgroundColor || '0 0% 100%';
-  const previewData = useMemo(() => getBrandingPreviewData(branding), [branding]);
+  const updateBrandingField = useCallback(
+    <Key extends keyof BrandingConfig>(key: Key, value: BrandingConfig[Key]) => {
+      onChange((current) => ({
+        ...current,
+        [key]: value,
+      }));
+    },
+    [onChange],
+  );
 
-  const handleLogoUrlChange = useCallback((url: string | null) => {
-    onChange((current) => ({
-      ...current,
-      logoUrl: url || undefined,
-    }));
-  }, [onChange]);
-
-  const handlePrimaryColorChange = useCallback((color: string) => {
-    onChange((current) => ({
-      ...current,
-      colorScheme: {
-        ...DEFAULT_BRANDING.colorScheme,
-        ...current.colorScheme,
-        primaryColor: color,
-      },
-    }));
-  }, [onChange]);
-
-  const handleSecondaryColorChange = useCallback((color: string) => {
-    onChange((current) => ({
-      ...current,
-      colorScheme: {
-        ...DEFAULT_BRANDING.colorScheme,
-        ...current.colorScheme,
-        secondaryColor: color,
-      },
-    }));
-  }, [onChange]);
-
-  const handleAccentColorChange = useCallback((color: string) => {
-    onChange((current) => ({
-      ...current,
-      colorScheme: {
-        ...DEFAULT_BRANDING.colorScheme,
-        ...current.colorScheme,
-        accentColor: color,
-      },
-    }));
-  }, [onChange]);
-
-  const handleBackgroundColorChange = useCallback((color: string) => {
-    onChange((current) => ({
-      ...current,
-      colorScheme: {
-        ...DEFAULT_BRANDING.colorScheme,
-        ...current.colorScheme,
-        backgroundColor: color,
-      },
-    }));
-  }, [onChange]);
-
-  const handleTextColorChange = useCallback((color: string) => {
-    onChange((current) => ({
-      ...current,
-      colorScheme: {
-        ...DEFAULT_BRANDING.colorScheme,
-        ...current.colorScheme,
-        textColor: color,
-      },
-    }));
-  }, [onChange]);
+  const updateGradient = useCallback(
+    (key: keyof NonNullable<BrandingConfig['gradients']>, value: string) => {
+      onChange((current) => ({
+        ...current,
+        gradients: {
+          ...current.gradients,
+          [key]: value,
+        },
+      }));
+    },
+    [onChange],
+  );
 
   const handleReset = useCallback(() => {
-    onChange(DEFAULT_BRANDING);
+    onChange({
+      appName: DEFAULT_BRANDING.appName,
+      logoUrl: DEFAULT_BRANDING.logoUrl,
+      primaryColor: DEFAULT_BRANDING.primaryColor,
+      secondaryColor: DEFAULT_BRANDING.secondaryColor,
+      faviconUrl: DEFAULT_BRANDING.faviconUrl,
+      fontFamily: DEFAULT_BRANDING.fontFamily,
+      gradients: DEFAULT_BRANDING.gradients,
+    });
   }, [onChange]);
+
+  const inputStyle =
+    'w-full rounded-lg border border-[var(--input)] px-3 py-2 text-sm focus:border-[var(--ring)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]';
 
   return (
     <div
-      className="rounded-xl border shadow-sm p-5 h-fit w-full"
-      style={{
-        backgroundColor: 'hsl(0 0% 98%)',
-        borderColor: 'var(--border)',
-      }}
+      className="h-fit w-full rounded-xl border p-5 shadow-sm"
+      style={{ backgroundColor: 'hsl(0 0% 98%)', borderColor: 'var(--border)' }}
     >
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-lg" style={{ color: 'var(--foreground)' }}>
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
           {title}
         </h3>
         <button
           type="button"
           onClick={handleReset}
-          className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
+          className="text-sm transition-colors hover:text-slate-700"
+          style={{ color: 'var(--muted-foreground)' }}
         >
           Reset
         </button>
       </div>
 
       <div className="space-y-5">
-        {showPreviewSection && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                Live Preview
-              </h4>
-              <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                Updates instantly
-              </span>
+        {validation.errors.length > 0 && (
+          <div
+            className="rounded-xl border p-4"
+            style={{
+              backgroundColor: 'hsl(0 84% 60% / 0.08)',
+              borderColor: 'hsl(0 84% 60% / 0.22)',
+            }}
+          >
+            <p className="text-sm font-semibold" style={{ color: 'var(--destructive)' }}>
+              Branding validation errors
+            </p>
+            <div className="mt-2 space-y-1 text-sm" style={{ color: 'var(--destructive)' }}>
+              {validation.errors.map((issue) => (
+                <p key={issue}>{issue}</p>
+              ))}
             </div>
-            <BrandingPreview
-              key={[
-                previewData.primaryValue,
-                previewData.secondaryValue,
-                previewData.accentValue,
-                previewData.textValue,
-                previewData.backgroundValue,
-                previewData.logoUrl || '',
-              ].join('|')}
-              {...previewData}
-            />
           </div>
         )}
 
-        <div className="border-t pt-5 space-y-4" style={{ borderColor: 'var(--border)' }}>
-          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
-            <ImageUploader
-              value={branding.logoUrl}
-              onChange={handleLogoUrlChange}
-              label="Logo Image"
-              placeholder="Upload logo"
+        {validation.warnings.length > 0 && (
+          <div
+            className="rounded-xl border p-4"
+            style={{
+              backgroundColor: 'rgba(245, 158, 11, 0.08)',
+              borderColor: 'rgba(245, 158, 11, 0.35)',
+            }}
+          >
+            <div className="mb-2 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" style={{ color: '#b45309' }} />
+              <p className="text-sm font-semibold" style={{ color: '#92400e' }}>
+                Runtime fallback warnings
+              </p>
+            </div>
+            <div className="space-y-1 text-sm" style={{ color: '#92400e' }}>
+              {validation.warnings.map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {showPreviewSection && <BrandingPreview branding={branding} />}
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+              App Name
+            </label>
+            <input
+              type="text"
+              value={branding.appName ?? ''}
+              onChange={(event) => updateBrandingField('appName', event.target.value)}
+              className={inputStyle}
+              placeholder={DEFAULT_BRANDING.appName}
             />
           </div>
 
-          <h4 className="text-sm font-medium mb-4" style={{ color: 'var(--foreground)' }}>
-            Color Scheme
-          </h4>
-          <p className="text-xs mb-4" style={{ color: 'var(--muted-foreground)' }}>
-            Keep it simple: choose a main brand color, a soft surface color, a highlight, plus readable page and text colors.
-          </p>
+          <div className="space-y-2">
+            <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+              Font Family
+            </label>
+            <input
+              type="text"
+              value={branding.fontFamily ?? ''}
+              onChange={(event) => updateBrandingField('fontFamily', event.target.value)}
+              className={inputStyle}
+              placeholder={DEFAULT_BRANDING.fontFamily}
+            />
+          </div>
+        </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
-              <ColorPicker
-                value={primaryColorValue}
-                onChange={handlePrimaryColorChange}
-                label="Primary Action"
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
+            <ImageUploader
+              value={branding.logoUrl}
+              onChange={(url) => updateBrandingField('logoUrl', url ?? undefined)}
+              label="Logo"
+              placeholder="Upload runtime logo"
+            />
+          </div>
+
+          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
+            <ImageUploader
+              value={branding.faviconUrl}
+              onChange={(url) => updateBrandingField('faviconUrl', url ?? undefined)}
+              label="Favicon"
+              placeholder="Upload favicon"
+              maxSizeMB={2}
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
+            <ColorPicker
+              value={resolved.primaryColor}
+              onChange={(color) => updateBrandingField('primaryColor', color)}
+              label="Primary Color"
+            />
+          </div>
+
+          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
+            <ColorPicker
+              value={resolved.secondaryColor}
+              onChange={(color) => updateBrandingField('secondaryColor', color)}
+              label="Secondary Color"
+            />
+          </div>
+        </div>
+
+        <div
+          className="rounded-xl border p-4"
+          style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}
+        >
+          <div className="mb-3">
+            <h4 className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+              Optional Gradient Overrides
+            </h4>
+            <p className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+              Leave empty to let the runtime derive safe gradients automatically.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                Brand Gradient
+              </label>
+              <input
+                type="text"
+                value={branding.gradients?.brandGradient ?? ''}
+                onChange={(event) => updateGradient('brandGradient', event.target.value)}
+                className={inputStyle}
+                placeholder={resolved.gradients.brandGradient}
               />
             </div>
 
-            <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
-              <ColorPicker
-                value={secondaryColorValue}
-                onChange={handleSecondaryColorChange}
-                label="Secondary Surface"
-              />
-            </div>
-
-            <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
-              <ColorPicker
-                value={accentColorValue}
-                onChange={handleAccentColorChange}
-                label="Highlight"
-              />
-            </div>
-
-            <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
-              <ColorPicker
-                value={backgroundColorValue}
-                onChange={handleBackgroundColorChange}
-                label="Page Background"
-              />
-            </div>
-
-            <div className="rounded-xl border p-3 sm:col-span-2" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
-              <ColorPicker
-                value={textColorValue}
-                onChange={handleTextColorChange}
-                label="Text"
+            <div className="space-y-2">
+              <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                Hero Gradient
+              </label>
+              <input
+                type="text"
+                value={branding.gradients?.heroGradient ?? ''}
+                onChange={(event) => updateGradient('heroGradient', event.target.value)}
+                className={inputStyle}
+                placeholder={resolved.gradients.heroGradient}
               />
             </div>
           </div>

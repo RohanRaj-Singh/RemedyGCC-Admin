@@ -10,6 +10,7 @@ export interface BuilderStep {
 interface StepNavigationProps {
   steps: BuilderStep[];
   activeStep: number;
+  canProceed?: boolean;
   onStepChange: (stepIndex: number) => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -18,6 +19,7 @@ interface StepNavigationProps {
 export function StepNavigation({
   steps,
   activeStep,
+  canProceed = true,
   onStepChange,
   onPrevious,
   onNext,
@@ -52,7 +54,7 @@ export function StepNavigation({
           <button
             type="button"
             onClick={onNext}
-            disabled={activeStep === steps.length - 1}
+            disabled={activeStep === steps.length - 1 || !canProceed}
             className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Next

@@ -1,8 +1,13 @@
 'use client';
 
-import { Tenant } from '@/types';
 import Link from 'next/link';
-import { Building2, Edit, Trash2, Scan } from 'lucide-react';
+import { AlertTriangle, Building2, Edit, Link2, Trash2 } from 'lucide-react';
+import type { Tenant } from '../types';
+import { getTenantHostname, getTenantStatusMeta } from '../utils';
+import {
+  getReadableTextColor,
+  resolveBrandingConfig,
+} from '@/types/branding';
 
 interface TenantListProps {
   tenants: Tenant[];
@@ -10,223 +15,189 @@ interface TenantListProps {
   isDeleting?: string | null;
 }
 
-function getBrandingCSSVars(branding: Tenant['branding']): Record<string, string> {
-  return {
-    '--brand-primary': branding.colorScheme.primaryColor,
-    '--brand-secondary': branding.colorScheme.secondaryColor || branding.colorScheme.primaryColor,
-    '--brand-background': branding.colorScheme.backgroundColor || '0 0% 100%',
-    '--brand-text': branding.colorScheme.textColor || '0 0% 43%',
-    '--brand-accent': branding.colorScheme.accentColor || '212 100% 50%',
-  };
-}
-
-const STATUS_CONFIG = {
-  active: { label: 'Active', bg: 'hsl(142 76% 36% / 0.15)', color: 'hsl(142 76% 26%)', dot: 'hsl(142 76% 36%)' },
-  inactive: { label: 'Inactive', bg: 'hsl(0 0% 85% / 0.5)', color: 'hsl(0 0% 30%)', dot: 'hsl(0 0% 60%)' },
-  suspended: { label: 'Suspended', bg: 'hsl(0 84% 60% / 0.15)', color: 'hsl(0 84% 50%)', dot: 'hsl(0 84% 60%)' },
+const STATUS_STYLES: Record<string, { bg: string; color: string; dot: string }> = {
+  draft: { bg: 'rgba(245, 158, 11, 0.12)', color: '#92400e', dot: '#d97706' },
+  active: { bg: 'rgba(34, 197, 94, 0.12)', color: '#166534', dot: '#16a34a' },
+  disabled: { bg: 'rgba(148, 163, 184, 0.18)', color: '#475569', dot: '#64748b' },
+  archived: { bg: 'rgba(82, 82, 91, 0.16)', color: '#3f3f46', dot: '#52525b' },
 };
 
 export function TenantList({ tenants, onDelete, isDeleting }: TenantListProps) {
   if (tenants.length === 0) {
     return (
-      <div className="text-center py-16">
-        <div 
-          className="w-20 h-20 mx-auto mb-5 rounded-2xl flex items-center justify-center"
+      <div className="py-16 text-center">
+        <div
+          className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl"
           style={{ backgroundColor: 'var(--muted)' }}
         >
-          <Building2 className="w-10 h-10" style={{ color: 'var(--muted-foreground)' }} />
+          <Building2 className="h-10 w-10" style={{ color: 'var(--muted-foreground)' }} />
         </div>
-        <h3 className="text-xl font-semibold mb-2" style={{ color: 'var(--foreground)' }}>No tenants found</h3>
-        <p className="text-base" style={{ color: 'var(--muted-foreground)' }}>Create your first tenant to get started</p>
+        <h3 className="mb-2 text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
+          No tenants found
+        </h3>
+        <p className="text-base" style={{ color: 'var(--muted-foreground)' }}>
+          Create your first tenant to start the draft-to-publish flow.
+        </p>
       </div>
     );
   }
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[900px]">
+      <table className="w-full min-w-[980px]">
         <thead>
-          <tr 
+          <tr
             className="border-b-2"
-            style={{ 
-              borderColor: 'var(--border)',
-              backgroundColor: 'hsl(0 0% 98%)'
-            }}
+            style={{ borderColor: 'var(--border)', backgroundColor: 'hsl(0 0% 98%)' }}
           >
-            <th 
-              className="text-left py-4 px-5 font-bold text-sm uppercase tracking-wide"
-              style={{ color: 'var(--foreground)' }}
-            >
-              Tenant
-            </th>
-            <th 
-              className="text-left py-4 px-5 font-bold text-sm uppercase tracking-wide"
-              style={{ color: 'var(--foreground)' }}
-            >
-              Subdomain
-            </th>
-            <th 
-              className="text-left py-4 px-5 font-bold text-sm uppercase tracking-wide"
-              style={{ color: 'var(--foreground)' }}
-            >
-              Status
-            </th>
-            <th 
-              className="text-left py-4 px-5 font-bold text-sm uppercase tracking-wide"
-              style={{ color: 'var(--foreground)' }}
-            >
-              Scanner
-            </th>
-            <th 
-              className="text-left py-4 px-5 font-bold text-sm uppercase tracking-wide"
-              style={{ color: 'var(--foreground)' }}
-            >
-              Submissions
-            </th>
-            <th 
-              className="text-right py-4 px-5 font-bold text-sm uppercase tracking-wide"
-              style={{ color: 'var(--foreground)' }}
-            >
-              Actions
-            </th>
+            {['Tenant', 'Slug', 'Status', 'Runtime Config', 'Publishing', 'Actions'].map((heading) => (
+              <th
+                key={heading}
+                className="px-5 py-4 text-left text-sm font-bold uppercase tracking-wide"
+                style={{ color: 'var(--foreground)' }}
+              >
+                {heading}
+              </th>
+            ))}
           </tr>
         </thead>
-          <tbody>
+
+        <tbody>
           {tenants.map((tenant) => {
-            const status = STATUS_CONFIG[tenant.status] || STATUS_CONFIG.inactive;
-            const cssVars = getBrandingCSSVars(tenant.branding);
-            
+            const resolvedBranding = resolveBrandingConfig(tenant.branding);
+            const status = STATUS_STYLES[tenant.status];
+            const statusMeta = getTenantStatusMeta(tenant.status);
+            const canDelete =
+              tenant.status === 'draft' && !tenant.activeRuntimeConfigId && Boolean(onDelete);
+
             return (
-              <tr 
-                key={tenant.id} 
+              <tr
+                key={tenant.id}
                 className="border-b transition-all duration-150 hover:bg-slate-50/80"
-                style={{ 
-                  borderColor: 'var(--border)',
-                  backgroundColor: 'var(--background)'
-                }}
+                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}
               >
-                <td className="py-4 px-5">
+                <td className="px-5 py-4">
                   <div className="flex items-center gap-4">
-                    <div 
-                      className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold shadow-sm"
-                      style={{ 
-                        backgroundColor: cssVars['--brand-primary'], 
-                        color: 'white',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    <div
+                      className="flex h-12 w-12 items-center justify-center rounded-xl text-lg font-bold shadow-sm"
+                      style={{
+                        background: resolvedBranding.gradients.brandGradient,
+                        color: getReadableTextColor(resolvedBranding.primaryColor),
                       }}
                     >
                       {tenant.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <div 
-                        className="font-semibold text-base" 
-                        style={{ color: 'var(--foreground)' }}
-                      >
+                      <div className="text-base font-semibold" style={{ color: 'var(--foreground)' }}>
                         {tenant.name}
                       </div>
-                      <div 
-                        className="text-sm mt-0.5"
-                        style={{ color: 'var(--muted-foreground)' }}
-                      >
+                      <div className="mt-0.5 text-sm" style={{ color: 'var(--muted-foreground)' }}>
                         Created {new Date(tenant.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </div>
                     </div>
                   </div>
                 </td>
-                <td className="py-4 px-5">
-                  <code 
-                    className="text-sm px-3 py-1.5 rounded-md font-medium"
-                    style={{ 
-                      backgroundColor: 'var(--muted)', 
-                      color: 'var(--foreground)'
-                    }}
+
+                <td className="px-5 py-4">
+                  <code
+                    className="rounded-md px-3 py-1.5 text-sm font-medium"
+                    style={{ backgroundColor: 'var(--muted)', color: 'var(--foreground)' }}
                   >
-                    {tenant.subdomain}.remedygcc.com
+                    {getTenantHostname(tenant.slug)}
                   </code>
                 </td>
-                <td className="py-4 px-5">
+
+                <td className="px-5 py-4">
                   <div className="flex items-center gap-2.5">
-                    <span 
-                      className="w-2.5 h-2.5 rounded-full"
-                      style={{ backgroundColor: status.dot }}
-                    />
-                    <span 
-                      className="inline-flex px-3 py-1.5 rounded-lg text-sm font-semibold"
-                      style={{ 
-                        backgroundColor: status.bg, 
-                        color: status.color
-                      }}
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: status.dot }} />
+                    <span
+                      className="inline-flex rounded-lg px-3 py-1.5 text-sm font-semibold"
+                      style={{ backgroundColor: status.bg, color: status.color }}
                     >
-                      {status.label}
+                      {statusMeta.label}
                     </span>
                   </div>
+                  <p className="mt-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                    {statusMeta.description}
+                  </p>
                 </td>
-                <td className="py-4 px-5">
-                  {tenant.assignedScannerId ? (
-                    <div className="flex items-center gap-2.5">
-                      <div 
-                        className="w-7 h-7 rounded-lg flex items-center justify-center"
-                        style={{ backgroundColor: 'hsl(142 76% 36% / 0.1)' }}
-                      >
-                        <Scan className="w-4 h-4" style={{ color: 'var(--primary)' }} />
+
+                <td className="px-5 py-4">
+                  {tenant.activeRuntimeConfig ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Link2 className="h-4 w-4" style={{ color: 'var(--primary)' }} />
+                        <span className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                          {tenant.activeRuntimeConfig.runtimeConfigId}
+                        </span>
                       </div>
-                      <span 
-                        className="text-sm font-medium truncate max-w-[180px]"
-                        style={{ color: 'var(--foreground)' }}
-                      >
-                        {tenant.assignedScannerName || tenant.assignedScannerId}
-                      </span>
+                      <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                        {tenant.activeRuntimeConfig.versionRefs.scannerVersionId} / {tenant.activeRuntimeConfig.versionRefs.attributeTemplateVersionId}
+                      </p>
                     </div>
                   ) : (
-                    <span 
-                      className="text-sm italic font-medium"
-                      style={{ color: 'var(--muted-foreground)' }}
-                    >
-                      Not assigned
+                    <span className="text-sm font-medium italic" style={{ color: 'var(--muted-foreground)' }}>
+                      No active runtime config
                     </span>
                   )}
                 </td>
-                <td className="py-4 px-5">
-                  <span 
-                    className="text-base font-bold"
-                    style={{ color: 'var(--foreground)' }}
-                  >
-                    {tenant.totalSubmissions.toLocaleString()}
-                  </span>
+
+                <td className="px-5 py-4">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                      {tenant.publishingReadiness?.hasPendingChanges
+                        ? 'Pending publish'
+                        : 'In sync'}
+                    </p>
+                    {(tenant.brandingWarnings?.length ?? 0) > 0 && (
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="mt-0.5 h-4 w-4" style={{ color: '#b45309' }} />
+                        <span className="text-xs" style={{ color: '#92400e' }}>
+                          {tenant.brandingWarnings?.length} runtime fallback warning{tenant.brandingWarnings?.length === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </td>
-                <td className="py-4 px-5">
+
+                <td className="px-5 py-4">
                   <div className="flex items-center justify-end gap-2">
                     <Link
                       href={`/tenants/${tenant.id}/edit`}
-                      className="p-2.5 rounded-lg transition-all duration-150 hover:scale-105"
+                      className="rounded-lg p-2.5 transition-all duration-150 hover:scale-105"
                       title="Edit tenant"
-                      style={{ 
-                        color: 'var(--muted-foreground)',
-                        backgroundColor: 'var(--muted)',
-                      }}
+                      style={{ color: 'var(--muted-foreground)', backgroundColor: 'var(--muted)' }}
                     >
-                      <Edit className="w-4.5 h-4.5" />
+                      <Edit className="h-4.5 w-4.5" />
                     </Link>
                     <button
                       onClick={() => onDelete?.(tenant.id)}
-                      disabled={isDeleting === tenant.id}
-                      className="p-2.5 rounded-lg transition-all duration-150 hover:scale-105 disabled:cursor-not-allowed"
-                      title="Delete tenant"
-                      style={{ 
-                        color: isDeleting === tenant.id ? 'var(--destructive)' : 'hsl(0 70% 50%)',
-                        backgroundColor: isDeleting === tenant.id ? 'hsl(0 84% 60% / 0.1)' : 'var(--muted)',
+                      disabled={!canDelete || isDeleting === tenant.id}
+                      className="rounded-lg p-2.5 transition-all duration-150 hover:scale-105 disabled:cursor-not-allowed"
+                      title={
+                        canDelete
+                          ? 'Delete draft tenant'
+                          : 'Only draft tenants without runtime configs can be deleted'
+                      }
+                      style={{
+                        color:
+                          !canDelete || isDeleting === tenant.id
+                            ? 'var(--muted-foreground)'
+                            : 'hsl(0 70% 50%)',
+                        backgroundColor:
+                          isDeleting === tenant.id
+                            ? 'hsl(0 84% 60% / 0.1)'
+                            : 'var(--muted)',
+                        opacity: canDelete ? 1 : 0.55,
                       }}
                     >
                       {isDeleting === tenant.id ? (
-                        <span 
-                          className="w-4.5 h-4.5 border-2 rounded-full animate-spin" 
-                          style={{ 
-                            borderColor: 'var(--destructive)',
-                            borderTopColor: 'transparent' 
-                          }} 
+                        <span
+                          className="h-4.5 w-4.5 animate-spin rounded-full border-2"
+                          style={{ borderColor: 'var(--destructive)', borderTopColor: 'transparent' }}
                         />
                       ) : (
-                        <Trash2 className="w-4.5 h-4.5" />
+                        <Trash2 className="h-4.5 w-4.5" />
                       )}
                     </button>
                   </div>

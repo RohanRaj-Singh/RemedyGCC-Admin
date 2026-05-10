@@ -10,15 +10,11 @@ import Link from 'next/link';
 import { Building2, Scan, Activity, FileText, Plus, Palette } from 'lucide-react';
 import { Sidebar, Header } from '@/components/layout';
 import { StatsCard } from '@/components/dashboard';
-import { TenantTable, BrandingDialog, BrandingEditor } from '@/components/tenants';
 import { ScannerCard } from '@/components/scanners';
 import { LogsTable } from '@/components/logs';
 import { TemplateList } from '@/modules/attribute-template/components';
+import { TenantList } from '@/modules/tenant/components';
 import { useDashboard, useTenants, useScanners, useLogs } from '@/hooks';
-import { updateTenant } from '@/modules/tenant/service';
-import { Tenant as TenantType, BrandingConfig } from '@/modules/tenant/types';
-import { Tenant } from '@/types';
-import { cn } from '@/lib/utils';
 
 type TabType = 'dashboard' | 'tenants' | 'scanners' | 'logs' | 'attribute-templates' | 'settings';
 
@@ -39,25 +35,10 @@ export default function DashboardPage() {
   const { scanners, loading: scannersLoading } = useScanners();
   const { logs, loading: logsLoading } = useLogs();
 
-  const [brandingDialogOpen, setBrandingDialogOpen] = useState(false);
-  const [selectedTenantForBranding, setSelectedTenantForBranding] = useState<TenantType | null>(null);
-
   const loading = statsLoading || tenantsLoading || scannersLoading || logsLoading;
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab as TabType);
-  };
-
-  const handleEditBranding = (tenant: TenantType) => {
-    setSelectedTenantForBranding(tenant);
-    setBrandingDialogOpen(true);
-  };
-
-  const handleSaveBranding = async (branding: Partial<BrandingConfig>) => {
-    if (!selectedTenantForBranding) return;
-    await updateTenant(selectedTenantForBranding.id, { branding });
-    setBrandingDialogOpen(false);
-    setSelectedTenantForBranding(null);
   };
 
   return (
@@ -95,7 +76,7 @@ export default function DashboardPage() {
                     />
                     <StatsCard
                       title="Active Scanners"
-                      value={stats.activeScanners}
+                      value={stats.activeScanners ?? 0}
                       change="+5% from last month"
                       changeType="positive"
                       icon={Scan}
@@ -103,7 +84,7 @@ export default function DashboardPage() {
                     />
                     <StatsCard
                       title="Total Submissions"
-                      value={stats.totalSubmissions.toLocaleString()}
+                      value={(stats.totalSubmissions ?? 0).toLocaleString()}
                       change="+23% from last month"
                       changeType="positive"
                       icon={Activity}
@@ -145,6 +126,12 @@ export default function DashboardPage() {
                             <strong>{stats.tenantsByBranding.default}</strong> Default Branding
                           </span>
                         </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-amber-500" />
+                          <span style={{ color: 'var(--foreground)' }}>
+                            <strong>{stats.tenantsByBranding.withWarnings || 0}</strong> Fallback Warnings
+                          </span>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -154,12 +141,7 @@ export default function DashboardPage() {
               {/* Tenants Tab */}
               {activeTab === 'tenants' && (
                 <div className="space-y-6">
-                  <TenantTable 
-                    tenants={tenants} 
-                    onEdit={(tenant) => console.log('Edit', tenant)}
-                    onDelete={(id) => console.log('Delete', id)}
-                    onAssignScanner={(tenant) => console.log('Assign scanner', tenant)}
-                  />
+                  <TenantList tenants={tenants} />
                 </div>
               )}
 
@@ -207,21 +189,6 @@ export default function DashboardPage() {
               {activeTab === 'attribute-templates' && (
                 <TemplateList />
               )}
-
-              {/* Branding Dialog */}
-              <BrandingDialog
-                open={brandingDialogOpen}
-                onClose={() => setBrandingDialogOpen(false)}
-                title={`Edit Branding - ${selectedTenantForBranding?.name || ''}`}
-              >
-                {selectedTenantForBranding && (
-                  <BrandingEditor
-                    branding={selectedTenantForBranding.branding}
-                    onSave={handleSaveBranding}
-                    onCancel={() => setBrandingDialogOpen(false)}
-                  />
-                )}
-              </BrandingDialog>
             </>
           )}
         </div>

@@ -8,8 +8,8 @@ interface WeightSummaryProps {
   selectedSubdomainId?: string;
 }
 
-function sumWeights(items: Array<{ weight: number }>) {
-  return items.reduce((total, item) => total + item.weight, 0);
+function sumWeights(items: Array<{ weight?: number }>) {
+  return items.reduce((total, item) => total + (item.weight || 0), 0);
 }
 
 function statusTone(isValid: boolean) {

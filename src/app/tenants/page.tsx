@@ -2,25 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Tenant, TenantStatus, BrandingConfig } from '@/modules/tenant/types';
-import { getAllTenants, deleteTenant, getTenantStats, updateTenant } from '@/modules/tenant/service';
+import { Tenant, TenantStatus } from '@/modules/tenant/types';
+import { deleteTenant, getAllTenants, getTenantStats } from '@/modules/tenant/service';
 import { TenantList } from '@/modules/tenant/components';
-import { BrandingDialog } from '@/components/tenants/BrandingDialog';
-import { BrandingEditor } from '@/components/tenants/BrandingEditor';
 import { Plus, Search, Filter, Loader2, Building2, Palette } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface TenantStats {
   total: number;
+  draft: number;
   active: number;
-  inactive: number;
-  suspended: number;
+  disabled: number;
+  archived: number;
+  activeRuntimeConfigs: number;
   byBranding: Record<string, number>;
 }
 
 export default function TenantsPage() {
-  const router = useRouter();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [stats, setStats] = useState<TenantStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,9 +26,6 @@ export default function TenantsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TenantStatus | 'all'>('all');
-
-  const [brandingDialogOpen, setBrandingDialogOpen] = useState(false);
-  const [selectedTenantForBranding, setSelectedTenantForBranding] = useState<Tenant | null>(null);
 
   useEffect(() => {
     loadTenants();
@@ -78,34 +73,11 @@ export default function TenantsPage() {
     }
   };
 
-  const handleEditBranding = (tenant: Tenant) => {
-    setSelectedTenantForBranding(tenant);
-    setBrandingDialogOpen(true);
-  };
-
-  const handleSaveBranding = async (branding: Partial<BrandingConfig>) => {
-    if (!selectedTenantForBranding) return;
-
-    try {
-      await updateTenant(selectedTenantForBranding.id, { branding });
-      await loadTenants();
-      setBrandingDialogOpen(false);
-      setSelectedTenantForBranding(null);
-    } catch (err) {
-      console.error('Failed to update branding', err);
-      throw err;
-    }
-  };
-
-  const handleCloseBrandingDialog = () => {
-    setBrandingDialogOpen(false);
-    setSelectedTenantForBranding(null);
-  };
-
   const filteredTenants = tenants.filter(tenant => {
     const matchesSearch = 
       tenant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tenant.subdomain.toLowerCase().includes(searchQuery.toLowerCase());
+      tenant.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (tenant.activeRuntimeConfigId || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || tenant.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -145,7 +117,7 @@ export default function TenantsPage() {
       </div>
 
       {stats && (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <div className={cardStyle} style={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}>
             <div className="flex items-center gap-3">
               <div 
@@ -178,13 +150,13 @@ export default function TenantsPage() {
             <div className="flex items-center gap-3">
               <div 
                 className="w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ backgroundColor: 'var(--muted)' }}
+                style={{ backgroundColor: 'rgba(245, 158, 11, 0.12)' }}
               >
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: 'var(--muted-foreground)' }} />
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#d97706' }} />
               </div>
               <div>
-                <p className="text-2xl font-bold" style={{ color: 'var(--foreground)' }}>{stats.inactive}</p>
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Inactive</p>
+                <p className="text-2xl font-bold" style={{ color: 'var(--foreground)' }}>{stats.draft}</p>
+                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Draft</p>
               </div>
             </div>
           </div>
@@ -192,13 +164,27 @@ export default function TenantsPage() {
             <div className="flex items-center gap-3">
               <div 
                 className="w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ backgroundColor: 'hsl(0 84% 60% / 0.1)' }}
+                style={{ backgroundColor: 'rgba(148, 163, 184, 0.18)' }}
               >
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: 'var(--destructive)' }} />
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#64748b' }} />
               </div>
               <div>
-                <p className="text-2xl font-bold" style={{ color: 'var(--foreground)' }}>{stats.suspended}</p>
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Suspended</p>
+                <p className="text-2xl font-bold" style={{ color: 'var(--foreground)' }}>{stats.disabled}</p>
+                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Disabled</p>
+              </div>
+            </div>
+          </div>
+          <div className={cardStyle} style={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}>
+            <div className="flex items-center gap-3">
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center"
+                style={{ backgroundColor: 'rgba(82, 82, 91, 0.12)' }}
+              >
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#52525b' }} />
+              </div>
+              <div>
+                <p className="text-2xl font-bold" style={{ color: 'var(--foreground)' }}>{stats.archived}</p>
+                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Archived</p>
               </div>
             </div>
           </div>
@@ -222,6 +208,12 @@ export default function TenantsPage() {
               <div className="w-3 h-3 rounded-full bg-gray-400" />
               <span style={{ color: 'var(--foreground)' }}>
                 <strong>{stats.byBranding.default || 0}</strong> Default Branding
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-amber-500" />
+              <span style={{ color: 'var(--foreground)' }}>
+                <strong>{stats.byBranding.warnings || 0}</strong> Fallback Warnings
               </span>
             </div>
           </div>
@@ -271,9 +263,10 @@ export default function TenantsPage() {
             style={{ color: 'var(--foreground)', backgroundColor: 'var(--background)' }}
           >
             <option value="all">All Status</option>
+            <option value="draft">Draft</option>
             <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="suspended">Suspended</option>
+            <option value="disabled">Disabled</option>
+            <option value="archived">Archived</option>
           </select>
         </div>
       </div>
@@ -321,20 +314,6 @@ export default function TenantsPage() {
           )}
         </div>
       )}
-
-      <BrandingDialog
-        open={brandingDialogOpen}
-        onClose={handleCloseBrandingDialog}
-        title={`Edit Branding - ${selectedTenantForBranding?.name || ''}`}
-      >
-        {selectedTenantForBranding && (
-          <BrandingEditor
-            branding={selectedTenantForBranding.branding}
-            onSave={handleSaveBranding}
-            onCancel={handleCloseBrandingDialog}
-          />
-        )}
-      </BrandingDialog>
     </div>
   );
 }

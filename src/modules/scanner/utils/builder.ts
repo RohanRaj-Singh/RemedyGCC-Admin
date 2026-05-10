@@ -3,6 +3,7 @@
  */
 
 import { Category, LocalizedText, Question, Subdomain } from '../types';
+import { FIXED_CATEGORIES } from '../constants/categories';
 
 export function createId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -43,12 +44,13 @@ export function createEmptySubdomain(categoryId: string): Subdomain {
 }
 
 export function createDefaultCategories(): Category[] {
-  return [1, 2, 3, 4, 5].map((slot) => {
+  return FIXED_CATEGORIES.map((name, index) => {
+    const slot = (index + 1) as Category['slot'];
     const id = createId('category');
     return {
       id,
-      slot: slot as Category['slot'],
-      name: emptyText(),
+      slot,
+      name: { en: name, ar: name },
       polarity: 'positive',
       weight: 0,
       subdomains: [createEmptySubdomain(id)],

@@ -1,29 +1,41 @@
 /**
- * Super Admin Dashboard - TypeScript Type Definitions
- * Defines all data structures for the RemedyGCC Super Admin module
+ * Shared type surface for the Super Admin app.
  */
 
-import { BrandingConfig, ColorScheme, BrandingAssets } from './branding';
+export type {
+  BrandingConfig,
+  BrandingGradients,
+  BrandingValidationResult,
+  ResolvedBrandingConfig,
+} from './branding';
+export {
+  DEFAULT_BRANDING,
+  brandingToCSSVars,
+  getBrandingWithDefault,
+  getReadableTextColor,
+  hexToRgba,
+  isDefaultBranding,
+  isSafeAssetReference,
+  isValidBrandingConfig,
+  isValidHexColor,
+  mixHexColors,
+  normalizeHexColor,
+  resolveBrandingConfig,
+  validateBrandingConfig,
+} from './branding';
 
-export type { BrandingConfig, ColorScheme, BrandingAssets };
-
-export type TenantStatus = 'active' | 'inactive' | 'suspended';
-
-export interface Tenant {
-  id: string;
-  name: string;
-  slug: string;
-  domain: string;
-  status: TenantStatus;
-  branding: BrandingConfig;
-  createdAt: string;
-  updatedAt: string;
-  subdomain: string;
-  assignedScannerId?: string;
-  assignedScannerName?: string;
-  scannerId?: string | null;
-  totalSubmissions: number;
-}
+export type {
+  CreateTenantDto,
+  RuntimeConfigOption,
+  RuntimeConfigStatus,
+  RuntimeVersionRefs,
+  Tenant,
+  TenantPublishingReadiness,
+  TenantRuntimeConfigReference,
+  TenantStatus,
+  UpdateBrandingDto,
+  UpdateTenantDto,
+} from '@/modules/tenant/types';
 
 export interface Scanner {
   id: string;
@@ -65,33 +77,22 @@ export interface SystemLog {
 export interface DashboardStats {
   totalTenants: number;
   activeTenants: number;
-  activeScanners: number;
+  draftTenants?: number;
+  disabledTenants?: number;
+  archivedTenants?: number;
+  activeRuntimeConfigs?: number;
+  activeScanners?: number;
   totalLogs: number;
-  totalSubmissions: number;
-  avgScore: number;
+  totalSubmissions?: number;
+  avgScore?: number;
   tenantsByBranding: {
     custom: number;
     default: number;
+    withWarnings?: number;
   };
   recentActivity: {
     date: string;
     submissions: number;
     newTenants: number;
   }[];
-}
-
-export interface UpdateBrandingDto {
-  logoUrl?: string;
-  faviconUrl?: string;
-  colorScheme?: Partial<ColorScheme>;
-  fontFamily?: string;
-  assets?: Partial<BrandingAssets>;
-}
-
-export interface CreateTenantDto {
-  name: string;
-  slug: string;
-  domain: string;
-  status?: TenantStatus;
-  branding?: Partial<BrandingConfig>;
 }

@@ -5,8 +5,8 @@
 
 import { Category, Question, Subdomain } from '../types';
 
-export function sumWeights(items: Array<{ weight: number }>): number {
-  return items.reduce((total, item) => total + item.weight, 0);
+export function sumWeights(items: Array<{ weight?: number }>): number {
+  return items.reduce((total, item) => total + (item.weight || 0), 0);
 }
 
 export function getWeightBalance(total: number, target: number) {

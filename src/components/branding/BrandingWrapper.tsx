@@ -2,7 +2,12 @@
 
 import { ReactNode, CSSProperties } from 'react';
 import { BrandingConfig } from '@/types';
-import { DEFAULT_BRANDING } from '@/types/branding';
+import {
+  brandingToCSSVars,
+  getReadableTextColor,
+  resolveBrandingConfig,
+} from '@/types/branding';
+import type { TenantStatus } from '@/modules/tenant/types';
 
 interface BrandingWrapperProps {
   branding: BrandingConfig | null | undefined;
@@ -11,7 +16,7 @@ interface BrandingWrapperProps {
 }
 
 export function BrandingWrapper({ branding, children, className }: BrandingWrapperProps) {
-  const resolvedBranding = branding || DEFAULT_BRANDING;
+  const resolvedBranding = resolveBrandingConfig(branding);
   const cssVariables = getBrandingCSSVariables(resolvedBranding);
 
   return (
@@ -22,44 +27,41 @@ export function BrandingWrapper({ branding, children, className }: BrandingWrapp
 }
 
 export function getBrandingCSSVariables(branding: BrandingConfig): Record<string, string> {
+  const resolved = resolveBrandingConfig(branding);
   return {
-    '--brand-primary': branding.colorScheme.primaryColor,
-    '--brand-secondary': branding.colorScheme.secondaryColor || branding.colorScheme.primaryColor,
-    '--brand-background': branding.colorScheme.backgroundColor || '0 0% 100%',
-    '--brand-text': branding.colorScheme.textColor || '0 0% 43%',
-    '--brand-accent': branding.colorScheme.accentColor || '212 100% 50%',
-    '--brand-font': branding.fontFamily || 'Satoshi, Inter, sans-serif',
-    '--brand-logo': branding.logoUrl || '/default-logo.svg',
+    ...brandingToCSSVars(resolved),
+    '--brand-background': '#ffffff',
+    '--brand-text': '#111827',
+    '--brand-accent': resolved.secondaryColor,
   };
 }
 
 interface TenantBrandingCardProps {
   name: string;
-  subdomain: string;
+  slug: string;
   branding: BrandingConfig;
-  status: 'active' | 'inactive' | 'suspended';
-  totalSubmissions?: number;
-  scannerAssigned?: boolean;
+  status: TenantStatus;
+  runtimeConfigId?: string | null;
   onEditBranding?: () => void;
   onViewDetails?: () => void;
 }
 
 export function TenantBrandingCard({
   name,
-  subdomain,
+  slug,
   branding,
   status,
-  totalSubmissions,
-  scannerAssigned,
+  runtimeConfigId,
   onEditBranding,
   onViewDetails,
 }: TenantBrandingCardProps) {
   const cssVars = getBrandingCSSVariables(branding);
   
   const statusColors = {
+    draft: { bg: 'rgba(245, 158, 11, 0.12)', text: '#92400e' },
     active: { bg: 'hsl(142 76% 36% / 0.15)', text: 'hsl(142 76% 26%)' },
-    inactive: { bg: 'hsl(0 0% 85% / 0.5)', text: 'hsl(0 0% 30%)' },
-    suspended: { bg: 'hsl(0 84% 60% / 0.15)', text: 'hsl(0 84% 50%)' },
+    disabled: { bg: 'rgba(148, 163, 184, 0.18)', text: '#475569' },
+    archived: { bg: 'rgba(82, 82, 91, 0.16)', text: '#3f3f46' },
   };
 
   return (
@@ -78,7 +80,7 @@ export function TenantBrandingCard({
           >
             <span 
               className="text-2xl font-bold"
-              style={{ color: 'white' }}
+              style={{ color: getReadableTextColor(cssVars['--brand-primary']) }}
             >
               {name.charAt(0).toUpperCase()}
             </span>
@@ -88,7 +90,7 @@ export function TenantBrandingCard({
               {name}
             </h3>
             <code className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-              {subdomain}.remedygcc.com
+              {slug}.remedygcc.com
             </code>
           </div>
         </div>
@@ -146,16 +148,16 @@ export function TenantBrandingCard({
       >
         <div>
           <span className="font-medium" style={{ color: 'var(--foreground)' }}>
-            {totalSubmissions?.toLocaleString() || 0}
+            {runtimeConfigId || 'No runtime config'}
           </span>
-          <span style={{ color: 'var(--muted-foreground)' }}> submissions</span>
+          <span style={{ color: 'var(--muted-foreground)' }}> runtime pointer</span>
         </div>
         
         <div>
-          {scannerAssigned ? (
-            <span className="text-emerald-600 font-medium">Scanner assigned</span>
+          {runtimeConfigId ? (
+            <span className="text-emerald-600 font-medium">Runtime linked</span>
           ) : (
-            <span style={{ color: 'var(--muted-foreground)' }}>No scanner</span>
+            <span style={{ color: 'var(--muted-foreground)' }}>Draft only</span>
           )}
         </div>
       </div>
