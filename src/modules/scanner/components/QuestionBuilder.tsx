@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { MessageSquareText, Plus } from 'lucide-react';
-import { Category, Question, Subdomain } from '../types';
+import { Category, Question, ScannerFollowUpTrigger, Subdomain } from '../types';
 import { createEmptyQuestion } from '../utils/builder';
 import {
   DndContext,
@@ -24,17 +24,22 @@ import { SortableQuestionCard } from './SortableQuestionCard';
 interface QuestionBuilderProps {
   category?: Category;
   subdomain?: Subdomain;
+  siblingQuestions?: Question[];
+  followUpTriggers?: ScannerFollowUpTrigger[];
   selectedSubdomainId?: string;
   disabled?: boolean;
   onSelectSubdomain?: (subdomainId: string) => void;
   onSubdomainChange: (subdomain: Subdomain) => void;
+  onTriggersChange?: (triggers: ScannerFollowUpTrigger[]) => void;
 }
 
 export function QuestionBuilder({
   category,
   subdomain,
+  followUpTriggers = [],
   disabled = false,
   onSubdomainChange,
+  onTriggersChange,
 }: QuestionBuilderProps) {
   const [openQuestionId, setOpenQuestionId] = useState<string | undefined>(undefined);
 
@@ -69,7 +74,7 @@ export function QuestionBuilder({
   }
 
   function addQuestion() {
-    const newQuestion = createEmptyQuestion(activeSubdomain.id);
+    const newQuestion = createEmptyQuestion(activeSubdomain.id, activeSubdomain.questions.length + 1);
     onSubdomainChange({
       ...activeSubdomain,
       questions: [...activeSubdomain.questions, newQuestion],
@@ -97,26 +102,11 @@ export function QuestionBuilder({
 
       let newQuestions = arrayMove(activeSubdomain.questions, oldIndex, newIndex);
 
-      // Validation logic: if a trigger question is moved away from its dependent follow-up question
-      // we need to make sure follow-up questions always have a preceding question.
-      // And we also update their triggerCondition.questionId to the newly preceding question.
-      newQuestions = newQuestions.map((q, idx) => {
-        if (q.isFollowUp) {
-          const prev = newQuestions[idx - 1];
-          if (prev && q.triggerCondition?.questionId !== prev.id) {
-            // Update trigger ID, but we might want to clear optionIds if the trigger changed
-            return {
-              ...q,
-              triggerCondition: {
-                questionId: prev.id,
-                optionIds: [], // Reset options because the trigger changed
-              }
-            };
-          }
-        }
-        return q;
-      });
-
+      // Validation logic: if a follow-up question is moved, we need to ensure the trigger is updated.
+      // But we just removed triggerCondition.
+      // Since follow-up triggers are decoupled and root-level, we can just let them move.
+      // However, if the user moves a question, we might want to validate triggers.
+      // For now, we just update the questions array.
       onSubdomainChange({
         ...activeSubdomain,
         questions: newQuestions,
@@ -184,7 +174,7 @@ export function QuestionBuilder({
           >
             <div className="space-y-4">
               {activeSubdomain.questions.map((question, index) => {
-                const isInvalidFollowUp = question.isFollowUp && index === 0;
+                const isInvalidFollowUp = question.kind === 'follow-up' && index === 0;
 
                 return (
                   <SortableQuestionCard
@@ -192,6 +182,7 @@ export function QuestionBuilder({
                     question={question}
                     index={index}
                     siblingQuestions={activeSubdomain.questions}
+                    followUpTriggers={followUpTriggers}
                     disabled={disabled}
                     canRemove={activeSubdomain.questions.length > 1}
                     isOpen={openQuestionId === question.id || (activeSubdomain.questions.length === 1)}
@@ -199,6 +190,7 @@ export function QuestionBuilder({
                     onToggle={() => setOpenQuestionId(openQuestionId === question.id ? undefined : question.id)}
                     onUpdate={updateQuestion}
                     onRemove={removeQuestion}
+                    onTriggersChange={onTriggersChange}
                   />
                 );
               })}

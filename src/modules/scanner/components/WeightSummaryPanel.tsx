@@ -173,7 +173,7 @@ export function WeightSummaryPanel({
           <div className="mt-4 space-y-2">
             {blockingIssues.slice(0, 5).map((issue) => (
               <div
-                key={`${issue.code}-${issue.path}-${issue.entityId ?? 'root'}`}
+                key={issue.id}
                 className="rounded-xl border border-white bg-white px-3 py-3"
               >
                 <div className="flex items-start gap-3">

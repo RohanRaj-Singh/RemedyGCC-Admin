@@ -3,33 +3,67 @@ import type {
   BrandingValidationResult,
   ResolvedBrandingConfig,
 } from '@/types/branding';
+import type {
+  RuntimeConfigStatus,
+  RuntimeVersionRefs,
+  TenantRuntimeConfigSnapshot,
+} from '@/types/runtime-config';
+import type { PublishValidationIssue } from '@/modules/publishing/engine';
 
 export type { BrandingConfig, BrandingValidationResult, ResolvedBrandingConfig };
 
 export type TenantStatus = 'draft' | 'active' | 'disabled' | 'archived';
 
-export type RuntimeConfigStatus = 'draft' | 'published' | 'archived';
+export interface TenantDraftSetupReference {
+  id: string;
+  label: string;
+  description?: string;
+}
 
-export interface RuntimeVersionRefs {
+export interface TenantRuntimeScannerSummary {
   scannerVersionId: string;
+  version: string;
+  categoryCount: number;
+  subdomainCount: number;
+  questionCount: number;
+}
+
+export interface TenantRuntimeAttributeTemplateSummary {
   attributeTemplateVersionId: string;
-  calculationVersionId: string;
-  brandingVersionId: string;
+  streamCount: number;
+  locationCount: number;
+  functionCount: number;
+  departmentCount: number;
 }
 
 export interface TenantRuntimeConfigReference {
   runtimeConfigId: string;
   tenantId: string;
   tenantSlug: string;
+  tenantSubdomain: string;
   status: RuntimeConfigStatus;
   publishedAt: string | null;
   activatedAt: string | null;
   versionRefs: RuntimeVersionRefs;
+  submissionCount: number;
+  scannerSummary: TenantRuntimeScannerSummary;
+  attributeTemplateSummary: TenantRuntimeAttributeTemplateSummary;
 }
 
 export interface RuntimeConfigOption extends TenantRuntimeConfigReference {
   isActive: boolean;
   label: string;
+}
+
+export type TenantPublishingIssue = PublishValidationIssue;
+
+export interface TenantPublishingPreview {
+  status: RuntimeConfigStatus;
+  isReady: boolean;
+  issues: TenantPublishingIssue[];
+  warnings: string[];
+  runtimeConfig: TenantRuntimeConfigSnapshot | null;
+  existingMatchRuntimeConfigId: string | null;
 }
 
 export interface TenantPublishingReadiness {
@@ -43,31 +77,50 @@ export interface TenantPublishingReadiness {
 export interface Tenant {
   id: string;
   slug: string;
+  subdomain: string;
   name: string;
   status: TenantStatus;
+  draftScannerId: string | null;
+  draftAttributeTemplateId: string | null;
   activeRuntimeConfigId: string | null;
   branding: BrandingConfig;
   createdAt: string;
   updatedAt: string;
+  archivedAt?: string | null;
+  submissionCount: number;
+  runtimeConfigCount: number;
+  draftScanner?: TenantDraftSetupReference | null;
+  draftAttributeTemplate?: TenantDraftSetupReference | null;
   activeRuntimeConfig?: TenantRuntimeConfigReference | null;
   publishingReadiness?: TenantPublishingReadiness;
   brandingWarnings?: string[];
+  publishingPreview?: TenantPublishingPreview | null;
+}
+
+export interface TenantSetupOption {
+  id: string;
+  label: string;
+  description?: string;
 }
 
 export interface CreateTenantDto {
   name: string;
   slug: string;
+  subdomain: string;
   status?: TenantStatus;
+  draftScannerId?: string | null;
+  draftAttributeTemplateId?: string | null;
   branding?: Partial<BrandingConfig>;
-  activeRuntimeConfigId?: string | null;
 }
 
 export interface UpdateTenantDto {
   name?: string;
   slug?: string;
+  subdomain?: string;
   status?: TenantStatus;
+  draftScannerId?: string | null;
+  draftAttributeTemplateId?: string | null;
   branding?: Partial<BrandingConfig>;
-  activeRuntimeConfigId?: string | null;
 }
 
 export interface UpdateBrandingDto {
@@ -76,6 +129,15 @@ export interface UpdateBrandingDto {
   primaryColor?: string;
   secondaryColor?: string;
   faviconUrl?: string;
-  fontFamily?: string;
-  gradients?: Partial<ResolvedBrandingConfig['gradients']>;
+  gradient?: Partial<ResolvedBrandingConfig['gradient']>;
+}
+
+export interface PublishTenantRuntimeOptions {
+  activate?: boolean;
+}
+
+export interface TenantPublishResult {
+  tenant: Tenant;
+  runtimeConfig: RuntimeConfigOption;
+  preview: TenantPublishingPreview;
 }

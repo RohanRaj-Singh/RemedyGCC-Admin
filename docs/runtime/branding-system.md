@@ -19,11 +19,14 @@
 
 ```ts
 interface TenantBrandingConfig {
+  appName?: string;
   logoUrl?: string;
   primaryColor?: string;
   secondaryColor?: string;
-  fontFamily?: string;
   faviconUrl?: string;
+  gradient?: Record<string, string>;
+  chartColors?: string[];
+  themeMode?: "light" | "dark";
 }
 ```
 
@@ -57,7 +60,6 @@ Resolved theme always supplies:
 - `tenantName`
 - `logoUrl`
 - `faviconUrl`
-- `fontFamily`
 - `primaryColor`
 - `secondaryColor`
 - `primaryHoverColor`
@@ -90,7 +92,6 @@ Resolved defaults in `themeUtils.ts`:
 - `DEFAULT_SECONDARY = "#f37820"`
 - `DEFAULT_LOGO = "/images/logo.png"`
 - `DEFAULT_TENANT_NAME = "RemedyGCC"`
-- `DEFAULT_FONT_FAMILY = "Inter, system-ui, sans-serif"`
 - `DEFAULT_FAVICON = "/favicon.ico"`
 
 Behavior:
@@ -101,8 +102,6 @@ Behavior:
   Derived from `mixHexColors(primary, DEFAULT_SECONDARY, 0.55)`, then contrast-adjusted.
 - Missing `branding.logoUrl`
   Resolved to `DEFAULT_LOGO`.
-- Missing `branding.fontFamily`
-  Resolved to `DEFAULT_FONT_FAMILY`.
 - Missing `branding.faviconUrl`
   Resolved to `DEFAULT_FAVICON`.
 - Missing `tenant.name`

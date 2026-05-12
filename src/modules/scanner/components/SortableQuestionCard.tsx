@@ -3,19 +3,21 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { QuestionCard } from './QuestionCard';
-import { Question } from '../types';
+import { Question, ScannerFollowUpTrigger } from '../types';
 import { GripVertical } from 'lucide-react';
 
 interface SortableQuestionCardProps {
   question: Question;
   index: number;
   siblingQuestions: Question[];
+  followUpTriggers?: ScannerFollowUpTrigger[];
   disabled?: boolean;
   canRemove: boolean;
   isOpen: boolean;
   onToggle: () => void;
   onUpdate: (question: Question) => void;
   onRemove: (questionId: string) => void;
+  onTriggersChange?: (triggers: ScannerFollowUpTrigger[]) => void;
   dragError?: boolean;
 }
 
@@ -48,7 +50,12 @@ export function SortableQuestionCard(props: SortableQuestionCardProps) {
       >
         <GripVertical size={16} />
       </div>
-      <QuestionCard {...props} dragError={props.dragError} />
+      <QuestionCard 
+        {...props} 
+        dragError={props.dragError}
+        followUpTriggers={props.followUpTriggers}
+        onTriggersChange={props.onTriggersChange}
+      />
     </div>
   );
 }

@@ -17,8 +17,9 @@ export interface BrandingConfig {
   primaryColor?: string;
   secondaryColor?: string;
   faviconUrl?: string;
-  fontFamily?: string;
-  gradients?: Partial<BrandingGradients>;
+  gradient?: Partial<BrandingGradients>;
+  chartColors?: string[];
+  themeMode?: "light" | "dark";
   metadata?: Record<string, unknown>;
 }
 
@@ -28,8 +29,9 @@ export interface ResolvedBrandingConfig {
   primaryColor: string;
   secondaryColor: string;
   faviconUrl: string;
-  fontFamily: string;
-  gradients: BrandingGradients;
+  gradient: BrandingGradients;
+  chartColors: string[];
+  themeMode: "light" | "dark";
   metadata?: Record<string, unknown>;
 }
 
@@ -42,7 +44,6 @@ const DEFAULT_PRIMARY = '#f58220';
 const DEFAULT_SECONDARY = '#f37820';
 const DEFAULT_LOGO = '/images/logo.png';
 const DEFAULT_TENANT_NAME = 'RemedyGCC';
-const DEFAULT_FONT_FAMILY = 'Inter, system-ui, sans-serif';
 const DEFAULT_FAVICON = '/favicon.ico';
 
 export const DEFAULT_BRANDING: ResolvedBrandingConfig = {
@@ -51,8 +52,9 @@ export const DEFAULT_BRANDING: ResolvedBrandingConfig = {
   primaryColor: DEFAULT_PRIMARY,
   secondaryColor: DEFAULT_SECONDARY,
   faviconUrl: DEFAULT_FAVICON,
-  fontFamily: DEFAULT_FONT_FAMILY,
-  gradients: buildDefaultGradients(DEFAULT_PRIMARY, DEFAULT_SECONDARY),
+  gradient: buildDefaultGradients(DEFAULT_PRIMARY, DEFAULT_SECONDARY),
+  chartColors: [DEFAULT_PRIMARY, DEFAULT_SECONDARY, '#A0A0A0', '#6B6B6B', '#2E2E2E'], // Example defaults, can be refined
+  themeMode: "light", // Default theme mode
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -158,6 +160,42 @@ export function getReadableTextColor(hex: string): '#111827' | '#ffffff' {
   return luminance > 0.62 ? '#111827' : '#ffffff';
 }
 
+function getLuminance(hex: string): number {
+  const rgb = hexToRgb(normalizeHexColor(hex, DEFAULT_PRIMARY));
+  if (!rgb) {
+    return 0; // Or a reasonable default for non-parseable colors
+  }
+
+  const R = rgb.r / 255;
+  const G = rgb.g / 255;
+  const B = rgb.b / 255;
+
+  const r = R <= 0.03928 ? R / 12.92 : ((R + 0.055) / 1.055) ** 2.4;
+  const g = G <= 0.03928 ? G / 12.92 : ((G + 0.055) / 1.055) ** 2.4;
+  const b = B <= 0.03928 ? B / 12.92 : ((B + 0.055) / 1.055) ** 2.4;
+
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+export function getContrastRatio(color1: string, color2: string): number {
+  const lum1 = getLuminance(color1);
+  const lum2 = getLuminance(color2);
+
+  const lighter = Math.max(lum1, lum2);
+  const darker = Math.min(lum1, lum2);
+
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+export function hasDuplicateColors(colors: string[]): boolean {
+  if (!colors || colors.length <= 1) {
+    return false;
+  }
+  const normalizedColors = colors.map(color => normalizeHexColor(color, "").toLowerCase()).filter(Boolean);
+  const uniqueColors = new Set(normalizedColors);
+  return uniqueColors.size !== normalizedColors.length;
+}
+
 function buildDefaultGradients(primary: string, secondary: string): BrandingGradients {
   return {
     brandGradient: `linear-gradient(135deg, ${primary}, ${secondary})`,
@@ -181,18 +219,18 @@ function buildDefaultGradients(primary: string, secondary: string): BrandingGrad
 function mergeGradients(
   primaryColor: string,
   secondaryColor: string,
-  gradients?: Partial<BrandingGradients>,
+  gradient?: Partial<BrandingGradients>,
 ): BrandingGradients {
   const defaults = buildDefaultGradients(primaryColor, secondaryColor);
 
   return {
-    brandGradient: gradients?.brandGradient?.trim() || defaults.brandGradient,
-    heroGradient: gradients?.heroGradient?.trim() || defaults.heroGradient,
-    headerGradient: gradients?.headerGradient?.trim() || defaults.headerGradient,
-    pageGradient: gradients?.pageGradient?.trim() || defaults.pageGradient,
+    brandGradient: gradient?.brandGradient?.trim() || defaults.brandGradient,
+    heroGradient: gradient?.heroGradient?.trim() || defaults.heroGradient,
+    headerGradient: gradient?.headerGradient?.trim() || defaults.headerGradient,
+    pageGradient: gradient?.pageGradient?.trim() || defaults.pageGradient,
     dashboardGradient:
-      gradients?.dashboardGradient?.trim() || defaults.dashboardGradient,
-    cardGradient: gradients?.cardGradient?.trim() || defaults.cardGradient,
+      gradient?.dashboardGradient?.trim() || defaults.dashboardGradient,
+    cardGradient: gradient?.cardGradient?.trim() || defaults.cardGradient,
   };
 }
 
@@ -242,14 +280,24 @@ export function isValidBrandingConfig(brand: unknown): brand is BrandingConfig {
   ) {
     return false;
   }
+  if ('gradient' in brand && brand.gradient !== undefined && !isRecord(brand.gradient)) {
+    return false;
+  }
+
   if (
-    'fontFamily' in brand &&
-    brand.fontFamily !== undefined &&
-    typeof brand.fontFamily !== 'string'
+    'chartColors' in brand &&
+    brand.chartColors !== undefined &&
+    (!Array.isArray(brand.chartColors) ||
+      !brand.chartColors.every((color) => typeof color === 'string'))
   ) {
     return false;
   }
-  if ('gradients' in brand && brand.gradients !== undefined && !isRecord(brand.gradients)) {
+
+  if (
+    'themeMode' in brand &&
+    brand.themeMode !== undefined &&
+    (brand.themeMode !== 'light' && brand.themeMode !== 'dark')
+  ) {
     return false;
   }
 
@@ -266,7 +314,7 @@ export function validateBrandingConfig(
     return {
       errors,
       warnings: [
-        'Branding is missing and will fully fall back to runtime defaults until publish.',
+        'Brand styling has not been customized yet. Safe default styling will be used until you publish.',
       ],
     };
   }
@@ -288,34 +336,51 @@ export function validateBrandingConfig(
   }
 
   if (!branding.appName?.trim()) {
-    warnings.push('App name is missing. Runtime will fall back to "RemedyGCC".');
+    warnings.push('App name is missing. The default survey name will be used.');
   }
 
   if (!branding.logoUrl?.trim()) {
-    warnings.push('Logo is missing. Runtime will fall back to the default logo.');
+    warnings.push('Logo is missing. The default logo will be used.');
   }
 
   if (!branding.primaryColor?.trim()) {
-    warnings.push('Primary color is missing. Runtime will fall back to the default primary color.');
+    warnings.push('Primary color is missing. The default brand color will be used.');
   }
 
   if (!branding.secondaryColor?.trim()) {
     warnings.push(
-      'Secondary color is missing. Runtime will derive a safe secondary color from the primary color.',
+      'Secondary color is missing. A matching accent color will be used automatically.',
     );
   }
 
   if (!branding.faviconUrl?.trim()) {
-    warnings.push('Favicon is missing. Runtime will fall back to the default favicon.');
+    warnings.push('Browser icon is missing. The default icon will be used.');
   }
 
-  if (!branding.fontFamily?.trim()) {
-    warnings.push('Font family is missing. Runtime will fall back to the default font stack.');
+  if (!branding.gradient?.brandGradient?.trim() || !branding.gradient?.heroGradient?.trim()) {
+    warnings.push('Optional gradient styling is incomplete. Default styling will be used safely.');
   }
 
-  if (!branding.gradients?.brandGradient?.trim() || !branding.gradients?.heroGradient?.trim()) {
-    warnings.push('Brand gradients are incomplete. Runtime will derive safe gradients automatically.');
+  if (branding.chartColors && hasDuplicateColors(branding.chartColors)) {
+    errors.push("Chart colors contain duplicate values. Please ensure all chart colors are unique.");
   }
+
+  // Basic contrast checks for primary/secondary against a assumed light background (#FFFFFF)
+  // The runtime will do full accessibility adjustments via ensureAccessibleColor()
+  if (branding.primaryColor) {
+    const contrastWithWhite = getContrastRatio(branding.primaryColor, "#FFFFFF");
+    if (contrastWithWhite < 3) { // WCAG AA for large text is 3:1
+      warnings.push('Primary color may be hard to read on light backgrounds. Consider a darker shade.');
+    }
+  }
+
+  if (branding.secondaryColor) {
+    const contrastWithWhite = getContrastRatio(branding.secondaryColor, "#FFFFFF");
+    if (contrastWithWhite < 3) { // WCAG AA for large text is 3:1
+      warnings.push('Secondary color may be hard to read on light backgrounds. Consider a darker shade.');
+    }
+  }
+
 
   return { errors, warnings };
 }
@@ -340,8 +405,9 @@ export function resolveBrandingConfig(
       branding?.faviconUrl && isSafeAssetReference(branding.faviconUrl)
         ? branding.faviconUrl.trim()
         : DEFAULT_FAVICON,
-    fontFamily: branding?.fontFamily?.trim() || DEFAULT_FONT_FAMILY,
-    gradients: mergeGradients(primaryColor, secondaryColor, branding?.gradients),
+    gradient: mergeGradients(primaryColor, secondaryColor, branding?.gradient),
+    chartColors: branding?.chartColors && Array.isArray(branding.chartColors) ? branding.chartColors.map(c => normalizeHexColor(c, '#000000')) : DEFAULT_BRANDING.chartColors,
+    themeMode: branding?.themeMode === "light" || branding?.themeMode === "dark" ? branding.themeMode : DEFAULT_BRANDING.themeMode,
     metadata: branding?.metadata,
   };
 }
@@ -360,17 +426,18 @@ export function brandingToCSSVars(
   return {
     '--brand-primary': resolved.primaryColor,
     '--brand-secondary': resolved.secondaryColor,
-    '--brand-font': resolved.fontFamily,
     '--brand-logo': resolved.logoUrl,
     '--brand-favicon': resolved.faviconUrl,
-    '--brand-gradient': resolved.gradients.brandGradient,
-    '--brand-hero-gradient': resolved.gradients.heroGradient,
-    '--brand-header-gradient': resolved.gradients.headerGradient,
-    '--brand-page-gradient': resolved.gradients.pageGradient,
-    '--brand-dashboard-gradient': resolved.gradients.dashboardGradient,
-    '--brand-card-gradient': resolved.gradients.cardGradient,
+    '--brand-gradient': resolved.gradient.brandGradient,
+    '--brand-hero-gradient': resolved.gradient.heroGradient,
+    '--brand-header-gradient': resolved.gradient.headerGradient,
+    '--brand-page-gradient': resolved.gradient.pageGradient,
+    '--brand-dashboard-gradient': resolved.gradient.dashboardGradient,
+    '--brand-card-gradient': resolved.gradient.cardGradient,
     '--brand-on-primary': getReadableTextColor(resolved.primaryColor),
     '--brand-on-secondary': getReadableTextColor(resolved.secondaryColor),
+    '--brand-chart-colors': resolved.chartColors.join(", "), // For CSS usage
+    '--brand-theme-mode': resolved.themeMode,
   };
 }
 

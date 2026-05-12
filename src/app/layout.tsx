@@ -6,6 +6,8 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { DevBanner } from '@/components/layout/DevBanner';
+import { ThemeProvider } from '@/context/ThemeProvider';
+import { DEFAULT_BRANDING } from '@/types/branding';
 
 export const metadata: Metadata = {
   title: 'RemedyGCC | Super Admin',
@@ -21,9 +23,11 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased">
         <DevBanner />
-        <div className="min-h-screen">
-          {children}
-        </div>
+        <ThemeProvider defaultBranding={DEFAULT_BRANDING}>
+          <div className="min-h-screen">
+            {children}
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   );

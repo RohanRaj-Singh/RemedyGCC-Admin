@@ -82,7 +82,7 @@ export function TemplateList() {
               Attribute Templates
             </h1>
             <p className="text-gray-500 mt-1">
-              Manage linked attribute templates for scanner assignment rules
+              Manage canonical stream to location to function to department templates for scanner assignment rules
             </p>
           </div>
           
@@ -96,7 +96,7 @@ export function TemplateList() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
+        <div className="mt-6 grid grid-cols-2 gap-4 border-t border-gray-100 pt-6 lg:grid-cols-5">
           <div className="text-center">
             <div className="text-2xl font-bold text-gray-900">{templates.length}</div>
             <div className="text-sm text-gray-500">Total Templates</div>
@@ -106,12 +106,16 @@ export function TemplateList() {
             <div className="text-sm text-gray-500">Total Streams</div>
           </div>
           <div className="text-center">
+            <div className="text-2xl font-bold text-gray-900">{templates.reduce((acc, t) => acc + t.location.length, 0)}</div>
+            <div className="text-sm text-gray-500">Total Locations</div>
+          </div>
+          <div className="text-center">
             <div className="text-2xl font-bold text-gray-900">{templates.reduce((acc, t) => acc + t.function.length, 0)}</div>
             <div className="text-sm text-gray-500">Total Functions</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-gray-900">{templates.reduce((acc, t) => acc + t.location.length, 0)}</div>
-            <div className="text-sm text-gray-500">Total Locations</div>
+            <div className="text-2xl font-bold text-gray-900">{templates.reduce((acc, t) => acc + t.department.length, 0)}</div>
+            <div className="text-sm text-gray-500">Total Departments</div>
           </div>
         </div>
       </div>

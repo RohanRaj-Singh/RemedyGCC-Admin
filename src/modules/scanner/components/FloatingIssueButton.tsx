@@ -7,9 +7,10 @@ import { IssuePanel } from './IssuePanel';
 
 interface FloatingIssueButtonProps {
   issues: ValidationIssue[];
+  onNavigate?: (issue: ValidationIssue) => void;
 }
 
-export function FloatingIssueButton({ issues }: FloatingIssueButtonProps) {
+export function FloatingIssueButton({ issues, onNavigate }: FloatingIssueButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const blockingIssues = issues.filter(i => i.blocking);
@@ -43,7 +44,7 @@ export function FloatingIssueButton({ issues }: FloatingIssueButtonProps) {
         </div>
       </button>
 
-      {isOpen && <IssuePanel issues={issues} onClose={() => setIsOpen(false)} />}
+      {isOpen && <IssuePanel issues={issues} onClose={() => setIsOpen(false)} onNavigate={onNavigate} />}
       
       {/* Backdrop */}
       {isOpen && (

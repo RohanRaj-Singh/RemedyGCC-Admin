@@ -4,6 +4,7 @@
  */
 
 import { AttributeTemplate } from '../../attribute-template/types';
+import { validateAttributeTemplateHierarchy } from '../../attribute-template/utils';
 import {
   Category,
   LocalizedText,
@@ -13,13 +14,14 @@ import {
   Subdomain,
   ValidationIssue,
   ValidationResult,
+  ValidationIssueSeverity,
 } from '../types';
 
-function pushIssue(
-  issues: ValidationIssue[],
-  issue: ValidationIssue
-) {
-  issues.push(issue);
+function pushIssue(issues: ValidationIssue[], issue: Omit<ValidationIssue, 'id'>) {
+  issues.push({
+    ...issue,
+    id: `${issue.code}-${issue.questionId || issue.subdomainId || issue.categoryId || issue.path}`
+  });
 }
 
 function isLocalizedTextComplete(value?: LocalizedText): boolean {
@@ -35,54 +37,104 @@ function validateLocalizedText(
   value: LocalizedText | undefined,
   message: string,
   level: ValidationIssue['level'],
+  severity: ValidationIssueSeverity,
   path: string,
-  entityId?: string
+  context: {
+    categoryId?: string;
+    categoryName?: string;
+    subdomainId?: string;
+    subdomainName?: string;
+    questionId?: string;
+    questionText?: string;
+    answerId?: string;
+    answerLabel?: string;
+  }
 ) {
   if (!isLocalizedTextComplete(value)) {
     pushIssue(issues, {
       code: 'MISSING_TRANSLATION',
       level,
-      entityId,
+      severity,
       path,
       message,
-      blocking: true,
+      blocking: severity === 'error',
+      ...context,
     });
   }
 }
 
 function validateQuestion(
   question: Question,
-  siblingQuestions: Question[],
+  subdomain: Subdomain,
+  category: Category,
   issues: ValidationIssue[]
 ) {
+  const context = {
+    categoryId: category.id,
+    categoryName: category.name.en || 'Untitled Category',
+    subdomainId: subdomain.id,
+    subdomainName: subdomain.name.en || 'Untitled Subdomain',
+    questionId: question.id,
+    questionText: question.text.en || 'Untitled Question',
+  };
+
   validateLocalizedText(
     issues,
     question.text,
     'Question text is required in English and Arabic.',
     'question',
+    'error',
     `question.${question.id}.text`,
-    question.id
+    context
   );
 
   if (question.options.length < 2) {
     pushIssue(issues, {
       code: 'QUESTION_OPTIONS_MINIMUM',
       level: 'question',
-      entityId: question.id,
+      severity: 'error',
       path: `question.${question.id}.options`,
       message: 'Questions must have at least two multiple-choice options.',
       blocking: true,
+      ...context,
     });
   }
 
-  question.options.forEach((option) => {
+  question.options.forEach((option, index) => {
+    const optContext = { ...context, answerId: option.id, answerLabel: option.label.en || `Option ${index + 1}` };
+    
+    if (option.order !== index + 1) {
+      pushIssue(issues, {
+        code: 'QUESTION_OPTION_ORDER_INVALID',
+        level: 'question',
+        severity: 'error',
+        path: `question.${question.id}.option.${option.id}.order`,
+        message: 'Option order must be sequential starting from 1.',
+        blocking: true,
+        ...optContext,
+      });
+    }
+
+    if (typeof option.score !== 'number' || isNaN(option.score)) {
+      pushIssue(issues, {
+        code: 'QUESTION_OPTION_SCORE_INVALID',
+        level: 'question',
+        severity: 'error',
+        path: `question.${question.id}.option.${option.id}.score`,
+        message: 'Every answer option must have an explicit numeric score.',
+        blocking: true,
+        ...optContext,
+      });
+    }
+
     validateLocalizedText(
       issues,
       option.label,
       'Every answer option is required in English and Arabic.',
       'question',
+      'error',
       `question.${question.id}.option.${option.id}.label`,
-      question.id
+      optContext
     );
   });
 
@@ -90,60 +142,44 @@ function validateQuestion(
     pushIssue(issues, {
       code: 'QUESTION_WEIGHT_REQUIRED',
       level: 'question',
-      entityId: question.id,
+      severity: question.kind === 'primary' ? 'error' : 'info',
       path: `question.${question.id}.weight`,
-      message: 'Question weight must be greater than zero.',
-      blocking: true,
+      message: question.kind === 'primary' 
+        ? 'Primary question weight must be greater than zero.'
+        : 'Diagnostic follow-ups typically do not need weights.',
+      blocking: question.kind === 'primary',
+      ...context,
     });
-  }
-
-  if (question.isFollowUp) {
-    if (!question.triggerCondition?.questionId || question.triggerCondition.optionIds.length === 0) {
-      pushIssue(issues, {
-        code: 'FOLLOW_UP_TRIGGER_REQUIRED',
-        level: 'question',
-        entityId: question.id,
-        path: `question.${question.id}.triggerCondition`,
-        message: 'Follow-up questions require a trigger question and at least one trigger option.',
-        blocking: true,
-      });
-    }
-
-    const normalQuestions = siblingQuestions.filter((item) => !item.isFollowUp && item.id !== question.id);
-    if (
-      normalQuestions.length > 0 &&
-      normalQuestions.some((item) => (question.weight || 0) <= (item.weight || 0))
-    ) {
-      pushIssue(issues, {
-        code: 'FOLLOW_UP_WEIGHT_RULE',
-        level: 'question',
-        entityId: question.id,
-        path: `question.${question.id}.weight`,
-        message: 'Follow-up questions must have a higher weight than normal questions in the same subdomain.',
-        blocking: true,
-      });
-    }
   }
 }
 
-function validateSubdomain(subdomain: Subdomain, issues: ValidationIssue[]) {
+function validateSubdomain(subdomain: Subdomain, category: Category, issues: ValidationIssue[]) {
+  const context = {
+    categoryId: category.id,
+    categoryName: category.name.en || 'Untitled Category',
+    subdomainId: subdomain.id,
+    subdomainName: subdomain.name.en || 'Untitled Subdomain',
+  };
+
   validateLocalizedText(
     issues,
     subdomain.name,
     'Subdomain name is required in English and Arabic.',
     'subdomain',
+    'error',
     `subdomain.${subdomain.id}.name`,
-    subdomain.id
+    context
   );
 
   if (subdomain.questions.length === 0) {
     pushIssue(issues, {
       code: 'SUBDOMAIN_QUESTION_REQUIRED',
       level: 'subdomain',
-      entityId: subdomain.id,
+      severity: 'error',
       path: `subdomain.${subdomain.id}.questions`,
       message: 'Each subdomain must contain at least one question.',
       blocking: true,
+      ...context,
     });
   }
 
@@ -152,36 +188,57 @@ function validateSubdomain(subdomain: Subdomain, issues: ValidationIssue[]) {
     pushIssue(issues, {
       code: 'SUBDOMAIN_WEIGHT_MISMATCH',
       level: 'subdomain',
-      entityId: subdomain.id,
+      severity: 'error',
       path: `subdomain.${subdomain.id}.weight`,
       message: `Question weights must total ${subdomain.weight} for this subdomain. Current total is ${questionWeightTotal}.`,
       blocking: true,
+      ...context,
     });
   }
 
-  subdomain.questions.forEach((question) =>
-    validateQuestion(question, subdomain.questions, issues)
-  );
+  subdomain.questions.forEach((question, index) => {
+    if (question.order !== index + 1) {
+      pushIssue(issues, {
+        code: 'SUBDOMAIN_QUESTION_ORDER_INVALID',
+        level: 'subdomain',
+        severity: 'error',
+        path: `subdomain.${subdomain.id}.question.${question.id}.order`,
+        message: 'Question order must be sequential starting from 1.',
+        blocking: true,
+        ...context,
+        questionId: question.id,
+        questionText: question.text.en,
+      });
+    }
+    validateQuestion(question, subdomain, category, issues);
+  });
 }
 
 function validateCategory(category: Category, issues: ValidationIssue[]) {
+  const context = {
+    categoryId: category.id,
+    categoryName: category.name.en || 'Untitled Category',
+  };
+
   validateLocalizedText(
     issues,
     category.name,
     'Category name is required in English and Arabic.',
     'category',
+    'error',
     `category.${category.id}.name`,
-    category.id
+    context
   );
 
   if (category.subdomains.length === 0) {
     pushIssue(issues, {
       code: 'CATEGORY_SUBDOMAIN_REQUIRED',
       level: 'category',
-      entityId: category.id,
+      severity: 'error',
       path: `category.${category.id}.subdomains`,
       message: 'Each category must contain at least one subdomain.',
       blocking: true,
+      ...context,
     });
   }
 
@@ -190,14 +247,30 @@ function validateCategory(category: Category, issues: ValidationIssue[]) {
     pushIssue(issues, {
       code: 'CATEGORY_WEIGHT_MISMATCH',
       level: 'category',
-      entityId: category.id,
+      severity: 'error',
       path: `category.${category.id}.weight`,
       message: `Subdomain weights must total ${category.weight} for this category. Current total is ${subdomainWeightTotal}.`,
       blocking: true,
+      ...context,
     });
   }
 
-  category.subdomains.forEach((subdomain) => validateSubdomain(subdomain, issues));
+  category.subdomains.forEach((subdomain, index) => {
+    if (subdomain.order !== index + 1) {
+      pushIssue(issues, {
+        code: 'CATEGORY_SUBDOMAIN_ORDER_INVALID',
+        level: 'category',
+        severity: 'error',
+        path: `category.${category.id}.subdomain.${subdomain.id}.order`,
+        message: 'Subdomain order must be sequential starting from 1.',
+        blocking: true,
+        ...context,
+        subdomainId: subdomain.id,
+        subdomainName: subdomain.name.en,
+      });
+    }
+    validateSubdomain(subdomain, category, issues);
+  });
 }
 
 export function validateAttributeTemplate(template: AttributeTemplate | null): ValidationIssue[] {
@@ -207,6 +280,7 @@ export function validateAttributeTemplate(template: AttributeTemplate | null): V
     pushIssue(issues, {
       code: 'ATTRIBUTE_TEMPLATE_REQUIRED',
       level: 'attribute-template',
+      severity: 'error',
       path: 'attributeTemplateId',
       message: 'An attribute template is required before a scanner can be published.',
       blocking: true,
@@ -214,84 +288,15 @@ export function validateAttributeTemplate(template: AttributeTemplate | null): V
     return issues;
   }
 
-  if (template.stream.length === 0) {
+  validateAttributeTemplateHierarchy(template).forEach((issue) => {
     pushIssue(issues, {
-      code: 'ATTRIBUTE_STREAM_REQUIRED',
+      code: issue.code,
       level: 'attribute-template',
-      path: 'attributeTemplate.stream',
-      message: 'Attribute template must contain at least one stream.',
-      blocking: true,
+      severity: issue.severity,
+      path: issue.path,
+      message: issue.message,
+      blocking: issue.blocking,
     });
-  }
-
-  if (template.location.length === 0) {
-    pushIssue(issues, {
-      code: 'ATTRIBUTE_LOCATION_REQUIRED',
-      level: 'attribute-template',
-      path: 'attributeTemplate.location',
-      message: 'Attribute template must contain at least one location.',
-      blocking: true,
-    });
-  }
-
-  if (template.function.length === 0) {
-    pushIssue(issues, {
-      code: 'ATTRIBUTE_FUNCTION_REQUIRED',
-      level: 'attribute-template',
-      path: 'attributeTemplate.function',
-      message: 'Attribute template must contain at least one function.',
-      blocking: true,
-    });
-  }
-
-  if (template.department.length === 0) {
-    pushIssue(issues, {
-      code: 'ATTRIBUTE_DEPARTMENT_REQUIRED',
-      level: 'attribute-template',
-      path: 'attributeTemplate.department',
-      message: 'Attribute template must contain at least one department.',
-      blocking: true,
-    });
-  }
-
-  const streamIds = new Set(template.stream.map((item) => item.id));
-  const locationIds = new Set(template.location.map((item) => item.id));
-  const functionIds = new Set(template.function.map((item) => item.id));
-
-  template.location.forEach((location) => {
-    if (!streamIds.has(location.streamId)) {
-      pushIssue(issues, {
-        code: 'ATTRIBUTE_LOCATION_PARENT_INVALID',
-        level: 'attribute-template',
-        path: `attributeTemplate.location.${location.id}.streamId`,
-        message: 'Every location must belong to a valid stream.',
-        blocking: true,
-      });
-    }
-  });
-
-  template.function.forEach((func) => {
-    if (!locationIds.has(func.locationId)) {
-      pushIssue(issues, {
-        code: 'ATTRIBUTE_FUNCTION_PARENT_INVALID',
-        level: 'attribute-template',
-        path: `attributeTemplate.function.${func.id}.locationId`,
-        message: 'Every function must belong to a valid location.',
-        blocking: true,
-      });
-    }
-  });
-
-  template.department.forEach((department) => {
-    if (!functionIds.has(department.functionId)) {
-      pushIssue(issues, {
-        code: 'ATTRIBUTE_DEPARTMENT_PARENT_INVALID',
-        level: 'attribute-template',
-        path: `attributeTemplate.department.${department.id}.functionId`,
-        message: 'Every department must belong to a valid function.',
-        blocking: true,
-      });
-    }
   });
 
   return issues;
@@ -308,13 +313,16 @@ export function validateScannerDraft(
     draft.name,
     'Scanner name is required in English and Arabic.',
     'scanner',
-    'scanner.name'
+    'error',
+    'scanner.name',
+    {}
   );
 
   if (!draft.attributeTemplateId) {
     pushIssue(issues, {
       code: 'ATTRIBUTE_TEMPLATE_REQUIRED',
       level: 'scanner',
+      severity: 'error',
       path: 'scanner.attributeTemplateId',
       message: 'Select an attribute template before publishing.',
       blocking: true,
@@ -325,6 +333,7 @@ export function validateScannerDraft(
     pushIssue(issues, {
       code: 'CATEGORY_COUNT_INVALID',
       level: 'scanner',
+      severity: 'error',
       path: 'scanner.categories',
       message: 'Each scanner must define exactly 5 categories.',
       blocking: true,
@@ -336,6 +345,7 @@ export function validateScannerDraft(
     pushIssue(issues, {
       code: 'SCANNER_WEIGHT_INVALID',
       level: 'scanner',
+      severity: 'error',
       path: 'scanner.categories.weight',
       message: `Category weights must total 100. Current total is ${categoryWeightTotal}.`,
       blocking: true,
@@ -343,16 +353,25 @@ export function validateScannerDraft(
   }
 
   const seenQuestionIds = new Set<string>();
+  const questionMap = new Map<string, { question: Question, category: Category, subdomain: Subdomain }>();
+  
   draft.categories.forEach((category) => {
     validateCategory(category, issues);
 
     category.subdomains.forEach((subdomain) => {
       subdomain.questions.forEach((question) => {
+        questionMap.set(question.id, { question, category, subdomain });
         if (seenQuestionIds.has(question.id)) {
           pushIssue(issues, {
             code: 'QUESTION_REUSED',
             level: 'question',
-            entityId: question.id,
+            severity: 'error',
+            categoryId: category.id,
+            categoryName: category.name.en,
+            subdomainId: subdomain.id,
+            subdomainName: subdomain.name.en,
+            questionId: question.id,
+            questionText: question.text.en,
             path: `question.${question.id}`,
             message: 'A question can belong to only one subdomain.',
             blocking: true,
@@ -361,6 +380,133 @@ export function validateScannerDraft(
         seenQuestionIds.add(question.id);
       });
     });
+  });
+
+  // Validate followUpTriggers
+  const allFollowUpIdsWithTriggers = new Set<string>();
+
+  draft.followUpTriggers?.forEach((trigger, idx) => {
+    const triggerData = questionMap.get(trigger.triggerQuestionId);
+
+    if (!triggerData) {
+      pushIssue(issues, {
+        code: 'TRIGGER_QUESTION_MISSING',
+        level: 'scanner',
+        severity: 'error',
+        path: `scanner.followUpTriggers[${idx}]`,
+        message: 'Trigger question does not exist.',
+        blocking: true,
+      });
+      return;
+    }
+
+    const { question: triggerQuestion, category, subdomain } = triggerData;
+    const context = {
+      categoryId: category.id,
+      categoryName: category.name.en,
+      subdomainId: subdomain.id,
+      subdomainName: subdomain.name.en,
+      questionId: triggerQuestion.id,
+      questionText: triggerQuestion.text.en,
+    };
+
+    if (triggerQuestion.kind !== 'primary') {
+      pushIssue(issues, {
+        code: 'TRIGGER_NOT_PRIMARY',
+        level: 'question',
+        severity: 'error',
+        path: `scanner.followUpTriggers[${idx}]`,
+        message: 'Follow-up triggers can only originate from primary questions.',
+        blocking: true,
+        ...context,
+      });
+    }
+
+    if (trigger.triggerOptionIds.length === 0) {
+      pushIssue(issues, {
+        code: 'TRIGGER_OPTIONS_EMPTY',
+        level: 'question',
+        severity: 'error',
+        path: `scanner.followUpTriggers[${idx}]`,
+        message: 'Trigger must have at least one valid option selected.',
+        blocking: true,
+        ...context,
+      });
+    } else {
+      const validOptionIds = new Set(triggerQuestion.options.map((o) => o.id));
+      trigger.triggerOptionIds.forEach((optId) => {
+        if (!validOptionIds.has(optId)) {
+          pushIssue(issues, {
+            code: 'TRIGGER_OPTION_INVALID',
+            level: 'question',
+            severity: 'error',
+            path: `scanner.followUpTriggers[${idx}]`,
+            message: 'One or more trigger options do not belong to the trigger question.',
+            blocking: true,
+            ...context,
+          });
+        }
+      });
+    }
+
+    if (trigger.followUpQuestionIds.length === 0) {
+      pushIssue(issues, {
+        code: 'TRIGGER_FOLLOWUPS_EMPTY',
+        level: 'question',
+        severity: 'error',
+        path: `scanner.followUpTriggers[${idx}]`,
+        message: 'Trigger must have at least one follow-up question assigned.',
+        blocking: true,
+        ...context,
+      });
+    } else {
+      trigger.followUpQuestionIds.forEach((followUpId) => {
+        const followUpData = questionMap.get(followUpId);
+        allFollowUpIdsWithTriggers.add(followUpId);
+
+        if (!followUpData) {
+          pushIssue(issues, {
+            code: 'FOLLOW_UP_MISSING',
+            level: 'question',
+            severity: 'error',
+            path: `scanner.followUpTriggers[${idx}]`,
+            message: 'Follow-up question does not exist.',
+            blocking: true,
+            ...context,
+          });
+        } else if (followUpData.question.kind !== 'follow-up') {
+          pushIssue(issues, {
+            code: 'FOLLOW_UP_INVALID_KIND',
+            level: 'question',
+            severity: 'error',
+            path: `scanner.followUpTriggers[${idx}]`,
+            message: 'Trigger points to a primary question instead of a follow-up question.',
+            blocking: true,
+            ...context,
+          });
+        }
+      });
+    }
+  });
+
+  // Ensure all follow-up questions have a trigger
+  Array.from(questionMap.values()).forEach(({ question: q, category, subdomain }) => {
+    if (q.kind === 'follow-up' && !allFollowUpIdsWithTriggers.has(q.id)) {
+      pushIssue(issues, {
+        code: 'FOLLOW_UP_ORPHANED',
+        level: 'question',
+        severity: 'error',
+        categoryId: category.id,
+        categoryName: category.name.en,
+        subdomainId: subdomain.id,
+        subdomainName: subdomain.name.en,
+        questionId: q.id,
+        questionText: q.text.en,
+        path: `question.${q.id}`,
+        message: 'Follow-up question must be triggered by at least one primary question.',
+        blocking: true,
+      });
+    }
   });
 
   issues.push(...validateAttributeTemplate(attributeTemplate));
@@ -378,6 +524,7 @@ export function validatePublishedVersion(version: ScannerVersion): ValidationRes
       attributeTemplateId: version.attributeTemplateId,
       description: undefined,
       categories: version.categories,
+      followUpTriggers: version.followUpTriggers,
     },
     version.attributeTemplateSnapshot
   );

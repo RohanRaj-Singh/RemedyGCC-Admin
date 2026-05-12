@@ -30,7 +30,7 @@ export function getQuestionCount(category: Category): number {
 
 export function getSubdomainMetrics(subdomain: Subdomain) {
   const questionWeightTotal = sumWeights(subdomain.questions);
-  const followUpCount = subdomain.questions.filter((question) => question.isFollowUp).length;
+  const followUpCount = subdomain.questions.filter((question) => question.kind === 'follow-up').length;
 
   return {
     questionWeightTotal,
@@ -67,7 +67,7 @@ export function getScannerCounts(categories: Category[]) {
     (total, category) =>
       total + category.subdomains.reduce(
         (subTotal, subdomain) =>
-          subTotal + subdomain.questions.filter((question) => question.isFollowUp).length,
+          subTotal + subdomain.questions.filter((question) => question.kind === 'follow-up').length,
         0
       ),
     0

@@ -50,12 +50,11 @@ Current UI/API behavior:
 
 - frontend create flow sends `{ name, password: "123456" }`
 - no slug
-- no plan
 - no status
 - no branding fields
-- no runtime settings
+- no active runtime config pointer
+- no immutable runtime publish history
 - no attribute-template fields
-- no active scanner version pointer
 
 Current backend caution:
 
@@ -121,9 +120,8 @@ Add CRUD for:
 - tenant `name`
 - tenant `slug`
 - tenant `status`
-- tenant `plan`
 - tenant `createdAt`
-- runtime settings
+- tenant `activeRuntimeConfigId`
 
 ### Branding contracts
 
@@ -161,7 +159,6 @@ Add CRUD and publish workflow for:
 - version string
 - change log
 - published timestamp
-- active scanner selection
 
 ## Publishing Flow Gaps
 
@@ -170,7 +167,7 @@ Currently missing:
 - draft vs published state
 - immutable publish snapshot
 - rollback or history selection
-- active scanner switch per tenant
+- active runtime config switch per tenant
 - runtime preview against a draft config
 
 ## Required Validations

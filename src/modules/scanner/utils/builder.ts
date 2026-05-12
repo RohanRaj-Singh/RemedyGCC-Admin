@@ -13,33 +13,36 @@ export function emptyText(): LocalizedText {
   return { en: '', ar: '' };
 }
 
-export function createEmptyOption() {
+export function createEmptyOption(order: number) {
   return {
     id: createId('option'),
+    order,
     label: emptyText(),
-    scoreValue: 0,
+    score: 0,
   };
 }
 
-export function createEmptyQuestion(subdomainId: string): Question {
+export function createEmptyQuestion(subdomainId: string, order: number): Question {
   return {
     id: createId('question'),
+    order,
     subdomainId,
     text: emptyText(),
     weight: 0,
-    isFollowUp: false,
-    options: [createEmptyOption(), createEmptyOption()],
+    kind: 'primary',
+    options: [createEmptyOption(1), createEmptyOption(2)],
   };
 }
 
-export function createEmptySubdomain(categoryId: string): Subdomain {
+export function createEmptySubdomain(categoryId: string, order: number): Subdomain {
   const id = createId('subdomain');
   return {
     id,
+    order,
     categoryId,
     name: emptyText(),
     weight: 0,
-    questions: [createEmptyQuestion(id)],
+    questions: [createEmptyQuestion(id, 1)],
   };
 }
 
@@ -49,11 +52,11 @@ export function createDefaultCategories(): Category[] {
     const id = createId('category');
     return {
       id,
+      order: index + 1,
       slot,
       name: { en: name, ar: name },
-      polarity: 'positive',
       weight: 0,
-      subdomains: [createEmptySubdomain(id)],
+      subdomains: [createEmptySubdomain(id, 1)],
     };
   });
 }

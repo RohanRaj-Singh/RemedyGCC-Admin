@@ -1,23 +1,27 @@
 'use client';
 
 import { ChevronLeft, ChevronRight, MessageSquareText, Plus } from 'lucide-react';
-import { Category, Subdomain } from '../types';
+import { Category, ScannerFollowUpTrigger, Subdomain } from '../types';
 import { QuestionBuilder } from './QuestionBuilder';
 
 interface ContentBuilderProps {
   categories: Category[];
+  followUpTriggers: ScannerFollowUpTrigger[];
   selectedSubdomainId?: string;
   disabled?: boolean;
   onSelectSubdomain: (subdomainId: string) => void;
   onCategoryChange: (category: Category) => void;
+  onTriggersChange: (triggers: ScannerFollowUpTrigger[]) => void;
 }
 
 export function ContentBuilder({
   categories,
+  followUpTriggers,
   selectedSubdomainId,
   disabled = false,
   onSelectSubdomain,
   onCategoryChange,
+  onTriggersChange,
 }: ContentBuilderProps) {
   const selectedCategory = categories.find(c => 
     c.subdomains.some(s => s.id === selectedSubdomainId)
@@ -114,8 +118,11 @@ export function ContentBuilder({
         <QuestionBuilder
           category={selectedCategory}
           subdomain={selectedSubdomain}
+          siblingQuestions={selectedSubdomain?.questions ?? []}
+          followUpTriggers={followUpTriggers}
           disabled={disabled}
           onSubdomainChange={handleSubdomainChange}
+          onTriggersChange={onTriggersChange}
         />
       </div>
     </div>

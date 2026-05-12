@@ -36,7 +36,6 @@ No browser automation or integration test suite exists in the repo.
 | Runtime submit validation | The local Next route now rejects missing `attributes` or non-string attribute values. | Pass |
 | Unused batch submit path | `SurveyContainer` still is not mounted, but its batch payload now matches the active runtime contract. | Warn |
 | Runtime loading/error states | Provider uses mocks only; loading and error are effectively static. | Warn |
-| Auth behavior from `runtimeSettings` | Not implemented. | Fail |
 
 ## Fixes Applied
 

@@ -1,22 +1,28 @@
 'use client';
 
 import { Bell, Search, User } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useTheme } from '@/context/ThemeProvider';
 
-interface HeaderProps {
-  title: string;
-  subtitle?: string;
-}
+export function Header() {
+  const { branding } = useTheme();
+  const { appName, logoUrl } = branding;
 
-export function Header({ title, subtitle }: HeaderProps) {
+  // Use a sensible default title if appName is not available or empty
+  const displayTitle = appName || 'RemedyGCC Super Admin';
   return (
     <header className="h-16 bg-white/80 backdrop-blur-xl border-b flex items-center justify-between px-6 sticky top-0 z-40" style={{ borderColor: 'var(--border)' }}>
-      {/* Title */}
-      <div>
-        <h1 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>{title}</h1>
-        {subtitle && (
-          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>{subtitle}</p>
+      {/* Logo and Title */}
+      <div className="flex items-center gap-3">
+        {logoUrl && (
+          <img
+            src={logoUrl}
+            alt={`${appName} Logo`}
+            width={36}
+            height={36}
+            className="h-9 w-9 object-contain"
+          />
         )}
+        <h1 className="text-xl font-bold max-w-[200px] truncate" style={{ color: 'var(--foreground)' }} title={displayTitle}>{displayTitle}</h1>
       </div>
 
       {/* Right side actions */}

@@ -85,8 +85,18 @@ This `docs/` tree is the implementation-facing source of truth for the current r
   Schema-generation instructions for future DB/API work.
 - `super-admin/current-surface-and-gaps.md`
   Current admin modules and the exact CRUD/publishing gaps relative to the runtime app.
+- `super-admin/tenant-runtime-behavior.md`
+  Tenant lifecycle, runtime linkage, publish flow, activation rules, and runtime safety guarantees for the Super Admin tenant module.
+- `super-admin/tenant-business-workflow.md`
+  Business-facing tenant workflow, simplified labels, primary actions, and publish UX expectations for the Super Admin tenant module.
+- `super-admin/hidden-runtime-architecture.md`
+  Internal runtime architecture that remains in place behind the simplified tenant UX, including immutable snapshots and technical-details boundaries.
 - `super-admin/ai-super-admin-context.md`
   Super admin implementation rules for future AI agents.
+- `testing/tenant-module-tests.md`
+  Tenant create/update/archive/publish validation matrix for the Mongo-backed Super Admin tenant module.
+- `testing/tenant-module-edge-cases.md`
+  Tenant-specific duplicate, deletion, stale-reference, and runtime-safety edge cases.
 - `testing/branding-tests.md`
   Branding verification matrix for mock tenants and fallback behavior.
 - `testing/scanner-tests.md`

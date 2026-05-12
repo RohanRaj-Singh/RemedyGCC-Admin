@@ -49,10 +49,7 @@ export default function DashboardPage() {
         className="transition-all duration-300"
         style={{ marginLeft: '16rem' }}
       >
-        <Header 
-          title={tabTitles[activeTab]} 
-          subtitle={`Manage your ${activeTab} settings and configurations`}
-        />
+        <Header />
         
           <div className="p-6">
           {loading ? (

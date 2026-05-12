@@ -9,9 +9,12 @@ import {
   CreateAttributeTemplateDto,
   DEFAULT_QUESTION_TYPES,
   GENDER_OPTIONS,
-  QuestionType,
   UpdateAttributeTemplateDto,
 } from './types';
+import {
+  normalizeAttributeTemplateHierarchy,
+  validateAttributeTemplateHierarchy,
+} from './utils';
 
 let templates: AttributeTemplate[] = [
   {
@@ -32,17 +35,17 @@ let templates: AttributeTemplate[] = [
       { id: 'hr-uae', label: 'HR - UAE', streamId: 'hr', questionType: DEFAULT_QUESTION_TYPES.location },
     ],
     function: [
-      { id: 'tech-platform', label: 'Platform Engineering', locationId: 'tech-us', questionType: DEFAULT_QUESTION_TYPES.function },
-      { id: 'tech-support', label: 'Technical Support', locationId: 'tech-in', questionType: DEFAULT_QUESTION_TYPES.function },
-      { id: 'finance-controls', label: 'Financial Controls', locationId: 'finance-uk', questionType: DEFAULT_QUESTION_TYPES.function },
-      { id: 'hr-peopleops', label: 'People Operations', locationId: 'hr-uae', questionType: DEFAULT_QUESTION_TYPES.function },
+      { id: 'tech-us-platform', label: 'Platform Engineering', locationId: 'tech-us', questionType: DEFAULT_QUESTION_TYPES.function },
+      { id: 'tech-in-support', label: 'Technical Support', locationId: 'tech-in', questionType: DEFAULT_QUESTION_TYPES.function },
+      { id: 'finance-uk-controls', label: 'Financial Controls', locationId: 'finance-uk', questionType: DEFAULT_QUESTION_TYPES.function },
+      { id: 'hr-uae-peopleops', label: 'People Operations', locationId: 'hr-uae', questionType: DEFAULT_QUESTION_TYPES.function },
     ],
     department: [
-      { id: 'backend', label: 'Backend', functionId: 'tech-platform', questionType: DEFAULT_QUESTION_TYPES.department },
-      { id: 'frontend', label: 'Frontend', functionId: 'tech-platform', questionType: DEFAULT_QUESTION_TYPES.department },
-      { id: 'helpdesk', label: 'Helpdesk', functionId: 'tech-support', questionType: DEFAULT_QUESTION_TYPES.department },
-      { id: 'compliance', label: 'Compliance', functionId: 'finance-controls', questionType: DEFAULT_QUESTION_TYPES.department },
-      { id: 'talent', label: 'Talent Acquisition', functionId: 'hr-peopleops', questionType: DEFAULT_QUESTION_TYPES.department },
+      { id: 'tech-us-platform-backend', label: 'Backend', functionId: 'tech-us-platform', questionType: DEFAULT_QUESTION_TYPES.department },
+      { id: 'tech-us-platform-frontend', label: 'Frontend', functionId: 'tech-us-platform', questionType: DEFAULT_QUESTION_TYPES.department },
+      { id: 'tech-in-support-helpdesk', label: 'Helpdesk', functionId: 'tech-in-support', questionType: DEFAULT_QUESTION_TYPES.department },
+      { id: 'finance-uk-controls-compliance', label: 'Compliance', functionId: 'finance-uk-controls', questionType: DEFAULT_QUESTION_TYPES.department },
+      { id: 'hr-uae-peopleops-talent', label: 'Talent Acquisition', functionId: 'hr-uae-peopleops', questionType: DEFAULT_QUESTION_TYPES.department },
     ],
     seniority: [
       { id: 'junior', label: 'Junior', questionType: DEFAULT_QUESTION_TYPES.seniority },
@@ -70,14 +73,14 @@ let templates: AttributeTemplate[] = [
       { id: 'ops-riyadh', label: 'Operations - Riyadh', streamId: 'ops', questionType: DEFAULT_QUESTION_TYPES.location },
     ],
     function: [
-      { id: 'product-core', label: 'Core Product', locationId: 'product-remote', questionType: DEFAULT_QUESTION_TYPES.function },
-      { id: 'growth-demand', label: 'Demand Generation', locationId: 'growth-dubai', questionType: DEFAULT_QUESTION_TYPES.function },
-      { id: 'ops-enablement', label: 'Enablement', locationId: 'ops-riyadh', questionType: DEFAULT_QUESTION_TYPES.function },
+      { id: 'product-remote-core', label: 'Core Product', locationId: 'product-remote', questionType: DEFAULT_QUESTION_TYPES.function },
+      { id: 'growth-dubai-demand', label: 'Demand Generation', locationId: 'growth-dubai', questionType: DEFAULT_QUESTION_TYPES.function },
+      { id: 'ops-riyadh-enablement', label: 'Enablement', locationId: 'ops-riyadh', questionType: DEFAULT_QUESTION_TYPES.function },
     ],
     department: [
-      { id: 'pm', label: 'Product Management', functionId: 'product-core', questionType: DEFAULT_QUESTION_TYPES.department },
-      { id: 'content', label: 'Content', functionId: 'growth-demand', questionType: DEFAULT_QUESTION_TYPES.department },
-      { id: 'systems', label: 'Systems', functionId: 'ops-enablement', questionType: DEFAULT_QUESTION_TYPES.department },
+      { id: 'product-remote-core-pm', label: 'Product Management', functionId: 'product-remote-core', questionType: DEFAULT_QUESTION_TYPES.department },
+      { id: 'growth-dubai-demand-content', label: 'Content', functionId: 'growth-dubai-demand', questionType: DEFAULT_QUESTION_TYPES.department },
+      { id: 'ops-riyadh-enablement-systems', label: 'Systems', functionId: 'ops-riyadh-enablement', questionType: DEFAULT_QUESTION_TYPES.department },
     ],
     seniority: [
       { id: 'founder', label: 'Founder', questionType: DEFAULT_QUESTION_TYPES.seniority },
@@ -95,19 +98,71 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function normalizeTemplateRecord(
+  template: Omit<AttributeTemplate, 'gender' | 'age'>,
+): AttributeTemplate {
+  const normalized = normalizeAttributeTemplateHierarchy(template);
+
+  return {
+    ...template,
+    stream: clone(normalized.stream),
+    location: clone(normalized.location),
+    function: clone(normalized.function),
+    department: clone(normalized.department),
+    seniority: clone(normalized.seniority),
+    gender: GENDER_OPTIONS,
+    age: AGE_RANGES,
+  };
+}
+
+function assertValidHierarchy(
+  data: Pick<
+    CreateAttributeTemplateDto,
+    'stream' | 'location' | 'function' | 'department' | 'seniority'
+  >,
+): ReturnType<typeof normalizeAttributeTemplateHierarchy> {
+  const normalized = normalizeAttributeTemplateHierarchy({
+    stream: data.stream ?? [],
+    location: data.location ?? [],
+    function: data.function ?? [],
+    department: data.department ?? [],
+    seniority: data.seniority ?? [],
+  });
+  const issues = validateAttributeTemplateHierarchy(normalized);
+  const firstBlockingIssue = issues.find((issue) => issue.blocking);
+
+  if (firstBlockingIssue) {
+    throw new Error(firstBlockingIssue.message);
+  }
+
+  return normalized;
+}
+
+templates = templates.map((template) =>
+  normalizeTemplateRecord({
+    ...template,
+    stream: clone(template.stream),
+    location: clone(template.location),
+    function: clone(template.function),
+    department: clone(template.department),
+    seniority: clone(template.seniority),
+  }),
+);
+
 export async function getAllTemplates(): Promise<AttributeTemplate[]> {
   await delay(250);
-  return clone(templates);
+  return clone(templates.map((template) => normalizeTemplateRecord(template)));
 }
 
 export async function getTemplateById(id: string): Promise<AttributeTemplate | null> {
   await delay(180);
   const template = templates.find((item) => item.id === id);
-  return template ? clone(template) : null;
+  return template ? clone(normalizeTemplateRecord(template)) : null;
 }
 
 export async function createTemplate(data: CreateAttributeTemplateDto): Promise<AttributeTemplate> {
   await delay(300);
+  const normalized = assertValidHierarchy(data);
 
   const now = new Date().toISOString();
   const newTemplate: AttributeTemplate = {
@@ -116,17 +171,17 @@ export async function createTemplate(data: CreateAttributeTemplateDto): Promise<
     description: data.description,
     createdAt: now,
     updatedAt: now,
-    stream: clone(data.stream),
-    location: clone(data.location),
-    function: clone(data.function),
-    department: clone(data.department),
-    seniority: clone(data.seniority),
+    stream: clone(normalized.stream),
+    location: clone(normalized.location),
+    function: clone(normalized.function),
+    department: clone(normalized.department),
+    seniority: clone(normalized.seniority),
     gender: GENDER_OPTIONS,
     age: AGE_RANGES,
   };
 
   templates = [newTemplate, ...templates];
-  return clone(newTemplate);
+  return clone(normalizeTemplateRecord(newTemplate));
 }
 
 export async function updateTemplate(data: UpdateAttributeTemplateDto): Promise<AttributeTemplate> {
@@ -137,14 +192,28 @@ export async function updateTemplate(data: UpdateAttributeTemplateDto): Promise<
     throw new Error(`Template with id ${data.id} not found`);
   }
 
+  const merged = {
+    stream: data.stream ?? templates[index].stream,
+    location: data.location ?? templates[index].location,
+    function: data.function ?? templates[index].function,
+    department: data.department ?? templates[index].department,
+    seniority: data.seniority ?? templates[index].seniority,
+  };
+  const normalized = assertValidHierarchy(merged);
+
   const updated: AttributeTemplate = {
     ...templates[index],
     ...data,
+    stream: clone(normalized.stream),
+    location: clone(normalized.location),
+    function: clone(normalized.function),
+    department: clone(normalized.department),
+    seniority: clone(normalized.seniority),
     updatedAt: new Date().toISOString(),
   };
 
-  templates[index] = updated;
-  return clone(updated);
+  templates[index] = normalizeTemplateRecord(updated);
+  return clone(templates[index]);
 }
 
 export async function deleteTemplate(id: string): Promise<void> {
@@ -158,10 +227,10 @@ export async function deleteTemplate(id: string): Promise<void> {
   templates = templates.filter((template) => template.id !== id);
 }
 
-export async function getFunctions(
+export async function getDepartments(
   templateId: string,
-  locationId?: string
-): Promise<{ id: string; label: string; locationId: string }[]> {
+  functionId?: string
+): Promise<{ id: string; label: string; functionId: string }[]> {
   await delay(120);
 
   const template = templates.find((item) => item.id === templateId);
@@ -169,14 +238,14 @@ export async function getFunctions(
     return [];
   }
 
-  const functions = locationId
-    ? template.function.filter((item) => item.locationId === locationId)
-    : template.function;
+  const departments = functionId
+    ? template.department.filter((item) => item.functionId === functionId)
+    : template.department;
 
-  return clone(functions.map((item) => ({
+  return clone(departments.map((item) => ({
     id: item.id,
     label: item.label,
-    locationId: item.locationId,
+    functionId: item.functionId,
   })));
 }
 
@@ -186,5 +255,5 @@ export const attributeTemplateService = {
   create: createTemplate,
   update: updateTemplate,
   delete: deleteTemplate,
-  getFunctions,
+  getDepartments,
 };

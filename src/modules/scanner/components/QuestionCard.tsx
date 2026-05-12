@@ -6,6 +6,8 @@ import { createEmptyOption } from '../utils/builder';
 import { getQuestionOptionCount } from '../utils/metrics';
 import { FollowUpTriggerEditor } from './FollowUpTriggerEditor';
 
+import { ScannerFollowUpTrigger } from '../types';
+
 interface QuestionCardProps {
   question: Question;
   index: number;
@@ -14,9 +16,11 @@ interface QuestionCardProps {
   canRemove: boolean;
   isOpen: boolean;
   dragError?: boolean;
+  followUpTriggers?: ScannerFollowUpTrigger[];
   onToggle: () => void;
   onUpdate: (question: Question) => void;
   onRemove: (questionId: string) => void;
+  onTriggersChange?: (triggers: ScannerFollowUpTrigger[]) => void;
 }
 
 export function QuestionCard({
@@ -27,13 +31,15 @@ export function QuestionCard({
   canRemove,
   isOpen,
   dragError,
+  followUpTriggers,
   onToggle,
   onUpdate,
   onRemove,
+  onTriggersChange,
 }: QuestionCardProps) {
   const tone = dragError
     ? 'border-red-300 bg-red-50/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]'
-    : question.isFollowUp
+    : question.kind === 'follow-up'
       ? 'border-amber-200 bg-amber-50/70'
       : 'border-gray-200 bg-white';
 
@@ -50,7 +56,7 @@ export function QuestionCard({
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
               <span>Question {index + 1}</span>
-              {question.isFollowUp && (
+              {question.kind === 'follow-up' && (
                 <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] text-amber-700">
                   Follow-up
                 </span>
@@ -70,12 +76,11 @@ export function QuestionCard({
             <input
               type="checkbox"
               disabled={disabled}
-              checked={question.isFollowUp}
+              checked={question.kind === 'follow-up'}
               onChange={(event) =>
                 onUpdate({
                   ...question,
-                  isFollowUp: event.target.checked,
-                  triggerCondition: event.target.checked ? question.triggerCondition : undefined,
+                  kind: event.target.checked ? 'follow-up' : 'primary',
                 })
               }
             />
@@ -152,7 +157,7 @@ export function QuestionCard({
                   onClick={() =>
                     onUpdate({
                       ...question,
-                      options: [...question.options, createEmptyOption()],
+                      options: [...question.options, createEmptyOption(question.options.length + 1)],
                     })
                   }
                   className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
@@ -213,7 +218,7 @@ export function QuestionCard({
                       <input
                         type="number"
                         disabled={disabled}
-                        value={option.scoreValue}
+                        value={option.score}
                         onChange={(event) =>
                           onUpdate({
                             ...question,
@@ -221,7 +226,7 @@ export function QuestionCard({
                               item.id === option.id
                                 ? {
                                     ...item,
-                                    scoreValue: Number(event.target.value),
+                                    score: Number(event.target.value),
                                   }
                                 : item
                             ),
@@ -254,10 +259,12 @@ export function QuestionCard({
               <FollowUpTriggerEditor
                 question={question}
                 siblingQuestions={siblingQuestions}
+                followUpTriggers={followUpTriggers}
                 disabled={disabled}
-                onChange={onUpdate}
+                onTriggersChange={onTriggersChange}
               />
             </div>
+
           </div>
         </div>
       </div>

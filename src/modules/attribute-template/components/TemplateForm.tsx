@@ -1,8 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, BookOpen, Info, Lightbulb, Loader2, Lock, Save, Settings } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  BookOpen,
+  CheckCircle2,
+  Info,
+  Lightbulb,
+  Loader2,
+  Lock,
+  Save,
+  Settings,
+} from 'lucide-react';
 import { DepartmentMappingInput } from './DepartmentMappingInput';
 import { FunctionMappingInput } from './FunctionMappingInput';
 import { LocationMappingInput } from './LocationMappingInput';
@@ -18,6 +29,10 @@ import {
   LocationOption,
 } from '../types';
 import { createTemplate, updateTemplate } from '../service';
+import {
+  pruneAttributeTemplateHierarchy,
+  validateAttributeTemplateHierarchy,
+} from '../utils';
 
 interface TemplateFormProps {
   template?: AttributeTemplate;
@@ -37,33 +52,68 @@ export function TemplateForm({ template }: TemplateFormProps) {
   const [department, setDepartment] = useState<DepartmentOption[]>(template?.department || []);
   const [seniority, setSeniority] = useState<FieldOption[]>(template?.seniority || []);
 
-  function handleStreamsChange(nextStreams: FieldOption[]) {
-    const streamIds = new Set(nextStreams.map((item) => item.id));
-    const nextLocations = location.filter((item) => streamIds.has(item.streamId));
-    const locationIds = new Set(nextLocations.map((item) => item.id));
-    const nextFunctions = functionField.filter((item) => locationIds.has(item.locationId));
-    const functionIds = new Set(nextFunctions.map((item) => item.id));
+  const validationIssues = useMemo(
+    () => validateAttributeTemplateHierarchy({
+      stream,
+      location,
+      function: functionField,
+      department,
+      seniority,
+    }),
+    [department, functionField, location, seniority, stream],
+  );
+  const blockingIssues = validationIssues.filter((issue) => issue.blocking);
+  const shouldShowValidationState =
+    stream.length > 0
+    || location.length > 0
+    || functionField.length > 0
+    || department.length > 0
+    || seniority.length > 0;
 
-    setStream(nextStreams);
-    setLocation(nextLocations);
-    setFunctionField(nextFunctions);
-    setDepartment(department.filter((item) => functionIds.has(item.functionId)));
+  function handleStreamsChange(nextStreams: FieldOption[]) {
+    const nextHierarchy = pruneAttributeTemplateHierarchy({
+      stream: nextStreams,
+      location,
+      function: functionField,
+      department,
+      seniority,
+    });
+
+    setStream(nextHierarchy.stream);
+    setLocation(nextHierarchy.location);
+    setFunctionField(nextHierarchy.function);
+    setDepartment(nextHierarchy.department);
   }
 
   function handleLocationsChange(nextLocations: LocationOption[]) {
-    const locationIds = new Set(nextLocations.map((item) => item.id));
-    const nextFunctions = functionField.filter((item) => locationIds.has(item.locationId));
-    const functionIds = new Set(nextFunctions.map((item) => item.id));
+    const nextHierarchy = pruneAttributeTemplateHierarchy({
+      stream,
+      location: nextLocations,
+      function: functionField,
+      department,
+      seniority,
+    });
 
-    setLocation(nextLocations);
-    setFunctionField(nextFunctions);
-    setDepartment(department.filter((item) => functionIds.has(item.functionId)));
+    setLocation(nextHierarchy.location);
+    setFunctionField(nextHierarchy.function);
+    setDepartment(nextHierarchy.department);
   }
 
   function handleFunctionsChange(nextFunctions: FunctionOption[]) {
-    const functionIds = new Set(nextFunctions.map((item) => item.id));
-    setFunctionField(nextFunctions);
-    setDepartment(department.filter((item) => functionIds.has(item.functionId)));
+    const nextHierarchy = pruneAttributeTemplateHierarchy({
+      stream,
+      location,
+      function: nextFunctions,
+      department,
+      seniority,
+    });
+
+    setFunctionField(nextHierarchy.function);
+    setDepartment(nextHierarchy.department);
+  }
+
+  function handleDepartmentsChange(nextDepartments: DepartmentOption[]) {
+    setDepartment(nextDepartments);
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -75,23 +125,8 @@ export function TemplateForm({ template }: TemplateFormProps) {
       return;
     }
 
-    if (stream.length === 0) {
-      setError('At least one stream is required');
-      return;
-    }
-
-    if (location.length === 0) {
-      setError('At least one linked location is required');
-      return;
-    }
-
-    if (functionField.length === 0) {
-      setError('At least one linked function is required');
-      return;
-    }
-
-    if (department.length === 0) {
-      setError('At least one linked department is required');
+    if (blockingIssues.length > 0) {
+      setError(blockingIssues[0].message);
       return;
     }
 
@@ -204,15 +239,18 @@ export function TemplateForm({ template }: TemplateFormProps) {
             />
 
             <FunctionMappingInput
+              streams={stream}
               locations={location}
               functions={functionField}
               onChange={handleFunctionsChange}
             />
 
             <DepartmentMappingInput
+              streams={stream}
+              locations={location}
               functions={functionField}
               departments={department}
-              onChange={setDepartment}
+              onChange={handleDepartmentsChange}
             />
 
             <OptionsBuilder
@@ -223,6 +261,71 @@ export function TemplateForm({ template }: TemplateFormProps) {
             />
           </div>
         </div>
+
+        {shouldShowValidationState && (
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <div className="border-b border-gray-50 bg-gradient-to-r from-amber-50 to-transparent px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100">
+                  {blockingIssues.length > 0 ? (
+                    <AlertTriangle className="h-5 w-5 text-amber-600" />
+                  ) : (
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-[family-name:var(--font-roca)] text-lg font-semibold text-gray-900">
+                    Hierarchy Validation
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    The builder enforces the final chain: Stream {'->'} Location {'->'} Function {'->'} Department.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 p-6">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">
+                    Blocking Issues
+                  </p>
+                  <p className="mt-2 text-3xl font-semibold text-gray-900">{blockingIssues.length}</p>
+                </div>
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">
+                    Ready Chains
+                  </p>
+                  <p className="mt-2 text-3xl font-semibold text-gray-900">
+                    {functionField.filter((item) =>
+                      department.some((entry) => entry.functionId === item.id)).length}
+                  </p>
+                </div>
+              </div>
+
+              {validationIssues.length > 0 ? (
+                <div className="space-y-2">
+                  {validationIssues.map((issue) => (
+                    <div
+                      key={`${issue.code}-${issue.path}`}
+                      className={`rounded-xl border px-4 py-3 text-sm ${
+                        issue.blocking
+                          ? 'border-amber-200 bg-amber-50 text-amber-900'
+                          : 'border-slate-200 bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      {issue.message}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                  Every configured branch currently satisfies the canonical dependency flow.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="border-b border-gray-50 bg-gradient-to-r from-gray-50 to-transparent px-6 py-4">
@@ -315,6 +418,7 @@ export function TemplateForm({ template }: TemplateFormProps) {
             <li>Each location must sit under one stream only.</li>
             <li>Each function must sit under one location only.</li>
             <li>Each department must sit under one function only.</li>
+            <li>Changing a parent must reset every child below it.</li>
           </ul>
         </div>
 
@@ -339,7 +443,7 @@ export function TemplateForm({ template }: TemplateFormProps) {
             </div>
             <div>
               <h4 className="mb-1 font-semibold text-gray-700">Functions</h4>
-              <p className="text-gray-500">Function choices that belong to one location.</p>
+              <p className="text-gray-500">Functions that belong to one location only.</p>
             </div>
             <div>
               <h4 className="mb-1 font-semibold text-gray-700">Departments</h4>
@@ -376,6 +480,10 @@ export function TemplateForm({ template }: TemplateFormProps) {
             <div className="flex justify-between py-2">
               <span className="text-gray-500">Fixed Fields</span>
               <span className="font-medium text-gray-900">2</span>
+            </div>
+            <div className="flex justify-between py-2">
+              <span className="text-gray-500">Blocking Issues</span>
+              <span className="font-medium text-gray-900">{blockingIssues.length}</span>
             </div>
           </div>
         </div>

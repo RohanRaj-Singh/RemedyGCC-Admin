@@ -175,7 +175,7 @@ export function WeightBuilder({
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                       <span className="text-[10px] font-semibold uppercase text-gray-500">Q{qIndex + 1}</span>
-                                      {question.isFollowUp && (
+                                      {question.kind === 'follow-up' && (
                                         <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 uppercase">
                                           Follow-up
                                         </span>

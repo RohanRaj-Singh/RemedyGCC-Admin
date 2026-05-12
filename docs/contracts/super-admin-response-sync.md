@@ -66,7 +66,6 @@ Super Admin must publish a composed runtime snapshot that includes:
 - branding payload
 - attribute template payload
 - scanner payload
-- runtime settings
 - explicit version references
 
 This is the payload later served by `GET /api/runtime/:tenantSlug`.

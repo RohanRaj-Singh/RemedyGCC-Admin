@@ -80,7 +80,6 @@ The mounted route still ignores:
 - `question.isFollowUp`
 - `question.scoring`
 - `subdomain.followUpRules`
-- `runtimeSettings.featureFlags.enableFollowUps`
 
 ## Local Submit Stub
 
@@ -104,7 +103,7 @@ It still does not validate:
 - answer-index range against question option count
 - duplicate responses
 - follow-up consistency
-- runtime settings such as authentication or anonymous access
+- tenant-level access or submission-policy constraints outside the canonical snapshot contract
 
 ## Secondary Survey Path Still Present
 
@@ -132,5 +131,4 @@ Not implemented:
 - API-backed runtime config fetch
 - persisted survey answers outside the local stub
 - runtime-backed dashboard aggregation fetch
-- auth behavior from `runtimeSettings`
 - follow-up/scoring behavior in the mounted survey route

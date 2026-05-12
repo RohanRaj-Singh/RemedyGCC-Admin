@@ -12,31 +12,34 @@ export interface LocalizedText {
 
 export type ScannerStatus = 'draft' | 'published' | 'archived';
 export type ScannerVersionStatus = 'draft' | 'published';
-export type CategoryPolarity = 'positive' | 'negative';
 
 export interface QuestionOption {
   id: string;
+  order: number;
   label: LocalizedText;
-  scoreValue: number;
+  score: number;
 }
 
-export interface FollowUpTriggerCondition {
-  questionId: string;
-  optionIds: string[];
+export interface ScannerFollowUpTrigger {
+  id: string;
+  triggerQuestionId: string;
+  triggerOptionIds: string[];
+  followUpQuestionIds: string[];
 }
 
 export interface Question {
   id: string;
+  order: number;
   subdomainId: string;
   text: LocalizedText;
   weight?: number;
-  isFollowUp: boolean;
-  triggerCondition?: FollowUpTriggerCondition;
+  kind: 'primary' | 'follow-up';
   options: QuestionOption[];
 }
 
 export interface Subdomain {
   id: string;
+  order: number;
   categoryId: string;
   name: LocalizedText;
   weight: number;
@@ -45,9 +48,9 @@ export interface Subdomain {
 
 export interface Category {
   id: string;
+  order: number;
   slot: 1 | 2 | 3 | 4 | 5;
   name: LocalizedText;
-  polarity: CategoryPolarity;
   weight: number;
   subdomains: Subdomain[];
 }
@@ -62,6 +65,7 @@ export interface ScannerVersion {
   attributeTemplateName?: string;
   attributeTemplateSnapshot: AttributeTemplate | null;
   categories: Category[];
+  followUpTriggers: ScannerFollowUpTrigger[];
   responseCount: number;
   publishedAt?: string;
   createdAt: string;
@@ -122,10 +126,22 @@ export type ValidationIssueLevel =
   | 'question'
   | 'attribute-template';
 
+export type ValidationIssueSeverity = 'error' | 'warning' | 'info';
+
 export interface ValidationIssue {
+  id: string;
   code: string;
   level: ValidationIssueLevel;
-  entityId?: string;
+  severity: ValidationIssueSeverity;
+  categoryId?: string;
+  categoryName?: string;
+  subdomainId?: string;
+  subdomainName?: string;
+  questionId?: string;
+  questionText?: string;
+  answerId?: string;
+  answerLabel?: string;
+  followUpRelation?: string;
   path: string;
   message: string;
   blocking: boolean;
@@ -147,4 +163,5 @@ export interface SaveScannerDraftDto {
   description?: LocalizedText;
   attributeTemplateId: string;
   categories: Category[];
+  followUpTriggers: ScannerFollowUpTrigger[];
 }

@@ -1,27 +1,65 @@
 /**
- * Tenant service wrapper for shared hooks and pages.
+ * Tenant service wrapper backed by local Next.js API routes.
  */
 
 import type {
   BrandingConfig,
-  CreateTenantDto,
   DashboardStats,
+  RuntimeConfigOption,
   Tenant,
+  TenantPublishingPreview,
+  TenantPublishResult,
   TenantStatus,
+  CreateTenantDto,
   UpdateTenantDto,
 } from '@/types';
-import { apiClient, type ApiResponse } from './api-client';
-import {
-  createTenant as createTenantRecord,
-  deleteTenant as deleteTenantRecord,
-  getAllTenants,
-  getTenantById,
-  getTenantStats,
-  updateTenant as updateTenantRecord,
-  updateTenantBranding as updateTenantBrandingRecord,
-} from '@/modules/tenant/service';
+import type { ApiResponse } from './api-client';
 
-const USE_MOCK_DATA = true;
+const TENANT_API_BASE = '/api/super-admin/tenants';
+
+async function request<T>(
+  input: string,
+  init: RequestInit = {},
+): Promise<ApiResponse<T>> {
+  try {
+    const response = await fetch(input, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init.headers ?? {}),
+      },
+    });
+
+    const payload = await response.json().catch(() => null) as
+      | T
+      | { error?: { message?: string } | string }
+      | null;
+
+    if (!response.ok) {
+      const errorPayload = payload as { error?: { message?: string } | string } | null;
+      const message =
+        typeof errorPayload?.error === 'string'
+          ? errorPayload.error
+          : errorPayload?.error?.message
+            || `Request failed with ${response.status}.`;
+
+      return {
+        data: null,
+        error: message,
+      };
+    }
+
+    return {
+      data: payload as T,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : 'Unknown error occurred.',
+    };
+  }
+}
 
 export interface TenantFilters {
   status?: TenantStatus;
@@ -30,152 +68,93 @@ export interface TenantFilters {
 
 class TenantService {
   async getAll(filters?: TenantFilters): Promise<ApiResponse<Tenant[]>> {
-    if (USE_MOCK_DATA) {
-      let tenants = await getAllTenants();
-
-      if (filters?.status) {
-        tenants = tenants.filter((tenant) => tenant.status === filters.status);
-      }
-
-      if (filters?.search) {
-        const search = filters.search.toLowerCase();
-        tenants = tenants.filter((tenant) => {
-          const runtimeConfigId = tenant.activeRuntimeConfigId ?? '';
-          return (
-            tenant.name.toLowerCase().includes(search) ||
-            tenant.slug.toLowerCase().includes(search) ||
-            runtimeConfigId.toLowerCase().includes(search)
-          );
-        });
-      }
-
-      return { data: tenants, error: null };
+    const params = new URLSearchParams();
+    if (filters?.status) {
+      params.set('status', filters.status);
+    }
+    if (filters?.search) {
+      params.set('search', filters.search);
     }
 
-    return apiClient.get<Tenant[]>('/api/super-admin/tenants');
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return request<Tenant[]>(`${TENANT_API_BASE}${suffix}`);
   }
 
   async getById(id: string): Promise<ApiResponse<Tenant>> {
-    if (USE_MOCK_DATA) {
-      const tenant = await getTenantById(id);
-      if (!tenant) {
-        return { data: null, error: 'Tenant not found' };
-      }
-
-      return { data: tenant, error: null };
-    }
-
-    return apiClient.get<Tenant>(`/api/super-admin/tenants/${id}`);
+    return request<Tenant>(`${TENANT_API_BASE}/${id}`);
   }
 
-  async create(
-    data: CreateTenantDto,
-  ): Promise<ApiResponse<Tenant>> {
-    if (USE_MOCK_DATA) {
-      try {
-        const tenant = await createTenantRecord(data);
-        return { data: tenant, error: null };
-      } catch (error) {
-        return {
-          data: null,
-          error: error instanceof Error ? error.message : 'Failed to create tenant',
-        };
-      }
-    }
-
-    return apiClient.post<Tenant>('/api/super-admin/tenants', data);
+  async create(data: CreateTenantDto): Promise<ApiResponse<Tenant>> {
+    return request<Tenant>(TENANT_API_BASE, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
-  async update(
-    id: string,
-    data: UpdateTenantDto,
-  ): Promise<ApiResponse<Tenant>> {
-    if (USE_MOCK_DATA) {
-      try {
-        const tenant = await updateTenantRecord(id, data);
-        return { data: tenant, error: null };
-      } catch (error) {
-        return {
-          data: null,
-          error: error instanceof Error ? error.message : 'Failed to update tenant',
-        };
-      }
-    }
-
-    return apiClient.put<Tenant>(`/api/super-admin/tenants/${id}`, data);
+  async update(id: string, data: UpdateTenantDto): Promise<ApiResponse<Tenant>> {
+    return request<Tenant>(`${TENANT_API_BASE}/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
   async updateBranding(
     id: string,
     branding: Partial<BrandingConfig>,
   ): Promise<ApiResponse<Tenant>> {
-    if (USE_MOCK_DATA) {
-      try {
-        const tenant = await updateTenantBrandingRecord(id, branding);
-        return { data: tenant, error: null };
-      } catch (error) {
-        return {
-          data: null,
-          error: error instanceof Error ? error.message : 'Failed to update branding',
-        };
-      }
-    }
-
-    return apiClient.put<Tenant>(`/api/super-admin/tenants/${id}/branding`, branding);
+    return this.update(id, { branding });
   }
 
-  async delete(id: string): Promise<ApiResponse<void>> {
-    if (USE_MOCK_DATA) {
-      try {
-        await deleteTenantRecord(id);
-        return { data: undefined, error: null };
-      } catch (error) {
-        return {
-          data: undefined,
-          error: error instanceof Error ? error.message : 'Failed to delete tenant',
-        };
-      }
-    }
+  async delete(
+    id: string,
+    confirmationText?: string,
+  ): Promise<ApiResponse<void>> {
+    return request<void>(`${TENANT_API_BASE}/${id}`, {
+      method: 'DELETE',
+      body: JSON.stringify({
+        confirmationText,
+      }),
+    });
+  }
 
-    return apiClient.delete<void>(`/api/super-admin/tenants/${id}`);
+  async getRuntimeConfigOptions(
+    tenantId: string,
+  ): Promise<ApiResponse<RuntimeConfigOption[]>> {
+    return request<RuntimeConfigOption[]>(
+      `${TENANT_API_BASE}/${tenantId}/runtime-configs`,
+    );
+  }
+
+  async getPublishingPreview(
+    tenantId: string,
+  ): Promise<ApiResponse<TenantPublishingPreview>> {
+    return request<TenantPublishingPreview>(
+      `${TENANT_API_BASE}/${tenantId}/publishing-preview`,
+    );
+  }
+
+  async publishRuntime(
+    tenantId: string,
+    activate = true,
+  ): Promise<ApiResponse<TenantPublishResult>> {
+    return request<TenantPublishResult>(`${TENANT_API_BASE}/${tenantId}/publish`, {
+      method: 'POST',
+      body: JSON.stringify({ activate }),
+    });
+  }
+
+  async activateRuntimeConfig(
+    tenantId: string,
+    runtimeConfigId: string,
+  ): Promise<ApiResponse<Tenant>> {
+    return request<Tenant>(`${TENANT_API_BASE}/${tenantId}/activate`, {
+      method: 'POST',
+      body: JSON.stringify({ runtimeConfigId }),
+    });
   }
 
   async getDashboardStats(): Promise<ApiResponse<DashboardStats>> {
-    if (USE_MOCK_DATA) {
-      const stats = await getTenantStats();
-
-      return {
-        data: {
-          totalTenants: stats.total,
-          activeTenants: stats.active,
-          draftTenants: stats.draft,
-          disabledTenants: stats.disabled,
-          archivedTenants: stats.archived,
-          activeRuntimeConfigs: stats.activeRuntimeConfigs,
-          activeScanners: 4,
-          totalLogs: 156,
-          totalSubmissions: 5478,
-          avgScore: 4.2,
-          tenantsByBranding: {
-            custom: stats.byBranding.custom,
-            default: stats.byBranding.default,
-            withWarnings: stats.byBranding.warnings,
-          },
-          recentActivity: [
-            { date: '2026-05-04', submissions: 132, newTenants: 1 },
-            { date: '2026-05-05', submissions: 145, newTenants: 0 },
-            { date: '2026-05-06', submissions: 167, newTenants: 1 },
-            { date: '2026-05-07', submissions: 158, newTenants: 0 },
-            { date: '2026-05-08', submissions: 182, newTenants: 0 },
-            { date: '2026-05-09', submissions: 176, newTenants: 1 },
-            { date: '2026-05-10', submissions: 191, newTenants: 0 },
-          ],
-        },
-        error: null,
-      };
-    }
-
-    return apiClient.get<DashboardStats>('/api/super-admin/dashboard');
+    return request<DashboardStats>(`${TENANT_API_BASE}/stats`);
   }
 
   async getActiveCount(): Promise<number> {

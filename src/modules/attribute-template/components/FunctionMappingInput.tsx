@@ -1,22 +1,39 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Briefcase, ChevronDown, Plus, X } from 'lucide-react';
-import { FunctionOption, LocationOption } from '../types';
+import { FunctionOption, FieldOption, LocationOption } from '../types';
+import {
+  createAttributeOptionId,
+  formatHierarchyPath,
+} from '../utils';
 
 interface FunctionMappingInputProps {
+  streams: FieldOption[];
   locations: LocationOption[];
   functions: FunctionOption[];
   onChange: (functions: FunctionOption[]) => void;
 }
 
 export function FunctionMappingInput({
+  streams,
   locations,
   functions,
   onChange,
 }: FunctionMappingInputProps) {
   const [newFunction, setNewFunction] = useState('');
   const [selectedLocationId, setSelectedLocationId] = useState('');
+
+  useEffect(() => {
+    if (selectedLocationId && !locations.some((location) => location.id === selectedLocationId)) {
+      setSelectedLocationId('');
+    }
+  }, [selectedLocationId, locations]);
+
+  const streamById = useMemo(
+    () => new Map(streams.map((stream) => [stream.id, stream])),
+    [streams],
+  );
 
   function handleAdd() {
     if (!newFunction.trim() || !selectedLocationId) {
@@ -26,7 +43,7 @@ export function FunctionMappingInput({
     onChange([
       ...functions,
       {
-        id: `${selectedLocationId}-${newFunction.toLowerCase().replace(/\s+/g, '-')}`,
+        id: createAttributeOptionId(selectedLocationId, newFunction),
         label: newFunction.trim(),
         locationId: selectedLocationId,
       },
@@ -40,10 +57,15 @@ export function FunctionMappingInput({
     onChange(functions.filter((item) => item.id !== id));
   }
 
-  const groupedFunctions = locations.map((location) => ({
-    location,
-    items: functions.filter((item) => item.locationId === location.id),
-  }));
+  const groupedFunctions = locations.map((location) => {
+    const stream = streamById.get(location.streamId) ?? null;
+    return {
+      location,
+      stream,
+      pathLabel: formatHierarchyPath([stream?.label, location.label]),
+      items: functions.filter((item) => item.locationId === location.id),
+    };
+  });
 
   return (
     <div className="space-y-4">
@@ -54,16 +76,16 @@ export function FunctionMappingInput({
       </div>
 
       <p className="text-xs text-gray-500">
-        Each function must be linked to one location.
+        Each function must sit under exactly one location and only filters the next level: departments.
       </p>
 
       <div className="grid gap-4">
-        {groupedFunctions.map(({ location, items }) =>
+        {groupedFunctions.map(({ location, pathLabel, items }) =>
           items.length > 0 ? (
             <div key={location.id} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
               <div className="mb-3 flex items-center gap-2">
                 <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-bold uppercase tracking-wide text-primary">
-                  {location.label}
+                  {pathLabel}
                 </span>
                 <span className="text-xs text-gray-400">({items.length} functions)</span>
               </div>
@@ -104,11 +126,14 @@ export function FunctionMappingInput({
             className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-gray-100"
           >
             <option value="">Select Location...</option>
-            {locations.map((location) => (
-              <option key={location.id} value={location.id}>
-                {location.label}
-              </option>
-            ))}
+            {locations.map((location) => {
+              const stream = streamById.get(location.streamId);
+              return (
+                <option key={location.id} value={location.id}>
+                  {formatHierarchyPath([stream?.label, location.label])}
+                </option>
+              );
+            })}
           </select>
           <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         </div>

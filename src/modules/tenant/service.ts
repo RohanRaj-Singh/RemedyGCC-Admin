@@ -1,319 +1,354 @@
+import 'server-only';
+
+import { getAllTemplates, getTemplateById } from '@/modules/attribute-template/service';
+import type { AttributeTemplate } from '@/modules/attribute-template/types';
 import {
-  type BrandingConfig,
-  resolveBrandingConfig,
-  validateBrandingConfig,
-} from '@/types/branding';
+  DEFAULT_RUNTIME_SETTINGS,
+  generateRuntimeConfig,
+  getRuntimeConfigFingerprint,
+} from '@/modules/publishing/engine';
+import { getScannerById, getScanners } from '@/modules/scanner/service';
+import type { Scanner, ScannerDetail, ScannerVersion } from '@/modules/scanner/types';
+import { resolveBrandingConfig, validateBrandingConfig } from '@/types/branding';
+import type {
+  RuntimeAttributeTemplate,
+  RuntimeScannerVersion,
+  RuntimeTenantSummary,
+  TenantRuntimeConfigSnapshot,
+} from '@/types/runtime-config';
+import {
+  activateRuntimeConfigForTenant,
+  deleteTenantDocument,
+  ensureTenantModuleIndexes,
+  getTenantDetailData,
+  getTenantDocumentBySlug,
+  getTenantListData,
+  insertTenantDocument,
+  publishTenantRuntimeDocuments,
+  updateTenantDocument,
+  type AttributeTemplateVersionDocument,
+  type RuntimeConfigDocument,
+  type ScannerVersionDocument,
+  type TenantDetailData,
+  type TenantDocument,
+} from '@/server/tenant/repository';
 import type {
   CreateTenantDto,
+  PublishTenantRuntimeOptions,
   RuntimeConfigOption,
-  RuntimeConfigStatus,
   Tenant,
+  TenantDraftSetupReference,
+  TenantPublishResult,
+  TenantPublishingPreview,
   TenantPublishingReadiness,
+  TenantRuntimeAttributeTemplateSummary,
   TenantRuntimeConfigReference,
+  TenantRuntimeScannerSummary,
   TenantStatus,
   UpdateTenantDto,
 } from './types';
 import {
+  createDeterministicId,
+  createFingerprint,
   getTenantBrandingWarnings,
-  isTenantSlugLocked,
+  isTenantIdentityLocked,
   normalizeTenantSlugInput,
+  normalizeTenantSubdomainInput,
   validateTenantSlug,
+  validateTenantSubdomain,
 } from './utils';
 
-interface StoredTenantRecord {
-  id: string;
-  slug: string;
-  name: string;
-  status: TenantStatus;
-  activeRuntimeConfigId: string | null;
-  branding: BrandingConfig;
-  createdAt: string;
-  updatedAt: string;
-  hasPendingChanges: boolean;
+const CALCULATION_VERSION_ID = 'calc_demo_placeholder_v1';
+
+interface ResolvedPublishingSource {
+  scannerDetail: ScannerDetail | null;
+  sourceVersion: ScannerVersion | null;
+  sourceTemplate: AttributeTemplate | null;
+  templateMismatch: boolean;
 }
 
-const runtimeConfigs: TenantRuntimeConfigReference[] = [
-  {
-    runtimeConfigId: 'runtimecfg_acme_2026_04_28',
-    tenantId: 'tenant-acme-health',
-    tenantSlug: 'acme-health',
-    status: 'published',
-    publishedAt: '2026-04-28T09:00:00.000Z',
-    activatedAt: '2026-04-28T09:30:00.000Z',
-    versionRefs: {
-      scannerVersionId: 'scanner_v7',
-      attributeTemplateVersionId: 'attr_v3',
-      calculationVersionId: 'calc_v1',
-      brandingVersionId: 'brand_v2',
-    },
-  },
-  {
-    runtimeConfigId: 'runtimecfg_acme_2026_05_08',
-    tenantId: 'tenant-acme-health',
-    tenantSlug: 'acme-health',
-    status: 'draft',
-    publishedAt: null,
-    activatedAt: null,
-    versionRefs: {
-      scannerVersionId: 'scanner_v8',
-      attributeTemplateVersionId: 'attr_v4',
-      calculationVersionId: 'calc_v1',
-      brandingVersionId: 'brand_v3',
-    },
-  },
-  {
-    runtimeConfigId: 'runtimecfg_techstart_2026_05_01',
-    tenantId: 'tenant-techstart-care',
-    tenantSlug: 'techstart-care',
-    status: 'draft',
-    publishedAt: null,
-    activatedAt: null,
-    versionRefs: {
-      scannerVersionId: 'scanner_v3',
-      attributeTemplateVersionId: 'attr_v2',
-      calculationVersionId: 'calc_v1',
-      brandingVersionId: 'brand_v1',
-    },
-  },
-  {
-    runtimeConfigId: 'runtimecfg_global_2026_04_12',
-    tenantId: 'tenant-global-works',
-    tenantSlug: 'global-works',
-    status: 'published',
-    publishedAt: '2026-04-12T07:00:00.000Z',
-    activatedAt: '2026-04-12T08:00:00.000Z',
-    versionRefs: {
-      scannerVersionId: 'scanner_v5',
-      attributeTemplateVersionId: 'attr_v3',
-      calculationVersionId: 'calc_v1',
-      brandingVersionId: 'brand_v2',
-    },
-  },
-  {
-    runtimeConfigId: 'runtimecfg_finance_2026_03_20',
-    tenantId: 'tenant-finance-first',
-    tenantSlug: 'finance-first',
-    status: 'published',
-    publishedAt: '2026-03-20T12:00:00.000Z',
-    activatedAt: '2026-03-20T12:30:00.000Z',
-    versionRefs: {
-      scannerVersionId: 'scanner_v4',
-      attributeTemplateVersionId: 'attr_v2',
-      calculationVersionId: 'calc_v1',
-      brandingVersionId: 'brand_v2',
-    },
-  },
-  {
-    runtimeConfigId: 'runtimecfg_carepoint_2026_05_02',
-    tenantId: 'tenant-carepoint',
-    tenantSlug: 'carepoint',
-    status: 'published',
-    publishedAt: '2026-05-02T10:00:00.000Z',
-    activatedAt: '2026-05-02T11:00:00.000Z',
-    versionRefs: {
-      scannerVersionId: 'scanner_v6',
-      attributeTemplateVersionId: 'attr_v4',
-      calculationVersionId: 'calc_v1',
-      brandingVersionId: 'brand_v2',
-    },
-  },
-];
+interface DraftSetupCatalog {
+  scannerMap: Map<string, Scanner>;
+  templateMap: Map<string, AttributeTemplate>;
+}
 
-let tenants: StoredTenantRecord[] = [
-  {
-    id: 'tenant-acme-health',
-    slug: 'acme-health',
-    name: 'Acme Health',
-    status: 'active',
-    activeRuntimeConfigId: 'runtimecfg_acme_2026_04_28',
-    branding: {
-      appName: 'Acme Health',
-      logoUrl: '/logos/acme-health.svg',
-      primaryColor: '#0f766e',
-      secondaryColor: '#115e59',
-      faviconUrl: '/logos/acme-health-favicon.ico',
-      fontFamily: 'IBM Plex Sans, sans-serif',
-    },
-    createdAt: '2026-01-10T08:00:00.000Z',
-    updatedAt: '2026-04-28T09:30:00.000Z',
-    hasPendingChanges: false,
-  },
-  {
-    id: 'tenant-techstart-care',
-    slug: 'techstart-care',
-    name: 'TechStart Care',
-    status: 'draft',
-    activeRuntimeConfigId: null,
-    branding: {
-      appName: 'TechStart Care',
-      primaryColor: '#7c3aed',
-      logoUrl: '/logos/techstart-care.svg',
-    },
-    createdAt: '2026-02-18T11:00:00.000Z',
-    updatedAt: '2026-05-01T14:30:00.000Z',
-    hasPendingChanges: true,
-  },
-  {
-    id: 'tenant-global-works',
-    slug: 'global-works',
-    name: 'Global Works',
-    status: 'disabled',
-    activeRuntimeConfigId: 'runtimecfg_global_2026_04_12',
-    branding: {
-      appName: 'Global Works',
-      primaryColor: '#1d4ed8',
-      secondaryColor: '#2563eb',
-      faviconUrl: '/logos/global-works-favicon.ico',
-    },
-    createdAt: '2026-01-22T10:20:00.000Z',
-    updatedAt: '2026-04-15T16:40:00.000Z',
-    hasPendingChanges: false,
-  },
-  {
-    id: 'tenant-finance-first',
-    slug: 'finance-first',
-    name: 'Finance First',
-    status: 'archived',
-    activeRuntimeConfigId: 'runtimecfg_finance_2026_03_20',
-    branding: {
-      appName: 'Finance First',
-      logoUrl: '/logos/finance-first.svg',
-      primaryColor: '#166534',
-      secondaryColor: '#15803d',
-      faviconUrl: '/logos/finance-first-favicon.ico',
-      fontFamily: 'Source Sans 3, sans-serif',
-    },
-    createdAt: '2025-12-02T09:15:00.000Z',
-    updatedAt: '2026-03-20T12:30:00.000Z',
-    hasPendingChanges: false,
-  },
-  {
-    id: 'tenant-carepoint',
-    slug: 'carepoint',
-    name: 'CarePoint',
-    status: 'active',
-    activeRuntimeConfigId: 'runtimecfg_carepoint_2026_05_02',
-    branding: {
-      appName: 'CarePoint',
-      logoUrl: '/logos/carepoint.svg',
-      primaryColor: '#f97316',
-    },
-    createdAt: '2026-03-03T13:10:00.000Z',
-    updatedAt: '2026-05-02T11:00:00.000Z',
-    hasPendingChanges: false,
-  },
-];
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function mergeBranding(
-  current: BrandingConfig,
-  next?: Partial<BrandingConfig>,
-): BrandingConfig {
-  if (!next) {
-    return current;
-  }
-
+function createTenantSummary(document: TenantDocument): RuntimeTenantSummary {
   return {
-    ...current,
-    ...next,
-    gradients: {
-      ...current.gradients,
-      ...next.gradients,
-    },
-    metadata: {
-      ...(current.metadata ?? {}),
-      ...(next.metadata ?? {}),
-    },
+    id: document.tenantId,
+    name: document.name,
+    slug: document.slug,
+    status: document.status,
   };
 }
 
-function findRuntimeConfig(runtimeConfigId: string | null | undefined) {
-  if (!runtimeConfigId) {
-    return null;
-  }
-
-  return runtimeConfigs.find((runtimeConfig) => runtimeConfig.runtimeConfigId === runtimeConfigId) ?? null;
+function normalizeTenantDocument(document: TenantDocument): TenantDocument {
+  return {
+    ...document,
+    subdomain: document.subdomain || document.slug,
+    branding: document.branding ?? {},
+    draftScannerId: document.draftScannerId ?? null,
+    draftAttributeTemplateId: document.draftAttributeTemplateId ?? null,
+    activeRuntimeConfigId: document.activeRuntimeConfigId ?? null,
+    activeRuntimeConfigPublishedAt: document.activeRuntimeConfigPublishedAt ?? null,
+    brandingVersionId: document.brandingVersionId ?? null,
+    archivedAt: document.archivedAt ?? null,
+  };
 }
 
-function getTenantRuntimeConfigs(
-  tenantId: string,
-  status?: RuntimeConfigStatus,
-): TenantRuntimeConfigReference[] {
-  return runtimeConfigs.filter((runtimeConfig) => {
-    if (runtimeConfig.tenantId !== tenantId) {
-      return false;
+function getRuntimeConfigStatus(
+  tenant: TenantDocument,
+  runtimeConfig: RuntimeConfigDocument,
+): RuntimeConfigOption['status'] {
+  if (tenant.activeRuntimeConfigId === runtimeConfig.runtimeConfigId) {
+    if (tenant.status === 'disabled') {
+      return 'disabled';
     }
 
-    return status ? runtimeConfig.status === status : true;
+    if (tenant.status === 'archived') {
+      return 'archived';
+    }
+
+    return 'active';
+  }
+
+  return 'published';
+}
+
+function buildScannerSummary(
+  scannerVersion: RuntimeScannerVersion,
+): TenantRuntimeScannerSummary {
+  const subdomainCount = scannerVersion.categories.reduce(
+    (total, category) => total + category.subdomains.length,
+    0,
+  );
+  const questionCount = scannerVersion.categories.reduce(
+    (total, category) =>
+      total
+      + category.subdomains.reduce(
+        (subdomainTotal, subdomain) => subdomainTotal + subdomain.questions.length,
+        0,
+      ),
+    0,
+  );
+
+  return {
+    scannerVersionId: scannerVersion.id,
+    version: scannerVersion.version,
+    categoryCount: scannerVersion.categories.length,
+    subdomainCount,
+    questionCount,
+  };
+}
+
+function buildAttributeTemplateSummary(
+  attributeTemplate: RuntimeAttributeTemplate,
+  versionId: string,
+): TenantRuntimeAttributeTemplateSummary {
+  return {
+    attributeTemplateVersionId: versionId,
+    streamCount: attributeTemplate.streams.length,
+    locationCount: attributeTemplate.locations.length,
+    functionCount: attributeTemplate.functions.length,
+    departmentCount: attributeTemplate.departments.length,
+  };
+}
+
+function toRuntimeConfigReference(
+  tenant: TenantDocument,
+  runtimeConfig: RuntimeConfigDocument,
+  submissionCount: number,
+): TenantRuntimeConfigReference {
+  return {
+    runtimeConfigId: runtimeConfig.runtimeConfigId,
+    tenantId: runtimeConfig.tenantId,
+    tenantSlug: runtimeConfig.tenantSlug,
+    tenantSubdomain: runtimeConfig.tenantSubdomain || runtimeConfig.tenantSlug,
+    status: getRuntimeConfigStatus(tenant, runtimeConfig),
+    publishedAt: runtimeConfig.publishedAt,
+    activatedAt: runtimeConfig.activatedAt ?? null,
+    versionRefs: clone(runtimeConfig.versionRefs),
+    submissionCount,
+    scannerSummary: buildScannerSummary(runtimeConfig.scannerVersion),
+    attributeTemplateSummary: buildAttributeTemplateSummary(
+      runtimeConfig.attributeTemplate,
+      runtimeConfig.versionRefs.attributeTemplateVersionId,
+    ),
+  };
+}
+
+function buildRuntimeConfigLabel(runtimeConfig: TenantRuntimeConfigReference): string {
+  return `${runtimeConfig.runtimeConfigId} - ${runtimeConfig.scannerSummary.version} / ${runtimeConfig.attributeTemplateSummary.streamCount} streams`;
+}
+
+function getTenantRuntimeFingerprint(runtimeConfig: RuntimeConfigDocument): string {
+  return runtimeConfig.fingerprint || getRuntimeConfigFingerprint(runtimeConfig);
+}
+
+function createTenantId(slug: string): string {
+  return `tenant-${slug}-${Date.now().toString(36)}`;
+}
+
+function createRuntimeConfigId(
+  subdomain: string,
+  runtimeConfigs: RuntimeConfigDocument[],
+): string {
+  const now = new Date();
+  const dateKey = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const prefix = `runtimecfg_${subdomain.replace(/-/g, '_')}_${dateKey}_`;
+  const sequence = runtimeConfigs.filter((runtimeConfig) =>
+    runtimeConfig.runtimeConfigId.startsWith(prefix)).length + 1;
+
+  return `${prefix}${String(sequence).padStart(3, '0')}`;
+}
+
+function createVersionResolver(
+  detailData: TenantDetailData,
+  fallbackRuntimeConfigs: RuntimeConfigDocument[],
+) {
+  const scannerVersionMatches = new Map<string, { id: string; version: string }>();
+  detailData.scannerVersions.forEach((version) => {
+    if (version.sourceFingerprint) {
+      scannerVersionMatches.set(version.sourceFingerprint, {
+        id: version.scannerVersionId,
+        version: version.version,
+      });
+    }
+  });
+
+  const attributeTemplateMatches = new Map<string, { id: string; version: string }>();
+  detailData.attributeTemplateVersions.forEach((version) => {
+    if (version.fingerprint) {
+      attributeTemplateMatches.set(version.fingerprint, {
+        id: version.attributeTemplateVersionId,
+        version: version.version,
+      });
+    }
+  });
+
+  const brandingMatches = new Map<string, { id: string; version: string }>();
+  fallbackRuntimeConfigs.forEach((runtimeConfig) => {
+    const brandingFingerprint =
+      runtimeConfig.brandingFingerprint || createFingerprint(runtimeConfig.branding ?? {});
+
+    if (!brandingMatches.has(brandingFingerprint)) {
+      brandingMatches.set(brandingFingerprint, {
+        id: runtimeConfig.versionRefs.brandingVersionId,
+        version: `v${brandingMatches.size + 1}`,
+      });
+    }
+  });
+
+  return ({
+    scannerFingerprint,
+    attributeTemplateFingerprint,
+    brandingFingerprint,
+    calculationVersionId,
+  }: {
+    scannerFingerprint: string;
+    attributeTemplateFingerprint: string;
+    brandingFingerprint: string;
+    sourceScannerId: string;
+    sourceScannerVersionId: string;
+    sourceAttributeTemplateId: string;
+    calculationVersionId: string;
+  }) => {
+    const existingScannerVersion = scannerVersionMatches.get(scannerFingerprint);
+    const existingAttributeTemplateVersion =
+      attributeTemplateMatches.get(attributeTemplateFingerprint);
+    const existingBrandingVersion = brandingMatches.get(brandingFingerprint);
+
+    return {
+      versionRefs: {
+        scannerVersionId:
+          existingScannerVersion?.id
+          ?? createDeterministicId('scanver', scannerFingerprint),
+        attributeTemplateVersionId:
+          existingAttributeTemplateVersion?.id
+          ?? createDeterministicId('attrtpl', attributeTemplateFingerprint),
+        calculationVersionId,
+        brandingVersionId:
+          existingBrandingVersion?.id
+          ?? createDeterministicId('brandver', brandingFingerprint),
+      },
+      scannerVersion:
+        existingScannerVersion?.version
+        ?? `v${detailData.scannerVersions.length + 1}`,
+      attributeTemplateVersion:
+        existingAttributeTemplateVersion?.version
+        ?? `v${detailData.attributeTemplateVersions.length + 1}`,
+      brandingVersion:
+        existingBrandingVersion?.version
+        ?? `v${brandingMatches.size + 1}`,
+      reused: {
+        scanner: Boolean(existingScannerVersion),
+        attributeTemplate: Boolean(existingAttributeTemplateVersion),
+        branding: Boolean(existingBrandingVersion),
+      },
+    };
+  };
+}
+
+function createScannerSourceFingerprint(
+  scannerDetail: ScannerDetail,
+  sourceVersion: ScannerVersion,
+): string {
+  return createFingerprint({
+    sourceScannerId: scannerDetail.id,
+    sourceScannerVersionId: sourceVersion.id,
+    language: DEFAULT_RUNTIME_SETTINGS.language,
+    categories: sourceVersion.categories,
+    followUpTriggers: sourceVersion.followUpTriggers,
   });
 }
 
-function computePublishingReadiness(
-  tenant: StoredTenantRecord,
-  activeRuntimeConfig: TenantRuntimeConfigReference | null,
-): TenantPublishingReadiness {
-  const blockingIssues: string[] = [];
-  const warnings = [...getTenantBrandingWarnings(tenant.branding)];
-
-  if (tenant.status === 'active' && !activeRuntimeConfig) {
-    blockingIssues.push('Active tenants require an active published runtime config.');
-  }
-
-  if (activeRuntimeConfig && activeRuntimeConfig.status !== 'published') {
-    blockingIssues.push('Only published runtime configs can be activated for runtime traffic.');
-  }
-
-  if (activeRuntimeConfig && activeRuntimeConfig.tenantId !== tenant.id) {
-    blockingIssues.push('Active runtime config must belong to the same tenant.');
-  }
-
-  if (!activeRuntimeConfig && tenant.status === 'draft') {
-    warnings.push('Draft tenants stay private until a published runtime config is activated.');
-  }
-
-  if (tenant.status === 'disabled') {
-    warnings.push('Disabled tenants keep history but must not resolve in the runtime app.');
-  }
-
-  if (tenant.status === 'archived') {
-    warnings.push('Archived tenants are historical only and should not be reactivated in place.');
-  }
-
-  if (tenant.hasPendingChanges) {
-    warnings.push(
-      'Tenant changes are ahead of the active runtime snapshot. Publish a new immutable runtime config before expecting runtime changes.',
-    );
-  }
+async function getDraftSetupCatalog(): Promise<DraftSetupCatalog> {
+  const [scanners, templates] = await Promise.all([
+    getScanners(),
+    getAllTemplates(),
+  ]);
 
   return {
-    canActivate: blockingIssues.length === 0 && tenant.status !== 'archived',
-    canPublish: tenant.status !== 'archived',
-    hasPendingChanges: tenant.hasPendingChanges,
-    blockingIssues,
-    warnings,
+    scannerMap: new Map(scanners.map((scanner) => [scanner.id, scanner])),
+    templateMap: new Map(templates.map((template) => [template.id, template])),
   };
 }
 
-function hydrateTenant(record: StoredTenantRecord): Tenant {
-  const activeRuntimeConfig = findRuntimeConfig(record.activeRuntimeConfigId);
+async function resolvePublishingSource(
+  tenant: TenantDocument,
+): Promise<ResolvedPublishingSource> {
+  const scannerDetail = tenant.draftScannerId
+    ? await getScannerById(tenant.draftScannerId)
+    : null;
+  const sourceVersion = scannerDetail?.draftVersion ?? scannerDetail?.publishedVersion ?? null;
+
+  const selectedTemplate = tenant.draftAttributeTemplateId
+    ? await getTemplateById(tenant.draftAttributeTemplateId)
+    : null;
+
+  const sourceTemplate = selectedTemplate
+    ?? (sourceVersion?.attributeTemplateId
+      ? await getTemplateById(sourceVersion.attributeTemplateId)
+      : null);
+
+  const templateMismatch = Boolean(
+    tenant.draftAttributeTemplateId
+    && sourceVersion?.attributeTemplateId
+    && tenant.draftAttributeTemplateId !== sourceVersion.attributeTemplateId,
+  );
 
   return {
-    id: record.id,
-    slug: record.slug,
-    name: record.name,
-    status: record.status,
-    activeRuntimeConfigId: record.activeRuntimeConfigId,
-    branding: record.branding,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    activeRuntimeConfig,
-    publishingReadiness: computePublishingReadiness(record, activeRuntimeConfig),
-    brandingWarnings: validateBrandingConfig(record.branding).warnings,
+    scannerDetail,
+    sourceVersion,
+    sourceTemplate,
+    templateMismatch,
   };
 }
 
-function ensureTenantName(name: string | undefined): string {
+function assertTenantName(name: string | undefined): string {
   const trimmed = name?.trim();
   if (!trimmed) {
     throw new Error('Tenant name is required.');
@@ -322,168 +357,497 @@ function ensureTenantName(name: string | undefined): string {
   return trimmed;
 }
 
-function ensureUniqueSlug(slug: string, excludeTenantId?: string) {
-  const exists = tenants.some(
-    (tenant) => tenant.slug === slug && tenant.id !== excludeTenantId,
+function assertUniqueIdentifier(
+  tenants: TenantDocument[],
+  field: 'slug' | 'subdomain',
+  value: string,
+  excludeTenantId?: string,
+): void {
+  const duplicate = tenants.find(
+    (tenant) => tenant[field] === value && tenant.tenantId !== excludeTenantId,
   );
 
-  if (exists) {
-    throw new Error(`Slug "${slug}" is already in use.`);
+  if (duplicate) {
+    throw new Error(
+      field === 'slug'
+        ? `Slug "${value}" is already in use.`
+        : `Subdomain "${value}" is already in use.`,
+    );
   }
 }
 
-function ensureValidRuntimeConfigLink(
-  tenantId: string,
-  runtimeConfigId: string | null,
-): TenantRuntimeConfigReference | null {
-  if (!runtimeConfigId) {
-    return null;
+function assertEditableTenant(current: TenantDocument): void {
+  if (current.status === 'archived') {
+    throw new Error('Archived tenants are protected and cannot be modified.');
   }
-
-  const runtimeConfig = findRuntimeConfig(runtimeConfigId);
-  if (!runtimeConfig) {
-    throw new Error('Selected runtime config does not exist.');
-  }
-
-  if (runtimeConfig.tenantId !== tenantId) {
-    throw new Error('Runtime config must belong to the same tenant.');
-  }
-
-  if (runtimeConfig.status !== 'published') {
-    throw new Error('Only published runtime configs can be linked as active runtime configs.');
-  }
-
-  return runtimeConfig;
 }
 
-function assertArchivedTenantImmutable(
-  current: StoredTenantRecord,
-  data: UpdateTenantDto,
+function assertSafeStatus(
+  current: TenantDocument,
+  nextStatus: TenantStatus,
+  hasActiveRuntimeConfig: boolean,
 ): void {
-  if (current.status !== 'archived') {
+  if (nextStatus === 'active' && !hasActiveRuntimeConfig) {
+    throw new Error('Publish the survey before making this tenant live.');
+  }
+
+  if (nextStatus === 'archived' && current.status === 'active') {
+    throw new Error('Disable the tenant before archiving it.');
+  }
+}
+
+function assertSafeIdentityChange(
+  current: TenantDocument,
+  nextSlug: string,
+  nextSubdomain: string,
+  submissionCount: number,
+  runtimeConfigCount: number,
+): void {
+  const slugChanged = current.slug !== nextSlug;
+  const subdomainChanged = (current.subdomain || current.slug) !== nextSubdomain;
+
+  if (!slugChanged && !subdomainChanged) {
     return;
   }
 
-  const slugChanged = data.slug !== undefined && normalizeTenantSlugInput(data.slug) !== current.slug;
-  const nameChanged = data.name !== undefined && data.name.trim() !== current.name;
-  const statusChanged = data.status !== undefined && data.status !== 'archived';
-  const runtimeConfigChanged =
-    data.activeRuntimeConfigId !== undefined &&
-    data.activeRuntimeConfigId !== current.activeRuntimeConfigId;
-  const brandingChanged = data.branding !== undefined;
-
-  if (slugChanged || nameChanged || statusChanged || runtimeConfigChanged || brandingChanged) {
-    throw new Error('Archived tenants are protected and cannot be modified in place.');
+  if (
+    isTenantIdentityLocked({
+      status: current.status,
+      activeRuntimeConfigId: current.activeRuntimeConfigId ?? null,
+      submissionCount,
+    })
+    || runtimeConfigCount > 0
+  ) {
+    throw new Error(
+      'Slug and subdomain are locked after a tenant leaves draft, publishes a live survey, or receives submissions.',
+    );
   }
 }
 
-function assertStatusRequirements(
-  status: TenantStatus,
-  runtimeConfig: TenantRuntimeConfigReference | null,
-) {
-  if (status === 'active' && !runtimeConfig) {
-    throw new Error('Active tenants must link to a published runtime config.');
+function findExistingRuntimeMatch(
+  runtimeConfigs: RuntimeConfigDocument[],
+  previewRuntimeConfig: TenantRuntimeConfigSnapshot | null | undefined,
+): RuntimeConfigDocument | null {
+  if (!previewRuntimeConfig) {
+    return null;
   }
+
+  const previewFingerprint = getRuntimeConfigFingerprint(previewRuntimeConfig);
+  return runtimeConfigs.find(
+    (runtimeConfig) => getTenantRuntimeFingerprint(runtimeConfig) === previewFingerprint,
+  ) ?? null;
+}
+
+async function buildPublishingPreview(
+  tenant: TenantDocument,
+  detailData: TenantDetailData,
+): Promise<TenantPublishingPreview> {
+  const issues: TenantPublishingPreview['issues'] = [];
+  const warnings: string[] = [];
+  const resolvedSource = await resolvePublishingSource(tenant);
+
+  if (!tenant.draftScannerId) {
+    issues.push({
+      code: 'TENANT_SCANNER_REQUIRED',
+      level: 'tenant',
+      path: 'draftScannerId',
+      message: 'Choose a scanner before publishing this survey.',
+      blocking: true,
+    });
+  }
+
+  if (!tenant.draftAttributeTemplateId) {
+    issues.push({
+      code: 'TENANT_ATTRIBUTE_TEMPLATE_REQUIRED',
+      level: 'tenant',
+      path: 'draftAttributeTemplateId',
+      message: 'Choose an attribute template before publishing this survey.',
+      blocking: true,
+    });
+  }
+
+  if (resolvedSource.templateMismatch) {
+    issues.push({
+      code: 'TENANT_SETUP_TEMPLATE_MISMATCH',
+      level: 'tenant',
+      path: 'draftAttributeTemplateId',
+      message:
+        'The selected scanner expects a different attribute template. Choose the matching template or update the scanner before publishing.',
+      blocking: true,
+    });
+  }
+
+  const runtimeConfigId = createRuntimeConfigId(
+    tenant.subdomain || tenant.slug,
+    detailData.runtimeConfigs,
+  );
+  const publishedAt = new Date().toISOString();
+
+  const generated = generateRuntimeConfig({
+    tenant: createTenantSummary(tenant),
+    branding: tenant.branding ?? {},
+    runtimeSettings: clone(DEFAULT_RUNTIME_SETTINGS),
+    sourceScanner:
+      resolvedSource.scannerDetail && resolvedSource.sourceVersion
+        ? {
+          scannerId: resolvedSource.scannerDetail.id,
+          name: resolvedSource.scannerDetail.name,
+          description: resolvedSource.scannerDetail.description,
+          version: resolvedSource.sourceVersion,
+        }
+        : null,
+    sourceAttributeTemplate: resolvedSource.sourceTemplate,
+    calculationVersionId: CALCULATION_VERSION_ID,
+    runtimeConfigId,
+    publishedAt,
+    activatedAt: null,
+    isActive: false,
+    resolveVersionRefs: createVersionResolver(detailData, detailData.runtimeConfigs),
+  });
+
+  issues.push(...generated.issues);
+  warnings.push(...generated.warnings);
+  warnings.push(...getTenantBrandingWarnings(tenant.branding ?? {}));
+
+  const existingMatch = generated.runtimeConfig
+    ? findExistingRuntimeMatch(detailData.runtimeConfigs, generated.runtimeConfig)
+    : null;
+
+  if (existingMatch) {
+    issues.push({
+      code: 'RUNTIME_CONFIGURATION_ALREADY_EXISTS',
+      level: 'runtime-config',
+      path: 'runtimeConfigId',
+      message:
+        existingMatch.runtimeConfigId === tenant.activeRuntimeConfigId
+          ? 'These settings already match the current live survey.'
+          : 'These settings already match a previously published survey. Make that survey live instead of publishing again.',
+      blocking: true,
+    });
+  }
+
+  return {
+    status: 'draft',
+    isReady: issues.every((issue) => !issue.blocking),
+    issues,
+    warnings: Array.from(new Set(warnings)),
+    runtimeConfig: generated.runtimeConfig,
+    existingMatchRuntimeConfigId: existingMatch?.runtimeConfigId ?? null,
+  };
+}
+
+function computePublishingReadiness(
+  tenant: TenantDocument,
+  activeRuntimeConfig: TenantRuntimeConfigReference | null,
+  activeRuntimeFingerprint: string | null,
+  preview: TenantPublishingPreview,
+): TenantPublishingReadiness {
+  const blockingIssues = preview.issues
+    .filter((issue) => issue.blocking)
+    .map((issue) => issue.message);
+  const warnings = [...preview.warnings];
+
+  if (!tenant.draftScannerId || !tenant.draftAttributeTemplateId) {
+    warnings.push(
+      'This tenant is not live yet. Choose a scanner and attribute template, then publish the survey.',
+    );
+  }
+
+  if (tenant.status === 'disabled') {
+    warnings.push('Survey access is currently turned off. Reactivate it when you are ready to reopen the survey.');
+  }
+
+  if (tenant.status === 'archived') {
+    warnings.push('Archived tenants are kept for history and cannot publish new surveys.');
+  }
+
+  if (tenant.status === 'active' && !activeRuntimeConfig) {
+    blockingIssues.push('A live tenant must always keep one published survey linked.');
+  }
+
+  const previewFingerprint = preview.runtimeConfig
+    ? getRuntimeConfigFingerprint(preview.runtimeConfig)
+    : null;
+
+  return {
+    canActivate:
+      tenant.status !== 'archived'
+      && Boolean(preview.existingMatchRuntimeConfigId || activeRuntimeConfig),
+    canPublish: tenant.status !== 'archived' && preview.isReady,
+    hasPendingChanges:
+      previewFingerprint !== null
+        ? activeRuntimeFingerprint !== previewFingerprint
+        : Boolean(tenant.draftScannerId || tenant.draftAttributeTemplateId),
+    blockingIssues: Array.from(new Set(blockingIssues)),
+    warnings: Array.from(new Set(warnings)),
+  };
+}
+
+async function hydrateTenant(
+  document: TenantDocument,
+  detailData: TenantDetailData,
+  catalog: DraftSetupCatalog,
+  includePreview = false,
+): Promise<Tenant> {
+  const normalized = normalizeTenantDocument(document);
+  const runtimeConfigs = detailData.runtimeConfigs
+    .filter((runtimeConfig) => runtimeConfig.tenantId === normalized.tenantId)
+    .sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
+
+  const activeRuntimeConfigDocument = runtimeConfigs.find(
+    (runtimeConfig) => runtimeConfig.runtimeConfigId === normalized.activeRuntimeConfigId,
+  ) ?? null;
+
+  const activeRuntimeConfig = activeRuntimeConfigDocument
+    ? toRuntimeConfigReference(
+      normalized,
+      activeRuntimeConfigDocument,
+      detailData.runtimeSubmissionCounts[activeRuntimeConfigDocument.runtimeConfigId] ?? 0,
+    )
+    : null;
+  const activeRuntimeFingerprint = activeRuntimeConfigDocument
+    ? getTenantRuntimeFingerprint(activeRuntimeConfigDocument)
+    : null;
+
+  const preview = await buildPublishingPreview(normalized, detailData);
+  const draftScanner = normalized.draftScannerId
+    ? catalog.scannerMap.get(normalized.draftScannerId)
+    : null;
+  const draftAttributeTemplate = normalized.draftAttributeTemplateId
+    ? catalog.templateMap.get(normalized.draftAttributeTemplateId)
+    : null;
+
+  return {
+    id: normalized.tenantId,
+    slug: normalized.slug,
+    subdomain: normalized.subdomain || normalized.slug,
+    name: normalized.name,
+    status: normalized.status,
+    draftScannerId: normalized.draftScannerId ?? null,
+    draftAttributeTemplateId: normalized.draftAttributeTemplateId ?? null,
+    activeRuntimeConfigId: normalized.activeRuntimeConfigId ?? null,
+    branding: clone(normalized.branding ?? {}),
+    createdAt: normalized.createdAt,
+    updatedAt: normalized.updatedAt,
+    archivedAt: normalized.archivedAt ?? null,
+    submissionCount: detailData.tenantSubmissionCounts[normalized.tenantId] ?? 0,
+    runtimeConfigCount: runtimeConfigs.length,
+    draftScanner: draftScanner
+      ? {
+        id: draftScanner.id,
+        label: draftScanner.name.en || draftScanner.id,
+        description: draftScanner.description?.en,
+      } satisfies TenantDraftSetupReference
+      : null,
+    draftAttributeTemplate: draftAttributeTemplate
+      ? {
+        id: draftAttributeTemplate.id,
+        label: draftAttributeTemplate.name,
+        description: draftAttributeTemplate.description,
+      } satisfies TenantDraftSetupReference
+      : null,
+    activeRuntimeConfig,
+    publishingReadiness: computePublishingReadiness(
+      normalized,
+      activeRuntimeConfig,
+      activeRuntimeFingerprint,
+      preview,
+    ),
+    brandingWarnings: validateBrandingConfig(normalized.branding ?? {}).warnings,
+    publishingPreview: includePreview ? preview : undefined,
+  };
+}
+
+async function loadTenantById(
+  tenantId: string,
+  includePreview = false,
+): Promise<Tenant | null> {
+  await ensureTenantModuleIndexes();
+  const [detailData, catalog] = await Promise.all([
+    getTenantDetailData(tenantId),
+    getDraftSetupCatalog(),
+  ]);
+
+  if (!detailData.tenant) {
+    return null;
+  }
+
+  return hydrateTenant(detailData.tenant, detailData, catalog, includePreview);
 }
 
 export async function getAllTenants(): Promise<Tenant[]> {
-  await delay(120);
-  return tenants.map(hydrateTenant);
+  await ensureTenantModuleIndexes();
+  const [listData, catalog] = await Promise.all([
+    getTenantListData(),
+    getDraftSetupCatalog(),
+  ]);
+
+  return Promise.all(
+    listData.tenants.map((tenant) =>
+      hydrateTenant(
+        tenant,
+        {
+          ...listData,
+          tenant,
+          runtimeConfigs: listData.runtimeConfigs.filter(
+            (runtimeConfig) => runtimeConfig.tenantId === tenant.tenantId,
+          ),
+          scannerVersions: [],
+          attributeTemplateVersions: [],
+        },
+        catalog,
+        false,
+      )),
+  );
 }
 
 export async function getTenantById(id: string): Promise<Tenant | null> {
-  await delay(100);
-  const tenant = tenants.find((entry) => entry.id === id);
-  return tenant ? hydrateTenant(tenant) : null;
+  return loadTenantById(id, true);
 }
 
 export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
-  await delay(100);
+  await ensureTenantModuleIndexes();
   const normalizedSlug = normalizeTenantSlugInput(slug);
-  const tenant = tenants.find((entry) => entry.slug === normalizedSlug);
-  return tenant ? hydrateTenant(tenant) : null;
+  const tenant = await getTenantDocumentBySlug(normalizedSlug);
+  if (!tenant) {
+    return null;
+  }
+
+  return loadTenantById(tenant.tenantId, true);
+}
+
+export async function getTenantPublishingPreview(
+  tenantId: string,
+): Promise<TenantPublishingPreview> {
+  await ensureTenantModuleIndexes();
+  const detailData = await getTenantDetailData(tenantId);
+  if (!detailData.tenant) {
+    throw new Error('Tenant not found.');
+  }
+
+  return buildPublishingPreview(detailData.tenant, detailData);
+}
+
+export async function getRuntimeConfigOptionsForTenant(
+  tenantId: string,
+): Promise<RuntimeConfigOption[]> {
+  await ensureTenantModuleIndexes();
+  const detailData = await getTenantDetailData(tenantId);
+  if (!detailData.tenant) {
+    throw new Error('Tenant not found.');
+  }
+
+  const normalizedTenant = normalizeTenantDocument(detailData.tenant);
+  return detailData.runtimeConfigs
+    .filter((runtimeConfig) => runtimeConfig.tenantId === tenantId)
+    .sort((left, right) => right.publishedAt.localeCompare(left.publishedAt))
+    .map((runtimeConfig) => {
+      const reference = toRuntimeConfigReference(
+        normalizedTenant,
+        runtimeConfig,
+        detailData.runtimeSubmissionCounts[runtimeConfig.runtimeConfigId] ?? 0,
+      );
+
+      return {
+        ...reference,
+        isActive: normalizedTenant.activeRuntimeConfigId === runtimeConfig.runtimeConfigId,
+        label: buildRuntimeConfigLabel(reference),
+      };
+    });
 }
 
 export async function isSlugAvailable(
   slug: string,
   excludeTenantId?: string,
 ): Promise<boolean> {
-  await delay(80);
-  const normalizedSlug = normalizeTenantSlugInput(slug);
-  return !tenants.some(
-    (tenant) => tenant.slug === normalizedSlug && tenant.id !== excludeTenantId,
+  await ensureTenantModuleIndexes();
+  const normalized = normalizeTenantSlugInput(slug);
+  const listData = await getTenantListData();
+
+  return !listData.tenants.some(
+    (tenant) => tenant.slug === normalized && tenant.tenantId !== excludeTenantId,
   );
 }
 
-export async function getRuntimeConfigOptionsForTenant(
-  tenantId: string,
-): Promise<RuntimeConfigOption[]> {
-  await delay(120);
-
-  return getTenantRuntimeConfigs(tenantId, 'published').map((runtimeConfig) => ({
-    ...runtimeConfig,
-    isActive: false,
-    label: `${runtimeConfig.runtimeConfigId} • ${runtimeConfig.versionRefs.scannerVersionId} / ${runtimeConfig.versionRefs.attributeTemplateVersionId}`,
-  }));
-}
-
 export async function createTenant(data: CreateTenantDto): Promise<Tenant> {
-  await delay(180);
+  await ensureTenantModuleIndexes();
+  const listData = await getTenantListData();
 
-  const name = ensureTenantName(data.name);
+  const name = assertTenantName(data.name);
   const slugValidation = validateTenantSlug(data.slug);
   if (slugValidation.errors.length > 0) {
     throw new Error(slugValidation.errors[0]);
   }
 
-  ensureUniqueSlug(slugValidation.normalized);
+  const subdomainValidation = validateTenantSubdomain(data.subdomain);
+  if (subdomainValidation.errors.length > 0) {
+    throw new Error(subdomainValidation.errors[0]);
+  }
 
-  const brandingValidation = validateBrandingConfig(data.branding);
+  assertUniqueIdentifier(listData.tenants, 'slug', slugValidation.normalized);
+  assertUniqueIdentifier(listData.tenants, 'subdomain', subdomainValidation.normalized);
+
+  const brandingValidation = validateBrandingConfig(data.branding ?? {});
   if (brandingValidation.errors.length > 0) {
     throw new Error(brandingValidation.errors[0]);
   }
 
-  if (data.activeRuntimeConfigId) {
-    throw new Error('New tenants cannot point to an active runtime config before publish.');
+  const status = data.status ?? 'draft';
+  if (status === 'active') {
+    throw new Error('New tenants start in Draft Setup. Publish the survey before making it live.');
   }
 
-  const status = data.status ?? 'draft';
-  assertStatusRequirements(status, null);
-
   const now = new Date().toISOString();
-  const newTenant: StoredTenantRecord = {
-    id: `tenant-${Date.now()}`,
-    slug: slugValidation.normalized,
+  const document: TenantDocument = {
+    tenantId: createTenantId(slugValidation.normalized),
     name,
+    slug: slugValidation.normalized,
+    subdomain: subdomainValidation.normalized,
     status,
-    activeRuntimeConfigId: null,
     branding: data.branding ?? {},
+    activeRuntimeConfigId: null,
+    activeRuntimeConfigPublishedAt: null,
+    brandingVersionId: null,
+    draftScannerId: data.draftScannerId ?? null,
+    draftAttributeTemplateId: data.draftAttributeTemplateId ?? null,
     createdAt: now,
     updatedAt: now,
-    hasPendingChanges: true,
+    archivedAt: null,
   };
 
-  tenants = [...tenants, newTenant];
-  return hydrateTenant(newTenant);
+  await insertTenantDocument(document);
+  const createdTenant = await getTenantById(document.tenantId);
+  if (!createdTenant) {
+    throw new Error('Tenant was created but could not be loaded.');
+  }
+
+  return createdTenant;
 }
 
 export async function updateTenant(
   id: string,
   data: UpdateTenantDto,
 ): Promise<Tenant> {
-  await delay(180);
+  await ensureTenantModuleIndexes();
+  const [detailData, listData] = await Promise.all([
+    getTenantDetailData(id),
+    getTenantListData(),
+  ]);
 
-  const index = tenants.findIndex((tenant) => tenant.id === id);
-  if (index === -1) {
+  if (!detailData.tenant) {
     throw new Error('Tenant not found.');
   }
 
-  const current = tenants[index];
-  assertArchivedTenantImmutable(current, data);
+  const current = normalizeTenantDocument(detailData.tenant);
+  assertEditableTenant(current);
 
-  const nextName = data.name !== undefined ? ensureTenantName(data.name) : current.name;
-  const nextSlug =
-    data.slug !== undefined ? validateTenantSlug(data.slug).normalized : current.slug;
+  const nextName = data.name !== undefined ? assertTenantName(data.name) : current.name;
+  const nextSlug = data.slug !== undefined
+    ? validateTenantSlug(data.slug).normalized
+    : current.slug;
+  const nextSubdomain = data.subdomain !== undefined
+    ? validateTenantSubdomain(data.subdomain).normalized
+    : current.subdomain || current.slug;
 
   if (data.slug !== undefined) {
     const slugValidation = validateTenantSlug(data.slug);
@@ -491,78 +855,322 @@ export async function updateTenant(
       throw new Error(slugValidation.errors[0]);
     }
 
-    if (slugValidation.normalized !== current.slug && isTenantSlugLocked(current)) {
-      throw new Error(
-        'Slug becomes immutable after the tenant leaves draft or links to a published runtime config.',
-      );
-    }
-
-    ensureUniqueSlug(slugValidation.normalized, id);
+    assertUniqueIdentifier(listData.tenants, 'slug', slugValidation.normalized, current.tenantId);
   }
 
-  const mergedBranding = mergeBranding(current.branding, data.branding);
+  if (data.subdomain !== undefined) {
+    const subdomainValidation = validateTenantSubdomain(data.subdomain);
+    if (subdomainValidation.errors.length > 0) {
+      throw new Error(subdomainValidation.errors[0]);
+    }
+
+    assertUniqueIdentifier(
+      listData.tenants,
+      'subdomain',
+      subdomainValidation.normalized,
+      current.tenantId,
+    );
+  }
+
+  assertSafeIdentityChange(
+    current,
+    nextSlug,
+    nextSubdomain,
+    detailData.tenantSubmissionCounts[current.tenantId] ?? 0,
+    detailData.runtimeConfigs.length,
+  );
+
+  const mergedBranding = {
+    ...current.branding,
+    ...data.branding,
+    gradient: {
+      ...(current.branding?.gradient ?? {}),
+      ...(data.branding?.gradient ?? {}),
+    },
+    metadata: {
+      ...(current.branding?.metadata ?? {}),
+      ...(data.branding?.metadata ?? {}),
+    },
+  };
+
   const brandingValidation = validateBrandingConfig(mergedBranding);
   if (brandingValidation.errors.length > 0) {
     throw new Error(brandingValidation.errors[0]);
   }
 
-  const nextRuntimeConfig =
-    data.activeRuntimeConfigId !== undefined
-      ? ensureValidRuntimeConfigLink(id, data.activeRuntimeConfigId)
-      : ensureValidRuntimeConfigLink(id, current.activeRuntimeConfigId);
-
   const nextStatus = data.status ?? current.status;
-  assertStatusRequirements(nextStatus, nextRuntimeConfig);
+  assertSafeStatus(current, nextStatus, Boolean(current.activeRuntimeConfigId));
 
-  const draftContractChanged =
-    data.name !== undefined || data.slug !== undefined || data.branding !== undefined;
-
-  const updated: StoredTenantRecord = {
-    ...current,
+  const now = new Date().toISOString();
+  const updatedTenant = await updateTenantDocument(id, {
     name: nextName,
     slug: nextSlug,
+    subdomain: nextSubdomain,
     status: nextStatus,
-    activeRuntimeConfigId:
-      data.activeRuntimeConfigId !== undefined
-        ? data.activeRuntimeConfigId
-        : current.activeRuntimeConfigId,
+    draftScannerId:
+      data.draftScannerId !== undefined ? data.draftScannerId : current.draftScannerId,
+    draftAttributeTemplateId:
+      data.draftAttributeTemplateId !== undefined
+        ? data.draftAttributeTemplateId
+        : current.draftAttributeTemplateId,
     branding: mergedBranding,
-    updatedAt: new Date().toISOString(),
-    hasPendingChanges:
-      data.activeRuntimeConfigId !== undefined
-        ? draftContractChanged
-        : current.hasPendingChanges || draftContractChanged,
-  };
+    updatedAt: now,
+    archivedAt: nextStatus === 'archived' ? now : current.archivedAt ?? null,
+  });
 
-  tenants = tenants.map((tenant, tenantIndex) =>
-    tenantIndex === index ? updated : tenant,
-  );
+  if (!updatedTenant) {
+    throw new Error('Tenant update failed.');
+  }
 
-  return hydrateTenant(updated);
+  const hydrated = await getTenantById(id);
+  if (!hydrated) {
+    throw new Error('Tenant was updated but could not be loaded.');
+  }
+
+  return hydrated;
 }
 
 export async function updateTenantBranding(
   id: string,
-  branding: Partial<BrandingConfig>,
+  branding: Partial<Tenant['branding']>,
 ): Promise<Tenant> {
   return updateTenant(id, { branding });
 }
 
-export async function deleteTenant(id: string): Promise<void> {
-  await delay(140);
-
-  const tenant = tenants.find((entry) => entry.id === id);
-  if (!tenant) {
+export async function activateRuntimeConfig(
+  tenantId: string,
+  runtimeConfigId: string,
+): Promise<Tenant> {
+  await ensureTenantModuleIndexes();
+  const detailData = await getTenantDetailData(tenantId);
+  if (!detailData.tenant) {
     throw new Error('Tenant not found.');
   }
 
-  if (tenant.status !== 'draft' || tenant.activeRuntimeConfigId) {
+  const current = normalizeTenantDocument(detailData.tenant);
+  if (current.status === 'archived') {
+    throw new Error('Archived tenants cannot make a survey live.');
+  }
+
+  const runtimeConfig = detailData.runtimeConfigs.find(
+    (entry) => entry.runtimeConfigId === runtimeConfigId,
+  );
+  if (!runtimeConfig) {
+    throw new Error('Published survey not found for this tenant.');
+  }
+
+  const activatedAt = new Date().toISOString();
+  await activateRuntimeConfigForTenant({
+    tenantId,
+    runtimeConfigId,
+    tenantStatus: 'active',
+    activatedAt,
+    updatedAt: activatedAt,
+  });
+
+  const hydrated = await getTenantById(tenantId);
+  if (!hydrated) {
+    throw new Error('Tenant activation completed but could not be loaded.');
+  }
+
+  return hydrated;
+}
+
+export async function publishTenantRuntime(
+  tenantId: string,
+  options: PublishTenantRuntimeOptions = { activate: true },
+): Promise<TenantPublishResult> {
+  await ensureTenantModuleIndexes();
+  const detailData = await getTenantDetailData(tenantId);
+  if (!detailData.tenant) {
+    throw new Error('Tenant not found.');
+  }
+
+  const current = normalizeTenantDocument(detailData.tenant);
+  assertEditableTenant(current);
+
+  const preview = await buildPublishingPreview(current, detailData);
+  if (preview.existingMatchRuntimeConfigId) {
+    const tenant = options.activate === false
+      ? await getTenantById(tenantId)
+      : await activateRuntimeConfig(tenantId, preview.existingMatchRuntimeConfigId);
+
+    if (!tenant) {
+      throw new Error('Matching published survey could not be loaded.');
+    }
+
+    const runtimeConfig = await getRuntimeConfigOptionsForTenant(tenantId);
+    const matched = runtimeConfig.find(
+      (entry) => entry.runtimeConfigId === preview.existingMatchRuntimeConfigId,
+    );
+    if (!matched) {
+      throw new Error('Matching published survey could not be loaded.');
+    }
+
+    return {
+      tenant,
+      runtimeConfig: matched,
+      preview,
+    };
+  }
+
+  const firstBlockingIssue = preview.issues.find((issue) => issue.blocking);
+  if (firstBlockingIssue) {
+    throw new Error(firstBlockingIssue.message);
+  }
+
+  const resolvedSource = await resolvePublishingSource(current);
+  if (!resolvedSource.scannerDetail || !resolvedSource.sourceVersion || !resolvedSource.sourceTemplate) {
+    throw new Error('Publishing source could not be resolved.');
+  }
+
+  const now = new Date().toISOString();
+  const runtimeConfigId = createRuntimeConfigId(current.subdomain || current.slug, detailData.runtimeConfigs);
+  const generated = generateRuntimeConfig({
+    tenant: createTenantSummary(current),
+    branding: current.branding ?? {},
+    runtimeSettings: clone(DEFAULT_RUNTIME_SETTINGS),
+    sourceScanner: {
+      scannerId: resolvedSource.scannerDetail.id,
+      name: resolvedSource.scannerDetail.name,
+      description: resolvedSource.scannerDetail.description,
+      version: resolvedSource.sourceVersion,
+    },
+    sourceAttributeTemplate: resolvedSource.sourceTemplate,
+    calculationVersionId: CALCULATION_VERSION_ID,
+    runtimeConfigId,
+    publishedAt: now,
+    activatedAt: options.activate === false ? null : now,
+    isActive: options.activate !== false,
+    resolveVersionRefs: createVersionResolver(detailData, detailData.runtimeConfigs),
+  });
+
+  if (!generated.isValid || !generated.runtimeConfig || !generated.versionAssignment) {
     throw new Error(
-      'Only draft tenants without an active runtime config can be deleted safely.',
+      generated.issues.find((issue) => issue.blocking)?.message
+      ?? 'Survey could not be published.',
     );
   }
 
-  tenants = tenants.filter((entry) => entry.id !== id);
+  const runtimeFingerprint = getRuntimeConfigFingerprint(generated.runtimeConfig);
+  const scannerSourceFingerprint = createScannerSourceFingerprint(
+    resolvedSource.scannerDetail,
+    resolvedSource.sourceVersion,
+  );
+
+  const scannerVersion: ScannerVersionDocument = {
+    scannerVersionId: generated.runtimeConfig.versionRefs.scannerVersionId,
+    tenantId,
+    version: generated.runtimeConfig.scannerVersion.version,
+    publishedAt: generated.runtimeConfig.publishedAt,
+    isActive: options.activate !== false,
+    categories: clone(generated.runtimeConfig.scannerVersion.categories),
+    followUpTriggers: clone(generated.runtimeConfig.scannerVersion.followUpTriggers),
+    createdAt: now,
+    updatedAt: now,
+    sourceScannerId: resolvedSource.scannerDetail.id,
+    sourceScannerVersionId: resolvedSource.sourceVersion.id,
+    sourceFingerprint: scannerSourceFingerprint,
+    fingerprint: generated.fingerprints.scanner,
+  };
+
+  const attributeTemplateVersion: AttributeTemplateVersionDocument = {
+    attributeTemplateVersionId: generated.runtimeConfig.versionRefs.attributeTemplateVersionId,
+    tenantId,
+    version: generated.versionAssignment.attributeTemplateVersion,
+    publishedAt: generated.runtimeConfig.publishedAt,
+    isActive: options.activate !== false,
+    attributeTemplate: clone(generated.runtimeConfig.attributeTemplate),
+    createdAt: now,
+    updatedAt: now,
+    sourceAttributeTemplateId: resolvedSource.sourceTemplate.id,
+    fingerprint: generated.fingerprints.attributeTemplate,
+  };
+
+  const runtimeConfigDocument: RuntimeConfigDocument = {
+    ...clone(generated.runtimeConfig),
+    tenantId,
+    tenantSlug: current.slug,
+    tenantSubdomain: current.subdomain || current.slug,
+    isActive: options.activate !== false,
+    createdAt: now,
+    updatedAt: now,
+    fingerprint: runtimeFingerprint,
+    brandingFingerprint: generated.fingerprints.branding ?? createFingerprint(current.branding ?? {}),
+    sourceScannerId: resolvedSource.scannerDetail.id,
+    sourceScannerVersionId: resolvedSource.sourceVersion.id,
+    sourceAttributeTemplateId: resolvedSource.sourceTemplate.id,
+  };
+
+  await publishTenantRuntimeDocuments({
+    tenantId,
+    tenantUpdates: {
+      activeRuntimeConfigId:
+        options.activate === false ? current.activeRuntimeConfigId : runtimeConfigId,
+      activeRuntimeConfigPublishedAt:
+        options.activate === false
+          ? current.activeRuntimeConfigPublishedAt ?? null
+          : now,
+      brandingVersionId: generated.runtimeConfig.versionRefs.brandingVersionId,
+      status: options.activate === false ? current.status : 'active',
+      updatedAt: now,
+    },
+    runtimeConfig: runtimeConfigDocument,
+    scannerVersion,
+    attributeTemplateVersion,
+    activate: options.activate !== false,
+  });
+
+  const tenant = await getTenantById(tenantId);
+  if (!tenant) {
+    throw new Error('Tenant was published but could not be loaded.');
+  }
+
+  const runtimeConfigOptions = await getRuntimeConfigOptionsForTenant(tenantId);
+  const runtimeConfig = runtimeConfigOptions.find(
+    (entry) => entry.runtimeConfigId === runtimeConfigId,
+  );
+  if (!runtimeConfig) {
+    throw new Error('Published survey could not be loaded.');
+  }
+
+  return {
+    tenant,
+    runtimeConfig,
+    preview,
+  };
+}
+
+export async function archiveTenant(tenantId: string): Promise<Tenant> {
+  const tenant = await updateTenant(tenantId, { status: 'archived' });
+  return tenant;
+}
+
+export async function deleteTenant(
+  tenantId: string,
+  confirmationText?: string | null,
+): Promise<void> {
+  await ensureTenantModuleIndexes();
+  const detailData = await getTenantDetailData(tenantId);
+  if (!detailData.tenant) {
+    throw new Error('Tenant not found.');
+  }
+
+  const current = normalizeTenantDocument(detailData.tenant);
+  const submissionCount = detailData.tenantSubmissionCounts[current.tenantId] ?? 0;
+  const runtimeConfigCount = detailData.runtimeConfigs.length;
+
+  if (current.status !== 'draft' || current.activeRuntimeConfigId || runtimeConfigCount > 0 || submissionCount > 0) {
+    throw new Error(
+      'Only draft tenants without submissions or published configuration history can be deleted.',
+    );
+  }
+
+  if ((confirmationText ?? '').trim() !== current.slug) {
+    throw new Error(`Type the tenant slug "${current.slug}" to confirm deletion.`);
+  }
+
+  await deleteTenantDocument(tenantId);
 }
 
 export async function getTenantStats(): Promise<{
@@ -573,28 +1181,32 @@ export async function getTenantStats(): Promise<{
   archived: number;
   activeRuntimeConfigs: number;
   byBranding: Record<string, number>;
+  totalSubmissions: number;
 }> {
-  await delay(100);
-
-  const hydratedTenants = tenants.map(hydrateTenant);
+  await ensureTenantModuleIndexes();
+  const listData = await getTenantListData();
 
   return {
-    total: hydratedTenants.length,
-    draft: hydratedTenants.filter((tenant) => tenant.status === 'draft').length,
-    active: hydratedTenants.filter((tenant) => tenant.status === 'active').length,
-    disabled: hydratedTenants.filter((tenant) => tenant.status === 'disabled').length,
-    archived: hydratedTenants.filter((tenant) => tenant.status === 'archived').length,
-    activeRuntimeConfigs: hydratedTenants.filter((tenant) => tenant.activeRuntimeConfigId).length,
+    total: listData.tenants.length,
+    draft: listData.tenants.filter((tenant) => tenant.status === 'draft').length,
+    active: listData.tenants.filter((tenant) => tenant.status === 'active').length,
+    disabled: listData.tenants.filter((tenant) => tenant.status === 'disabled').length,
+    archived: listData.tenants.filter((tenant) => tenant.status === 'archived').length,
+    activeRuntimeConfigs: listData.tenants.filter((tenant) => Boolean(tenant.activeRuntimeConfigId)).length,
     byBranding: {
-      custom: hydratedTenants.filter(
-        (tenant) => JSON.stringify(resolveBrandingConfig(tenant.branding)) !== JSON.stringify(resolveBrandingConfig({})),
-      ).length,
-      default: hydratedTenants.filter(
-        (tenant) => JSON.stringify(resolveBrandingConfig(tenant.branding)) === JSON.stringify(resolveBrandingConfig({})),
-      ).length,
-      warnings: hydratedTenants.filter(
-        (tenant) => validateBrandingConfig(tenant.branding).warnings.length > 0,
+      custom: listData.tenants.filter((tenant) =>
+        JSON.stringify(resolveBrandingConfig(tenant.branding ?? {}))
+        !== JSON.stringify(resolveBrandingConfig({}))).length,
+      default: listData.tenants.filter((tenant) =>
+        JSON.stringify(resolveBrandingConfig(tenant.branding ?? {}))
+        === JSON.stringify(resolveBrandingConfig({}))).length,
+      warnings: listData.tenants.filter(
+        (tenant) => validateBrandingConfig(tenant.branding ?? {}).warnings.length > 0,
       ).length,
     },
+    totalSubmissions: Object.values(listData.tenantSubmissionCounts).reduce(
+      (total, count) => total + count,
+      0,
+    ),
   };
 }

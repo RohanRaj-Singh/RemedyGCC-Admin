@@ -29,7 +29,7 @@ export function StructureBuilder({
   function addSubdomain(category: Category) {
     onCategoryChange({
       ...category,
-      subdomains: [...category.subdomains, createEmptySubdomain(category.id)],
+      subdomains: [...category.subdomains, createEmptySubdomain(category.id, category.subdomains.length + 1)],
     });
   }
 
@@ -81,19 +81,7 @@ export function StructureBuilder({
                   </div>
                 </div>
                 <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
-                  <label className="flex items-center gap-2 cursor-pointer mr-4">
-                    <input 
-                      type="checkbox" 
-                      disabled={disabled}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      checked={category.polarity === 'positive'} 
-                      onChange={(e) => onCategoryChange({ 
-                        ...category, 
-                        polarity: e.target.checked ? 'positive' : 'negative' 
-                      })} 
-                    />
-                    <span className="text-sm font-medium text-gray-600">Positive Polarity</span>
-                  </label>
+                  <div />
                   <button
                     type="button"
                     disabled={disabled}

@@ -69,7 +69,7 @@ export function ValidationBanner({ issues }: ValidationBannerProps) {
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         {blockingIssues.slice(0, 6).map((issue) => (
           <div
-            key={`${issue.code}-${issue.path}-${issue.entityId ?? 'root'}`}
+            key={issue.id}
             className="rounded-2xl border border-rose-100 bg-white px-4 py-3 shadow-sm"
           >
             <div className="flex items-start gap-3">

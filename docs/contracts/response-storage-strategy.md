@@ -46,7 +46,7 @@ Keeping these concerns separate prevents:
 - `attributeTemplateVersionId`
 - `calculationVersionId`
 - `brandingVersionId`
-- runtime settings and tenant metadata
+- tenant metadata required for immutable runtime resolution
 
 This collection exists so the platform can validate a submission against one immutable published configuration instead of piecing together live mutable dependencies at submit time.
 

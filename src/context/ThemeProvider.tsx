@@ -27,8 +27,9 @@ function generateCSSVariables(branding: BrandingConfig): React.CSSProperties {
   const resolved = resolveBrandingConfig(branding);
   return {
     ...brandingToCSSVars(resolved),
-    '--brand-background': '#ffffff',
-    '--brand-text': '#111827',
+    // Dynamically set background and text colors based on themeMode
+    '--brand-background': resolved.themeMode === "dark" ? "#111827" : "#ffffff",
+    '--brand-text': resolved.themeMode === "dark" ? "#ffffff" : "#111827",
     '--brand-accent': resolved.secondaryColor,
   } as React.CSSProperties;
 }

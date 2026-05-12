@@ -1,36 +1,70 @@
 'use client';
 
 import { memo, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Link2 } from 'lucide-react';
-import type { RuntimeConfigOption, Tenant, TenantStatus } from '../types';
+import { AlertTriangle, RadioTower } from 'lucide-react';
+import type {
+  Tenant,
+  TenantSetupOption,
+  TenantStatus,
+} from '../types';
 import {
   getTenantHostname,
+  getTenantPublishStateMeta,
   getTenantStatusMeta,
-  isTenantSlugLocked,
+  isTenantIdentityLocked,
   normalizeTenantSlugInput,
+  normalizeTenantSubdomainInput,
   validateTenantSlug,
+  validateTenantSubdomain,
 } from '../utils';
 import { cn } from '@/lib/utils';
 
 interface TenantFormProps {
   tenant?: Tenant;
-  runtimeConfigs?: RuntimeConfigOption[];
+  scannerOptions?: TenantSetupOption[];
+  attributeTemplateOptions?: TenantSetupOption[];
+  formId?: string;
+  showActions?: boolean;
   onSubmit: (data: {
     name: string;
     slug: string;
+    subdomain: string;
     status: TenantStatus;
-    activeRuntimeConfigId: string | null;
+    draftScannerId: string | null;
+    draftAttributeTemplateId: string | null;
   }) => void;
   onCancel: () => void;
   isLoading?: boolean;
   error?: string | null;
 }
 
-const STATUS_OPTIONS: TenantStatus[] = ['draft', 'active', 'disabled', 'archived'];
+const STATE_STYLES = {
+  warning: {
+    bg: 'rgba(245, 158, 11, 0.08)',
+    border: 'rgba(245, 158, 11, 0.25)',
+    badgeBg: 'rgba(245, 158, 11, 0.14)',
+    badgeColor: '#92400e',
+  },
+  success: {
+    bg: 'rgba(34, 197, 94, 0.08)',
+    border: 'rgba(34, 197, 94, 0.2)',
+    badgeBg: 'rgba(34, 197, 94, 0.14)',
+    badgeColor: '#166534',
+  },
+  muted: {
+    bg: 'rgba(82, 82, 91, 0.08)',
+    border: 'rgba(82, 82, 91, 0.2)',
+    badgeBg: 'rgba(82, 82, 91, 0.14)',
+    badgeColor: '#3f3f46',
+  },
+} as const;
 
 export const TenantForm = memo(function TenantForm({
   tenant,
-  runtimeConfigs = [],
+  scannerOptions = [],
+  attributeTemplateOptions = [],
+  formId,
+  showActions = true,
   onSubmit,
   onCancel,
   isLoading,
@@ -38,32 +72,36 @@ export const TenantForm = memo(function TenantForm({
 }: TenantFormProps) {
   const [name, setName] = useState(tenant?.name || '');
   const [slug, setSlug] = useState(tenant?.slug || '');
-  const [status, setStatus] = useState<TenantStatus>(tenant?.status || 'draft');
-  const [activeRuntimeConfigId, setActiveRuntimeConfigId] = useState<string | null>(
-    tenant?.activeRuntimeConfigId || null,
+  const [subdomain, setSubdomain] = useState(tenant?.subdomain || tenant?.slug || '');
+  const [draftScannerId, setDraftScannerId] = useState<string | null>(tenant?.draftScannerId || null);
+  const [draftAttributeTemplateId, setDraftAttributeTemplateId] = useState<string | null>(
+    tenant?.draftAttributeTemplateId || null,
   );
   const [slugTouched, setSlugTouched] = useState(Boolean(tenant?.slug));
+  const [subdomainTouched, setSubdomainTouched] = useState(Boolean(tenant?.subdomain || tenant?.slug));
   const [formError, setFormError] = useState('');
 
   useEffect(() => {
     setName(tenant?.name || '');
     setSlug(tenant?.slug || '');
-    setStatus(tenant?.status || 'draft');
-    setActiveRuntimeConfigId(tenant?.activeRuntimeConfigId || null);
+    setSubdomain(tenant?.subdomain || tenant?.slug || '');
+    setDraftScannerId(tenant?.draftScannerId || null);
+    setDraftAttributeTemplateId(tenant?.draftAttributeTemplateId || null);
     setSlugTouched(Boolean(tenant?.slug));
+    setSubdomainTouched(Boolean(tenant?.subdomain || tenant?.slug));
     setFormError('');
   }, [tenant]);
 
-  const slugLocked = isTenantSlugLocked(tenant);
+  const currentStatus = tenant?.status || 'draft';
+  const identityLocked = isTenantIdentityLocked(tenant);
   const tenantLocked = tenant?.status === 'archived';
-
+  const statusMeta = getTenantStatusMeta(currentStatus);
+  const publishStateMeta = getTenantPublishStateMeta(tenant, tenant?.publishingPreview ?? null);
+  const stateStyle = STATE_STYLES[publishStateMeta.tone];
   const slugValidation = useMemo(() => validateTenantSlug(slug), [slug]);
-  const selectedRuntimeConfig = useMemo(
-    () =>
-      runtimeConfigs.find(
-        (runtimeConfig) => runtimeConfig.runtimeConfigId === activeRuntimeConfigId,
-      ) ?? null,
-    [activeRuntimeConfigId, runtimeConfigs],
+  const subdomainValidation = useMemo(
+    () => validateTenantSubdomain(subdomain),
+    [subdomain],
   );
 
   const labelStyle = 'block text-sm font-medium';
@@ -73,14 +111,29 @@ export const TenantForm = memo(function TenantForm({
 
   const handleNameChange = (value: string) => {
     setName(value);
-    if (!slugTouched && !slugLocked) {
-      setSlug(normalizeTenantSlugInput(value));
+
+    if (!slugTouched && !identityLocked) {
+      const normalized = normalizeTenantSlugInput(value);
+      setSlug(normalized);
+      if (!subdomainTouched) {
+        setSubdomain(normalized);
+      }
     }
   };
 
   const handleSlugChange = (value: string) => {
     setSlugTouched(true);
-    setSlug(normalizeTenantSlugInput(value));
+    const normalized = normalizeTenantSlugInput(value);
+    setSlug(normalized);
+    if (!subdomainTouched) {
+      setSubdomain(normalized);
+    }
+    setFormError('');
+  };
+
+  const handleSubdomainChange = (value: string) => {
+    setSubdomainTouched(true);
+    setSubdomain(normalizeTenantSubdomainInput(value));
     setFormError('');
   };
 
@@ -96,8 +149,8 @@ export const TenantForm = memo(function TenantForm({
       return;
     }
 
-    if (status === 'active' && !activeRuntimeConfigId) {
-      setFormError('Active tenants must link to a published runtime config.');
+    if (subdomainValidation.errors.length > 0) {
+      setFormError(subdomainValidation.errors[0]);
       return;
     }
 
@@ -105,13 +158,15 @@ export const TenantForm = memo(function TenantForm({
     onSubmit({
       name,
       slug: slugValidation.normalized,
-      status,
-      activeRuntimeConfigId,
+      subdomain: subdomainValidation.normalized,
+      status: currentStatus,
+      draftScannerId,
+      draftAttributeTemplateId,
     });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form id={formId} onSubmit={handleSubmit} className="space-y-8">
       {(error || formError) && (
         <div
           className="rounded-lg border p-4 text-sm"
@@ -134,98 +189,122 @@ export const TenantForm = memo(function TenantForm({
             color: '#3f3f46',
           }}
         >
-          Archived tenants are protected. Identity, status, and runtime links are locked to preserve historical runtime references.
+          Archived tenants are protected. Survey setup and live access are locked to preserve history.
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="space-y-2">
-          <label htmlFor="name" className={labelStyle} style={{ color: 'var(--foreground)' }}>
-            Tenant Name <span style={{ color: 'var(--destructive)' }}>*</span>
-          </label>
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(event) => handleNameChange(event.target.value)}
-            required
-            disabled={tenantLocked}
-            className={inputStyle}
-            placeholder="e.g., Acme Health"
-          />
+      <section className="space-y-5">
+        <div>
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+            Tenant Info
+          </h2>
+          <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
+            Set the tenant name and survey address used by admins and respondents.
+          </p>
         </div>
 
-        <div className="space-y-2">
-          <label htmlFor="slug" className={labelStyle} style={{ color: 'var(--foreground)' }}>
-            Tenant Slug <span style={{ color: 'var(--destructive)' }}>*</span>
-          </label>
-          <div className="flex items-center gap-2">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="space-y-2">
+            <label htmlFor="name" className={labelStyle} style={{ color: 'var(--foreground)' }}>
+              Tenant Name <span style={{ color: 'var(--destructive)' }}>*</span>
+            </label>
+            <input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(event) => handleNameChange(event.target.value)}
+              required
+              disabled={tenantLocked}
+              className={inputStyle}
+              placeholder="e.g., Acme Health"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="slug" className={labelStyle} style={{ color: 'var(--foreground)' }}>
+              Tenant Slug <span style={{ color: 'var(--destructive)' }}>*</span>
+            </label>
             <input
               id="slug"
               type="text"
               value={slug}
               onChange={(event) => handleSlugChange(event.target.value)}
               required
-              disabled={slugLocked || tenantLocked}
+              disabled={identityLocked || tenantLocked}
               className={cn(
                 inputStyle,
                 slugValidation.errors.length > 0 && 'border-[var(--destructive)]',
               )}
               placeholder="e.g., acme-health"
             />
+            {slugValidation.warnings.map((warning) => (
+              <p key={warning} className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                {warning}
+              </p>
+            ))}
           </div>
-          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-            Runtime hostname: <code>{getTenantHostname(slugValidation.normalized || 'tenant')}</code>
-          </p>
-          {slugLocked && (
+
+          <div className="space-y-2">
+            <label htmlFor="subdomain" className={labelStyle} style={{ color: 'var(--foreground)' }}>
+              Survey Address <span style={{ color: 'var(--destructive)' }}>*</span>
+            </label>
+            <input
+              id="subdomain"
+              type="text"
+              value={subdomain}
+              onChange={(event) => handleSubdomainChange(event.target.value)}
+              required
+              disabled={identityLocked || tenantLocked}
+              className={cn(
+                inputStyle,
+                subdomainValidation.errors.length > 0 && 'border-[var(--destructive)]',
+              )}
+              placeholder="e.g., acme-health"
+            />
             <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-              Slug is locked after runtime publish or once the tenant leaves draft.
+              Survey hostname: <code>{getTenantHostname(subdomainValidation.normalized || 'tenant')}</code>
             </p>
-          )}
-          {slugValidation.warnings.map((warning) => (
-            <p key={warning} className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-              {warning}
-            </p>
-          ))}
-        </div>
-      </div>
+            {identityLocked && (
+              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                Slug and survey address lock after this tenant goes live or collects submissions.
+              </p>
+            )}
+            {subdomainValidation.warnings.map((warning) => (
+              <p key={warning} className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                {warning}
+              </p>
+            ))}
+          </div>
 
-      <div className="space-y-3">
-        <label className={labelStyle} style={{ color: 'var(--foreground)' }}>
-          Tenant Status
-        </label>
-        <div className="grid gap-3 md:grid-cols-2">
-          {STATUS_OPTIONS.map((option) => {
-            const meta = getTenantStatusMeta(option);
-            const isSelected = status === option;
-
-            return (
-              <button
-                key={option}
-                type="button"
-                onClick={() => setStatus(option)}
-                disabled={tenantLocked}
-                className={cn(
-                  'rounded-xl border p-4 text-left transition-all',
-                  isSelected
-                    ? 'border-[var(--primary)] bg-[var(--primary)]/5'
-                    : 'border-[var(--border)] hover:border-[var(--primary)]/50',
-                  tenantLocked && 'cursor-not-allowed opacity-70',
-                )}
+          <div
+            className="rounded-xl border p-4"
+            style={{
+              borderColor: stateStyle.border,
+              backgroundColor: stateStyle.bg,
+            }}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className="inline-flex rounded-lg px-3 py-1.5 text-sm font-semibold"
+                style={{
+                  backgroundColor: stateStyle.badgeBg,
+                  color: stateStyle.badgeColor,
+                }}
               >
-                <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
-                  {meta.label}
-                </p>
-                <p className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                  {meta.description}
-                </p>
-              </button>
-            );
-          })}
+                {publishStateMeta.label}
+              </span>
+              <span className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                {statusMeta.label}
+              </span>
+            </div>
+            <p className="mt-3 text-sm" style={{ color: 'var(--muted-foreground)' }}>
+              {publishStateMeta.description}
+            </p>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div
+      <section
         className="space-y-4 rounded-xl border p-5"
         style={{ borderColor: 'var(--border)', backgroundColor: 'hsl(0 0% 99%)' }}
       >
@@ -234,104 +313,105 @@ export const TenantForm = memo(function TenantForm({
             className="flex h-10 w-10 items-center justify-center rounded-xl"
             style={{ backgroundColor: 'rgba(15, 118, 110, 0.1)' }}
           >
-            <Link2 className="h-4 w-4" style={{ color: 'var(--primary)' }} />
+            <RadioTower className="h-4 w-4" style={{ color: 'var(--primary)' }} />
           </div>
           <div>
             <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>
-              Runtime Config Linking
+              Survey Setup
             </h3>
             <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-              Tenants activate published immutable runtime snapshots. Scanner and attribute versions are read-only through the linked runtime config.
+              Choose the scanner and attribute template that should be used when you publish this survey.
             </p>
           </div>
         </div>
 
-        {runtimeConfigs.length > 0 ? (
-          <div className="space-y-3">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
             <label className={labelStyle} style={{ color: 'var(--foreground)' }}>
-              Active Runtime Config
+              Scanner
             </label>
             <select
-              value={activeRuntimeConfigId ?? ''}
-              onChange={(event) => setActiveRuntimeConfigId(event.target.value || null)}
+              value={draftScannerId ?? ''}
+              onChange={(event) => setDraftScannerId(event.target.value || null)}
               disabled={tenantLocked}
               className={inputStyle}
             >
-              <option value="">No active runtime config</option>
-              {runtimeConfigs.map((runtimeConfig) => (
-                <option key={runtimeConfig.runtimeConfigId} value={runtimeConfig.runtimeConfigId}>
-                  {runtimeConfig.label}
+              <option value="">Select scanner</option>
+              {scannerOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
                 </option>
               ))}
             </select>
-
-            {selectedRuntimeConfig && (
-              <div
-                className="rounded-xl border p-4 text-sm"
-                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}
-              >
-                <p className="font-medium" style={{ color: 'var(--foreground)' }}>
-                  {selectedRuntimeConfig.runtimeConfigId}
-                </p>
-                <div className="mt-2 grid gap-2 md:grid-cols-2">
-                  <p style={{ color: 'var(--muted-foreground)' }}>
-                    Scanner: <code>{selectedRuntimeConfig.versionRefs.scannerVersionId}</code>
-                  </p>
-                  <p style={{ color: 'var(--muted-foreground)' }}>
-                    Attributes: <code>{selectedRuntimeConfig.versionRefs.attributeTemplateVersionId}</code>
-                  </p>
-                  <p style={{ color: 'var(--muted-foreground)' }}>
-                    Calculation: <code>{selectedRuntimeConfig.versionRefs.calculationVersionId}</code>
-                  </p>
-                  <p style={{ color: 'var(--muted-foreground)' }}>
-                    Branding: <code>{selectedRuntimeConfig.versionRefs.brandingVersionId}</code>
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
-        ) : (
+
+          <div className="space-y-2">
+            <label className={labelStyle} style={{ color: 'var(--foreground)' }}>
+              Attribute Template
+            </label>
+            <select
+              value={draftAttributeTemplateId ?? ''}
+              onChange={(event) => setDraftAttributeTemplateId(event.target.value || null)}
+              disabled={tenantLocked}
+              className={inputStyle}
+            >
+              <option value="">Select attribute template</option>
+              {attributeTemplateOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {(!draftScannerId || !draftAttributeTemplateId) && (
           <div
             className="rounded-xl border p-4 text-sm"
-            style={{ borderColor: 'rgba(245, 158, 11, 0.25)', backgroundColor: 'rgba(245, 158, 11, 0.08)' }}
+            style={{
+              borderColor: 'rgba(245, 158, 11, 0.25)',
+              backgroundColor: 'rgba(245, 158, 11, 0.08)',
+            }}
           >
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-4 w-4" style={{ color: '#b45309' }} />
               <p style={{ color: '#92400e' }}>
-                No published runtime configs are available for this tenant yet. Keep the tenant in draft or disabled until publish is completed.
+                This tenant is not live yet. Choose a scanner and attribute template, then publish the survey.
               </p>
             </div>
           </div>
         )}
-      </div>
+      </section>
 
-      <div className="flex justify-end gap-3 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
-        <button
-          type="button"
-          onClick={onCancel}
-          className={buttonStyle}
-          style={{
-            border: '1px solid var(--border)',
-            color: 'var(--foreground)',
-            backgroundColor: 'transparent',
-          }}
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={isLoading || tenantLocked}
-          className={buttonStyle}
-          style={{
-            backgroundColor: 'var(--primary)',
-            color: 'var(--primary-foreground)',
-            opacity: isLoading || tenantLocked ? 0.55 : 1,
-            cursor: isLoading || tenantLocked ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {isLoading ? 'Saving...' : tenant ? 'Update Tenant' : 'Create Tenant'}
-        </button>
-      </div>
+      {showActions && (
+        <div className="flex justify-end gap-3 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            className={buttonStyle}
+            style={{
+              border: '1px solid var(--border)',
+              color: 'var(--foreground)',
+              backgroundColor: 'transparent',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isLoading || tenantLocked}
+            className={buttonStyle}
+            style={{
+              backgroundColor: 'var(--primary)',
+              color: 'var(--primary-foreground)',
+              opacity: isLoading || tenantLocked ? 0.55 : 1,
+              cursor: isLoading || tenantLocked ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {isLoading ? 'Saving...' : tenant ? 'Save Tenant' : 'Create Tenant'}
+          </button>
+        </div>
+      )}
     </form>
   );
 });

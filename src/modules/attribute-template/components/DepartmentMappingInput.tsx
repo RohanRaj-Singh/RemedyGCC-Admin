@@ -1,22 +1,45 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Network, Plus, X } from 'lucide-react';
-import { DepartmentOption, FunctionOption } from '../types';
+import { DepartmentOption, FunctionOption, LocationOption, FieldOption } from '../types';
+import {
+  createAttributeOptionId,
+  formatHierarchyPath,
+} from '../utils';
 
 interface DepartmentMappingInputProps {
+  streams: FieldOption[];
+  locations: LocationOption[];
   functions: FunctionOption[];
   departments: DepartmentOption[];
   onChange: (departments: DepartmentOption[]) => void;
 }
 
 export function DepartmentMappingInput({
+  streams,
+  locations,
   functions,
   departments,
   onChange,
 }: DepartmentMappingInputProps) {
   const [newDepartment, setNewDepartment] = useState('');
   const [selectedFunctionId, setSelectedFunctionId] = useState('');
+
+  useEffect(() => {
+    if (selectedFunctionId && !functions.some((func) => func.id === selectedFunctionId)) {
+      setSelectedFunctionId('');
+    }
+  }, [functions, selectedFunctionId]);
+
+  const streamById = useMemo(
+    () => new Map(streams.map((stream) => [stream.id, stream])),
+    [streams],
+  );
+  const locationById = useMemo(
+    () => new Map(locations.map((location) => [location.id, location])),
+    [locations],
+  );
 
   function handleAdd() {
     if (!newDepartment.trim() || !selectedFunctionId) {
@@ -26,7 +49,7 @@ export function DepartmentMappingInput({
     onChange([
       ...departments,
       {
-        id: `${selectedFunctionId}-${newDepartment.toLowerCase().replace(/\s+/g, '-')}`,
+        id: createAttributeOptionId(selectedFunctionId, newDepartment),
         label: newDepartment.trim(),
         functionId: selectedFunctionId,
       },
@@ -40,10 +63,16 @@ export function DepartmentMappingInput({
     onChange(departments.filter((item) => item.id !== id));
   }
 
-  const groupedDepartments = functions.map((func) => ({
-    func,
-    items: departments.filter((item) => item.functionId === func.id),
-  }));
+  const groupedDepartments = functions.map((func) => {
+    const location = locationById.get(func.locationId) ?? null;
+    const stream = location ? streamById.get(location.streamId) ?? null : null;
+
+    return {
+      func,
+      pathLabel: formatHierarchyPath([stream?.label, location?.label, func.label]),
+      items: departments.filter((item) => item.functionId === func.id),
+    };
+  });
 
   return (
     <div className="space-y-4">
@@ -54,16 +83,16 @@ export function DepartmentMappingInput({
       </div>
 
       <p className="text-xs text-gray-500">
-        Each department must be linked to one function, completing the required chain.
+        Each department must sit under exactly one function and closes the canonical chain.
       </p>
 
       <div className="grid gap-4">
-        {groupedDepartments.map(({ func, items }) =>
+        {groupedDepartments.map(({ func, pathLabel, items }) =>
           items.length > 0 ? (
             <div key={func.id} className="rounded-xl border border-gray-100 bg-gray-50 p-4">
               <div className="mb-3 flex items-center gap-2">
                 <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-bold uppercase tracking-wide text-primary">
-                  {func.label}
+                  {pathLabel}
                 </span>
                 <span className="text-xs text-gray-400">({items.length} departments)</span>
               </div>
@@ -104,11 +133,16 @@ export function DepartmentMappingInput({
             className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-gray-100"
           >
             <option value="">Select Function...</option>
-            {functions.map((func) => (
-              <option key={func.id} value={func.id}>
-                {func.label}
-              </option>
-            ))}
+            {functions.map((func) => {
+              const location = locationById.get(func.locationId);
+              const stream = location ? streamById.get(location.streamId) : null;
+
+              return (
+                <option key={func.id} value={func.id}>
+                  {formatHierarchyPath([stream?.label, location?.label, func.label])}
+                </option>
+              );
+            })}
           </select>
           <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         </div>

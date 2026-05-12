@@ -26,7 +26,7 @@ These models support the legacy survey system only.
 
 ## Why the Current Models Are Not Enough
 
-- `organization` lacks runtime tenant fields such as `slug`, `status`, `plan`, and active scanner pointers.
+- `organization` lacks runtime tenant fields such as `slug`, `status`, and active runtime config pointers.
 - branding is not stored as a first-class runtime document.
 - attribute templates are split across code, enums, and reference tables, not one runtime contract.
 - scanner data is flat in `questions`, not versioned.

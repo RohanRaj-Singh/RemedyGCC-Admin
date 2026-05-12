@@ -53,7 +53,7 @@ The remaining version IDs are preserved explicitly so no later lookup is forced 
 
 ## Runtime Config Snapshot Behavior
 
-- Every publish of scanner, attributes, calculation, branding, or runtime settings creates a new immutable `runtimeConfigId`.
+- Every publish of scanner, attributes, calculation, or branding creates a new immutable `runtimeConfigId`.
 - `runtimeConfigs` is the tenant-facing published composition delivered by `GET /api/runtime/:tenantSlug`.
 - The active tenant pointer may move to a newer runtime config without invalidating the historical config snapshots already referenced by submissions.
 

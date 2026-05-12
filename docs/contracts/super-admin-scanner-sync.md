@@ -107,6 +107,6 @@ Publishing must:
 2. snapshot the scanner immutably
 3. freeze answer scores and orders for that version
 4. freeze trigger graph for that version
-5. update the tenant's active scanner pointer
+5. expose the published scanner version for runtime config composition
 
 Edits after publish must create a new version, not mutate the published one.

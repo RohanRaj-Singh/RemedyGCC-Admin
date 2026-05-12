@@ -4,7 +4,13 @@
  * Use this to design API contracts and test UI components
  */
 
-import { Tenant, Scanner, SystemLog, DashboardStats, BrandingConfig } from '../types';
+import {
+  Tenant,
+  Scanner,
+  SystemLog,
+  DashboardStats,
+  BrandingConfig,
+} from '../types';
 
 export { DEFAULT_BRANDING } from '../types/branding';
 
@@ -14,7 +20,7 @@ const HEALTHFIRST_BRANDING: BrandingConfig = {
   faviconUrl: '/logos/healthfirst-favicon.ico',
   primaryColor: '#2563eb',
   secondaryColor: '#38bdf8',
-  fontFamily: 'Roboto, sans-serif',
+
 };
 
 const WELLNESS_BRANDING: BrandingConfig = {
@@ -22,7 +28,7 @@ const WELLNESS_BRANDING: BrandingConfig = {
   logoUrl: '/logos/wellness-plus.svg',
   primaryColor: '#059669',
   secondaryColor: '#14b8a6',
-  fontFamily: 'Open Sans, sans-serif',
+
 };
 
 const CARPOINT_BRANDING: BrandingConfig = {
@@ -30,7 +36,7 @@ const CARPOINT_BRANDING: BrandingConfig = {
   logoUrl: '/logos/carepoint.svg',
   primaryColor: '#7c3aed',
   secondaryColor: '#a855f7',
-  fontFamily: 'Montserrat, sans-serif',
+
 };
 
 const MEDICARE_BRANDING: BrandingConfig = {
@@ -38,7 +44,7 @@ const MEDICARE_BRANDING: BrandingConfig = {
   logoUrl: '/logos/medicare.svg',
   primaryColor: '#0284c7',
   secondaryColor: '#38bdf8',
-  fontFamily: 'Lato, sans-serif',
+
 };
 
 const VITALHEALTH_BRANDING: BrandingConfig = {
@@ -46,7 +52,7 @@ const VITALHEALTH_BRANDING: BrandingConfig = {
   logoUrl: '/logos/vitalhealth.svg',
   primaryColor: '#e11d48',
   secondaryColor: '#fb7185',
-  fontFamily: 'Nunito, sans-serif',
+
 };
 
 const FAMILY_PRACTICE_BRANDING: BrandingConfig = {
@@ -54,7 +60,7 @@ const FAMILY_PRACTICE_BRANDING: BrandingConfig = {
   logoUrl: '/logos/family-practice.svg',
   primaryColor: '#f97316',
   secondaryColor: '#fb923c',
-  fontFamily: 'Poppins, sans-serif',
+
 };
 
 const PREMIER_BRANDING: BrandingConfig = {
@@ -62,7 +68,7 @@ const PREMIER_BRANDING: BrandingConfig = {
   logoUrl: '/logos/premier.svg',
   primaryColor: '#0891b2',
   secondaryColor: '#06b6d4',
-  fontFamily: 'Inter, sans-serif',
+
 };
 
 export const DEFAULT_BRANDING_FALLBACK: BrandingConfig = {
@@ -71,82 +77,117 @@ export const DEFAULT_BRANDING_FALLBACK: BrandingConfig = {
   primaryColor: '#f58220',
   secondaryColor: '#f37820',
   faviconUrl: '/favicon.ico',
-  fontFamily: 'Inter, system-ui, sans-serif',
+
 };
 
 /** ============================================================================
- * Tenant Data (with Branding - no plan)
+ * Tenant Data
  * ============================================================================ */
 export const tenants: Tenant[] = [
   {
     id: 'tenant-001',
     name: 'HealthFirst Clinic',
     slug: 'healthfirst',
+    subdomain: 'healthfirst',
     status: 'active',
+    draftScannerId: null,
+    draftAttributeTemplateId: null,
     activeRuntimeConfigId: 'runtimecfg_healthfirst_001',
     branding: HEALTHFIRST_BRANDING,
     createdAt: '2025-01-15T10:30:00Z',
     updatedAt: '2025-03-15T14:30:00Z',
+    submissionCount: 182,
+    runtimeConfigCount: 1,
   },
   {
     id: 'tenant-002',
     name: 'Wellness Plus',
     slug: 'wellness-plus',
+    subdomain: 'wellness-plus',
     status: 'active',
+    draftScannerId: null,
+    draftAttributeTemplateId: null,
     activeRuntimeConfigId: 'runtimecfg_wellness_001',
     branding: WELLNESS_BRANDING,
     createdAt: '2025-02-20T14:45:00Z',
     updatedAt: '2025-03-28T11:15:00Z',
+    submissionCount: 141,
+    runtimeConfigCount: 1,
   },
   {
     id: 'tenant-003',
     name: 'CarePoint Medical',
     slug: 'carepoint',
+    subdomain: 'carepoint',
     status: 'active',
+    draftScannerId: null,
+    draftAttributeTemplateId: null,
     activeRuntimeConfigId: 'runtimecfg_carepoint_001',
     branding: CARPOINT_BRANDING,
     createdAt: '2025-03-10T09:15:00Z',
     updatedAt: '2025-03-11T08:00:00Z',
+    submissionCount: 88,
+    runtimeConfigCount: 1,
   },
   {
     id: 'tenant-004',
     name: 'MediCare Solutions',
     slug: 'medicare',
+    subdomain: 'medicare',
     status: 'draft',
+    draftScannerId: null,
+    draftAttributeTemplateId: null,
     activeRuntimeConfigId: null,
     branding: MEDICARE_BRANDING,
     createdAt: '2025-03-25T16:20:00Z',
     updatedAt: '2025-03-25T16:20:00Z',
+    submissionCount: 0,
+    runtimeConfigCount: 0,
   },
   {
     id: 'tenant-005',
     name: 'VitalHealth Center',
     slug: 'vitalhealth',
+    subdomain: 'vitalhealth',
     status: 'disabled',
+    draftScannerId: null,
+    draftAttributeTemplateId: null,
     activeRuntimeConfigId: 'runtimecfg_vitalhealth_001',
     branding: VITALHEALTH_BRANDING,
     createdAt: '2024-11-05T11:00:00Z',
     updatedAt: '2025-02-10T16:45:00Z',
+    submissionCount: 53,
+    runtimeConfigCount: 1,
   },
   {
     id: 'tenant-006',
     name: 'Family Practice Group',
     slug: 'family-practice',
+    subdomain: 'family-practice',
     status: 'active',
+    draftScannerId: null,
+    draftAttributeTemplateId: null,
     activeRuntimeConfigId: 'runtimecfg_family_001',
     branding: FAMILY_PRACTICE_BRANDING,
     createdAt: '2025-04-01T08:30:00Z',
     updatedAt: '2025-04-02T09:30:00Z',
+    submissionCount: 64,
+    runtimeConfigCount: 1,
   },
   {
     id: 'tenant-007',
     name: 'Premier Health',
     slug: 'premier-health',
+    subdomain: 'premier-health',
     status: 'archived',
+    draftScannerId: null,
+    draftAttributeTemplateId: null,
     activeRuntimeConfigId: 'runtimecfg_premier_001',
     branding: PREMIER_BRANDING,
     createdAt: '2025-04-10T13:45:00Z',
     updatedAt: '2025-04-11T10:00:00Z',
+    submissionCount: 29,
+    runtimeConfigCount: 1,
   },
 ];
 

@@ -20,7 +20,7 @@ import {
   publishScanner,
   saveScannerDraft,
 } from '../service';
-import { ScannerDetail, ScannerStatus } from '../types';
+import { ValidationIssue, ScannerDetail, ScannerStatus } from '../types';
 import { createDefaultCategories, emptyText } from '../utils/builder';
 import { FIXED_CATEGORIES } from '../constants/categories';
 import { getCategoryMetrics, getScannerCounts, getSubdomainMetrics, sumWeights } from '../utils/metrics';
@@ -84,6 +84,9 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
     }
     return initial;
   });
+  const [followUpTriggers, setFollowUpTriggers] = useState(() => {
+    return scanner?.draftVersion?.followUpTriggers ?? scanner?.publishedVersion?.followUpTriggers ?? [];
+  });
   const [versions, setVersions] = useState(scanner?.versions ?? []);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>(categories[0]?.id);
   const [selectedSubdomainId, setSelectedSubdomainId] = useState<string | undefined>(categories[0]?.subdomains[0]?.id);
@@ -108,6 +111,7 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
       description,
       attributeTemplateId,
       categories,
+      followUpTriggers,
     },
     template
   );
@@ -134,6 +138,42 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
       setSelectedCategoryId(categories[0]?.id);
     }
   }, [categories, selectedCategoryId]);
+
+  // Prune stale follow-up triggers automatically
+  useEffect(() => {
+    const validQuestionIds = new Set<string>();
+    const validOptionIds = new Set<string>();
+
+    categories.forEach(c => c.subdomains.forEach(s => s.questions.forEach(q => {
+      validQuestionIds.add(q.id);
+      q.options.forEach(o => validOptionIds.add(o.id));
+    })));
+
+    setFollowUpTriggers(prev => {
+      let changed = false;
+      const next = prev.map(trigger => {
+        const nextOptions = trigger.triggerOptionIds.filter(id => validOptionIds.has(id));
+        const nextFollowUps = trigger.followUpQuestionIds.filter(id => validQuestionIds.has(id));
+        
+        if (nextOptions.length !== trigger.triggerOptionIds.length || 
+            nextFollowUps.length !== trigger.followUpQuestionIds.length) {
+          changed = true;
+        }
+
+        return {
+          ...trigger,
+          triggerOptionIds: nextOptions,
+          followUpQuestionIds: nextFollowUps,
+        };
+      }).filter(trigger => {
+        const keep = validQuestionIds.has(trigger.triggerQuestionId);
+        if (!keep) changed = true;
+        return keep;
+      });
+
+      return changed ? next : prev;
+    });
+  }, [categories]);
 
   useEffect(() => {
     const currentCategory = categories.find((category) => category.id === selectedCategoryId);
@@ -170,6 +210,7 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
       }));
     }
     setCategories(nextCategories);
+    setFollowUpTriggers(detail.draftVersion?.followUpTriggers ?? detail.publishedVersion?.followUpTriggers ?? []);
     setVersions(detail.versions);
     setTemplate(
       detail.draftVersion?.attributeTemplateSnapshot
@@ -196,6 +237,7 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
       description,
       attributeTemplateId,
       categories,
+      followUpTriggers,
     });
 
     applyScannerDetail(saved);
@@ -294,6 +336,53 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
 
   function goToPreviousStep() {
     setActiveStep((current) => Math.max(0, current - 1));
+  }
+
+  function handleIssueClick(issue: ValidationIssue) {
+    if (issue.level === 'scanner' || issue.level === 'attribute-template') {
+      if (issue.code === 'SCANNER_WEIGHT_INVALID' || issue.path.includes('weight')) {
+        setActiveStep(3); // Weights
+      } else {
+        setActiveStep(0); // Basic info
+      }
+    } else if (issue.level === 'category') {
+      if (issue.path.includes('weight')) {
+        setActiveStep(3); // Weights
+      } else {
+        setActiveStep(1); // Structure
+      }
+    } else if (issue.level === 'subdomain') {
+      if (issue.path.includes('weight')) {
+        setActiveStep(3); // Weights
+      } else if (issue.path.includes('questions')) {
+        setActiveStep(2); // Content
+      } else {
+        setActiveStep(1); // Structure
+      }
+      if (issue.categoryId) setSelectedCategoryId(issue.categoryId);
+      if (issue.subdomainId) setSelectedSubdomainId(issue.subdomainId);
+    } else if (issue.level === 'question') {
+      if (issue.path.includes('weight')) {
+        setActiveStep(3); // Weights
+      } else {
+        setActiveStep(2); // Content
+      }
+      if (issue.categoryId) setSelectedCategoryId(issue.categoryId);
+      if (issue.subdomainId) setSelectedSubdomainId(issue.subdomainId);
+
+      // Scroll into view if it's a question
+      if (issue.questionId) {
+        setTimeout(() => {
+          const el = document.getElementById(`question-${issue.questionId}`) 
+            || document.getElementById(`question-card-${issue.questionId}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('ring-4', 'ring-blue-500', 'ring-opacity-50', 'transition-all');
+            setTimeout(() => el.classList.remove('ring-4', 'ring-blue-500', 'ring-opacity-50'), 2000);
+          }
+        }, 300);
+      }
+    }
   }
 
   const canProceed = () => {
@@ -471,10 +560,12 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
             {activeStep === 2 && (
               <ContentBuilder
                 categories={categories}
+                followUpTriggers={followUpTriggers}
                 selectedSubdomainId={selectedSubdomainId}
                 disabled={!hasDraftVersion || saving}
                 onSelectSubdomain={handleSelectSubdomain}
                 onCategoryChange={updateCategory}
+                onTriggersChange={setFollowUpTriggers}
               />
             )}
 
@@ -585,7 +676,7 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
         </div>
       </div>
 
-      <FloatingIssueButton issues={validation.issues} />
+      <FloatingIssueButton issues={validation.issues} onNavigate={handleIssueClick} />
     </div>
   );
 }

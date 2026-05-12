@@ -25,7 +25,7 @@
 - version refs:
   `scannerVersionId`, `attributeTemplateVersionId`, `calculationVersionId`, `brandingVersionId`
 - branding payload already normalized or safe to normalize with runtime defaults
-- runtime settings and the immutable scanner and attribute snapshots
+- immutable scanner and attribute snapshots plus the published branding payload
 
 ## Explicit Non-Ownership Rules
 

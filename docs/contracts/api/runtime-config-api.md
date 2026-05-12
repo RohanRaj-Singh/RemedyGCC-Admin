@@ -14,7 +14,6 @@ This payload is the authoritative source for:
 
 - scanner rendering
 - attribute rendering
-- runtime settings
 - branding
 - version references required for submission persistence
 
@@ -34,8 +33,7 @@ This payload is the authoritative source for:
     "id": "tenant_acme_health",
     "name": "Acme Health",
     "slug": "acme-health",
-    "status": "active",
-    "plan": "enterprise"
+    "status": "active"
   },
   "versionRefs": {
     "scannerVersionId": "scanner_v7",
@@ -51,15 +49,7 @@ This payload is the authoritative source for:
     "faviconUrl": "https://cdn.example.com/acme/favicon.ico"
   },
   "attributeTemplate": {},
-  "scannerVersion": {},
-  "runtimeSettings": {
-    "allowAnonymous": true,
-    "requireAuthentication": false,
-    "surveyExpirationDays": 30,
-    "allowMultipleSubmissions": false,
-    "language": "en",
-    "featureFlags": {}
-  }
+  "scannerVersion": {}
 }
 ```
 
@@ -81,7 +71,7 @@ This payload is the authoritative source for:
 - do not compose scanner, attributes, and branding from unrelated draft documents
 - return the full scanner and attribute template contract needed for rendering
 - return `versionRefs` so the frontend can echo the expected version tuple during submit
-- return runtime settings required for runtime gating, but do not return calculation formulas
+- keep tenant-facing runtime behavior driven by immutable snapshot data only
 
 ## Backend Responsibilities
 

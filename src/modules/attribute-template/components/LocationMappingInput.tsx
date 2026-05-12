@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronDown, MapPinned, Plus, X } from 'lucide-react';
 import { FieldOption, LocationOption } from '../types';
+import { createAttributeOptionId } from '../utils';
 
 interface LocationMappingInputProps {
   streams: FieldOption[];
@@ -18,6 +19,12 @@ export function LocationMappingInput({
   const [newLocation, setNewLocation] = useState('');
   const [selectedStreamId, setSelectedStreamId] = useState('');
 
+  useEffect(() => {
+    if (selectedStreamId && !streams.some((stream) => stream.id === selectedStreamId)) {
+      setSelectedStreamId('');
+    }
+  }, [selectedStreamId, streams]);
+
   function handleAdd() {
     if (!newLocation.trim() || !selectedStreamId) {
       return;
@@ -26,7 +33,7 @@ export function LocationMappingInput({
     onChange([
       ...locations,
       {
-        id: `${selectedStreamId}-${newLocation.toLowerCase().replace(/\s+/g, '-')}`,
+        id: createAttributeOptionId(selectedStreamId, newLocation),
         label: newLocation.trim(),
         streamId: selectedStreamId,
       },
@@ -54,8 +61,7 @@ export function LocationMappingInput({
       </div>
 
       <p className="text-xs text-gray-500">
-        Each location must be linked to one stream. This starts the required chain:
-        stream to location to function to department.
+        Each location must sit under exactly one stream and only filters the next level: functions.
       </p>
 
       <div className="grid gap-4">
@@ -101,6 +107,7 @@ export function LocationMappingInput({
           <select
             value={selectedStreamId}
             onChange={(event) => setSelectedStreamId(event.target.value)}
+            disabled={streams.length === 0}
             className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
             <option value="">Select Stream...</option>
@@ -123,7 +130,7 @@ export function LocationMappingInput({
         <button
           type="button"
           onClick={handleAdd}
-          disabled={!newLocation.trim() || !selectedStreamId}
+          disabled={!newLocation.trim() || !selectedStreamId || streams.length === 0}
           className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Plus className="h-4 w-4" />

@@ -8,7 +8,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
-import { AlertTriangle, ImageOff } from 'lucide-react';
+import { AlertTriangle, ImageOff, Sparkles } from 'lucide-react';
 import { BrandingConfig } from '@/types';
 import {
   DEFAULT_BRANDING,
@@ -56,7 +56,7 @@ function PreviewLogo({
           color: fallbackText,
         }}
       >
-        {logoUrl ? <ImageOff className="h-5 w-5" /> : <span className="font-bold">T</span>}
+        {logoUrl ? <ImageOff className="h-5 w-5" /> : <span className="font-bold">S</span>}
       </div>
     );
   }
@@ -65,7 +65,7 @@ function PreviewLogo({
     <div className="h-12 w-12 overflow-hidden rounded-2xl border bg-white shadow-sm">
       <img
         src={logoUrl}
-        alt="Tenant branding logo preview"
+        alt="Survey branding logo preview"
         className="h-full w-full object-contain"
         onError={() => setHasError(true)}
       />
@@ -75,13 +75,13 @@ function PreviewLogo({
 
 function GradientChip({ label, gradient }: { label: string; gradient: string }) {
   return (
-    <div className="rounded-xl border p-2" style={{ borderColor: 'var(--border)' }}>
-      <div className="mb-2 h-10 rounded-lg" style={{ background: gradient }} />
-      <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--foreground)' }}>
+    <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)' }}>
+      <div className="h-10 rounded-lg" style={{ background: gradient }} />
+      <p
+        className="mt-2 text-[11px] font-semibold uppercase tracking-wide"
+        style={{ color: 'var(--foreground)' }}
+      >
         {label}
-      </p>
-      <p className="mt-1 break-all text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-        {gradient}
       </p>
     </div>
   );
@@ -96,13 +96,13 @@ function BrandingPreview({ branding }: { branding: Partial<BrandingConfig> }) {
       className="overflow-hidden rounded-2xl border shadow-sm"
       style={{ borderColor: 'var(--border)', backgroundColor: '#ffffff' }}
     >
-      <div className="h-3 w-full" style={{ background: resolved.gradients.brandGradient }} />
+      <div className="h-3 w-full" style={{ background: resolved.gradient.brandGradient }} />
 
       <div className="space-y-4 p-4">
         <div
           className="rounded-2xl p-4"
           style={{
-            background: resolved.gradients.heroGradient,
+            background: resolved.gradient.heroGradient,
             border: `1px solid ${resolved.primaryColor}22`,
           }}
         >
@@ -117,21 +117,19 @@ function BrandingPreview({ branding }: { branding: Partial<BrandingConfig> }) {
                 {resolved.appName}
               </p>
               <p className="text-xs" style={{ color: '#4b5563' }}>
-                tenant.remedygcc.com
+                survey.remedygcc.com
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
+            <div
               className="rounded-xl px-4 py-2 text-sm font-semibold"
               style={{ backgroundColor: resolved.primaryColor, color: onPrimary }}
             >
-              Primary
-            </button>
-            <button
-              type="button"
+              Start Survey
+            </div>
+            <div
               className="rounded-xl border px-4 py-2 text-sm font-semibold"
               style={{
                 backgroundColor: resolved.secondaryColor,
@@ -139,14 +137,14 @@ function BrandingPreview({ branding }: { branding: Partial<BrandingConfig> }) {
                 color: getReadableTextColor(resolved.secondaryColor),
               }}
             >
-              Secondary
-            </button>
+              Learn More
+            </div>
           </div>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2">
-          <GradientChip label="Brand Gradient" gradient={resolved.gradients.brandGradient} />
-          <GradientChip label="Hero Gradient" gradient={resolved.gradients.heroGradient} />
+          <GradientChip label="Brand Accent" gradient={resolved.gradient.brandGradient} />
+          <GradientChip label="Header Highlight" gradient={resolved.gradient.heroGradient} />
         </div>
       </div>
     </div>
@@ -155,8 +153,8 @@ function BrandingPreview({ branding }: { branding: Partial<BrandingConfig> }) {
 
 export function BrandingPreviewCard({
   branding,
-  title = 'Live Preview',
-  description = 'Resolved with the same fallback rules expected by the runtime app.',
+  title = 'Brand Preview',
+  description = 'Preview how the survey theme will look using safe defaults where needed.',
 }: BrandingPreviewCardProps) {
   return (
     <div
@@ -197,17 +195,26 @@ export function BrandingPanel({
   );
 
   const updateGradient = useCallback(
-    (key: keyof NonNullable<BrandingConfig['gradients']>, value: string) => {
+    (key: keyof NonNullable<BrandingConfig['gradient']>, value: string) => {
       onChange((current) => ({
         ...current,
-        gradients: {
-          ...current.gradients,
+        gradient: {
+          ...current.gradient,
           [key]: value,
         },
       }));
     },
     [onChange],
   );
+
+  const handleChartColorsChange = useCallback((value: string) => {
+    const colors = value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+
+    updateBrandingField('chartColors', colors);
+  }, [updateBrandingField]);
 
   const handleReset = useCallback(() => {
     onChange({
@@ -216,8 +223,9 @@ export function BrandingPanel({
       primaryColor: DEFAULT_BRANDING.primaryColor,
       secondaryColor: DEFAULT_BRANDING.secondaryColor,
       faviconUrl: DEFAULT_BRANDING.faviconUrl,
-      fontFamily: DEFAULT_BRANDING.fontFamily,
-      gradients: DEFAULT_BRANDING.gradients,
+      gradient: DEFAULT_BRANDING.gradient,
+      chartColors: DEFAULT_BRANDING.chartColors,
+      themeMode: DEFAULT_BRANDING.themeMode,
     });
   }, [onChange]);
 
@@ -229,17 +237,22 @@ export function BrandingPanel({
       className="h-fit w-full rounded-xl border p-5 shadow-sm"
       style={{ backgroundColor: 'hsl(0 0% 98%)', borderColor: 'var(--border)' }}
     >
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-          {title}
-        </h3>
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
+            {title}
+          </h3>
+          <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
+            Customize the survey look and feel. Missing items safely fall back to default styling.
+          </p>
+        </div>
         <button
           type="button"
           onClick={handleReset}
           className="text-sm transition-colors hover:text-slate-700"
           style={{ color: 'var(--muted-foreground)' }}
         >
-          Reset
+          Use Defaults
         </button>
       </div>
 
@@ -253,7 +266,7 @@ export function BrandingPanel({
             }}
           >
             <p className="text-sm font-semibold" style={{ color: 'var(--destructive)' }}>
-              Branding validation errors
+              Branding needs attention
             </p>
             <div className="mt-2 space-y-1 text-sm" style={{ color: 'var(--destructive)' }}>
               {validation.errors.map((issue) => (
@@ -274,7 +287,7 @@ export function BrandingPanel({
             <div className="mb-2 flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" style={{ color: '#b45309' }} />
               <p className="text-sm font-semibold" style={{ color: '#92400e' }}>
-                Runtime fallback warnings
+                Branding notes
               </p>
             </div>
             <div className="space-y-1 text-sm" style={{ color: '#92400e' }}>
@@ -290,7 +303,7 @@ export function BrandingPanel({
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-              App Name
+              Survey Name
             </label>
             <input
               type="text"
@@ -303,41 +316,52 @@ export function BrandingPanel({
 
           <div className="space-y-2">
             <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-              Font Family
+              Display Mode
             </label>
-            <input
-              type="text"
-              value={branding.fontFamily ?? ''}
-              onChange={(event) => updateBrandingField('fontFamily', event.target.value)}
+            <select
+              value={branding.themeMode ?? 'light'}
+              onChange={(event) =>
+                updateBrandingField('themeMode', event.target.value as 'light' | 'dark')}
               className={inputStyle}
-              placeholder={DEFAULT_BRANDING.fontFamily}
-            />
+            >
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
           </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
+          <div
+            className="rounded-xl border p-4"
+            style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}
+          >
             <ImageUploader
               value={branding.logoUrl}
-              onChange={(url) => updateBrandingField('logoUrl', url ?? undefined)}
+              onChange={(url) => updateBrandingField('logoUrl', url ?? '')}
               label="Logo"
-              placeholder="Upload runtime logo"
+              placeholder="Upload company logo"
             />
           </div>
 
-          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
+          <div
+            className="rounded-xl border p-4"
+            style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}
+          >
             <ImageUploader
               value={branding.faviconUrl}
-              onChange={(url) => updateBrandingField('faviconUrl', url ?? undefined)}
-              label="Favicon"
-              placeholder="Upload favicon"
+              onChange={(url) => updateBrandingField('faviconUrl', url ?? '')}
+              label="Browser Icon"
+              placeholder="Upload browser icon"
               maxSizeMB={2}
             />
           </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
+          <div
+            className="rounded-xl border p-3"
+            style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}
+          >
             <ColorPicker
               value={resolved.primaryColor}
               onChange={(color) => updateBrandingField('primaryColor', color)}
@@ -345,7 +369,10 @@ export function BrandingPanel({
             />
           </div>
 
-          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}>
+          <div
+            className="rounded-xl border p-3"
+            style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}
+          >
             <ColorPicker
               value={resolved.secondaryColor}
               onChange={(color) => updateBrandingField('secondaryColor', color)}
@@ -354,47 +381,81 @@ export function BrandingPanel({
           </div>
         </div>
 
-        <div
-          className="rounded-xl border p-4"
+        <details
+          className="rounded-xl border"
           style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}
         >
-          <div className="mb-3">
-            <h4 className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-              Optional Gradient Overrides
-            </h4>
-            <p className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
-              Leave empty to let the runtime derive safe gradients automatically.
-            </p>
-          </div>
+          <summary
+            className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium"
+            style={{ color: 'var(--foreground)' }}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Sparkles className="h-4 w-4" style={{ color: 'var(--primary)' }} />
+              Advanced Styling
+            </span>
+            <span style={{ color: 'var(--muted-foreground)' }}>Optional</span>
+          </summary>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-4 border-t px-4 py-4" style={{ borderColor: 'var(--border)' }}>
             <div className="space-y-2">
               <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                Brand Gradient
+                Chart Colors
               </label>
               <input
                 type="text"
-                value={branding.gradients?.brandGradient ?? ''}
-                onChange={(event) => updateGradient('brandGradient', event.target.value)}
+                value={branding.chartColors?.join(', ') ?? resolved.chartColors.join(', ')}
+                onChange={(event) => handleChartColorsChange(event.target.value)}
                 className={inputStyle}
-                placeholder={resolved.gradients.brandGradient}
+                placeholder="#f58220, #f37820, #a0a0a0"
               />
+              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                Use comma-separated hex colors for charts and summary visuals.
+              </p>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                Hero Gradient
-              </label>
-              <input
-                type="text"
-                value={branding.gradients?.heroGradient ?? ''}
-                onChange={(event) => updateGradient('heroGradient', event.target.value)}
-                className={inputStyle}
-                placeholder={resolved.gradients.heroGradient}
-              />
+            <div
+              className="rounded-xl border p-4"
+              style={{ borderColor: 'var(--border)', backgroundColor: 'hsl(0 0% 99%)' }}
+            >
+              <div className="mb-3">
+                <h4 className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                  Optional Gradient Overrides
+                </h4>
+                <p className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                  Leave these blank to use the standard brand styling automatically.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                    Brand Gradient
+                  </label>
+                  <input
+                    type="text"
+                    value={branding.gradient?.brandGradient ?? ''}
+                    onChange={(event) => updateGradient('brandGradient', event.target.value)}
+                    className={inputStyle}
+                    placeholder={resolved.gradient.brandGradient}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                    Hero Gradient
+                  </label>
+                  <input
+                    type="text"
+                    value={branding.gradient?.heroGradient ?? ''}
+                    onChange={(event) => updateGradient('heroGradient', event.target.value)}
+                    className={inputStyle}
+                    placeholder={resolved.gradient.heroGradient}
+                  />
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </details>
       </div>
     </div>
   );
