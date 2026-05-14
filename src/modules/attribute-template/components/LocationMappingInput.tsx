@@ -47,6 +47,13 @@ export function LocationMappingInput({
     onChange(locations.filter((location) => location.id !== id));
   }
 
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAdd();
+    }
+  }
+
   const groupedLocations = streams.map((stream) => ({
     stream,
     items: locations.filter((location) => location.streamId === stream.id),
@@ -123,6 +130,7 @@ export function LocationMappingInput({
         <input
           value={newLocation}
           onChange={(event) => setNewLocation(event.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder="Location name"
           className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />

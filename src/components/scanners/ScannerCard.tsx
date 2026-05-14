@@ -49,9 +49,6 @@ export function ScannerCard({ scanner, onEdit, onDelete }: ScannerCardProps) {
                 {scanner.questionCount} questions
               </span>
               <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                Template: {scanner.attributeTemplateName || 'N/A'}
-              </span>
-              <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
                 v{scanner.latestVersionNumber}
               </span>
             </div>

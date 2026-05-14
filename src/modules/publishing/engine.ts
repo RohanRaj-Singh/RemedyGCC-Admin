@@ -21,8 +21,9 @@ import {
   formatHierarchyPath,
   getFunctionLineage,
   getLocationLineage,
+  validateAttributeTemplateHierarchy,
 } from '@/modules/attribute-template/utils';
-import { validateAttributeTemplate, validateScannerDraft } from '@/modules/scanner/utils/validation';
+import { validateScannerDraft } from '@/modules/scanner/utils/validation';
 
 export const DEFAULT_RUNTIME_SETTINGS: RuntimeSettings = {
   allowAnonymous: true,
@@ -214,7 +215,6 @@ function toScannerDraftPayload(
   return {
     name: clone(sourceScanner.name),
     description: sourceScanner.description ? clone(sourceScanner.description) : undefined,
-    attributeTemplateId: sourceScanner.version.attributeTemplateId,
     categories: clone(sourceScanner.version.categories),
     followUpTriggers: clone(sourceScanner.version.followUpTriggers),
   };
@@ -289,29 +289,50 @@ function validateRuntimeSettings(
 function buildRuntimeAttributeTemplate(
   sourceAttributeTemplate: AttributeTemplate,
 ): RuntimeAttributeTemplate {
+  const streamIdMap = new Map(
+    sourceAttributeTemplate.stream.map((stream) => [
+      stream.id,
+      createStableUuid(`stream:${stream.id}`),
+    ]),
+  );
+
+  const locationIdMap = new Map(
+    sourceAttributeTemplate.location.map((location) => [
+      location.id,
+      createStableUuid(`location:${location.id}`),
+    ]),
+  );
+
+  const functionIdMap = new Map(
+    sourceAttributeTemplate.function.map((func) => [
+      func.id,
+      createStableUuid(`function:${func.id}`),
+    ]),
+  );
+
   return {
     streams: sourceAttributeTemplate.stream.map((stream) => ({
-      id: createStableUuid(`stream:${stream.id}`),
+      id: streamIdMap.get(stream.id)!,
       label: stream.label,
       value: stream.id,
     })),
     locations: sourceAttributeTemplate.location.map((location) => ({
-      id: createStableUuid(`location:${location.id}`),
+      id: locationIdMap.get(location.id)!,
       label: location.label,
       value: location.id,
-      streamId: location.streamId,
+      streamId: streamIdMap.get(location.streamId)!,
     })),
     functions: sourceAttributeTemplate.function.map((func) => ({
-      id: createStableUuid(`function:${func.id}`),
+      id: functionIdMap.get(func.id)!,
       label: func.label,
       value: func.id,
-      locationId: func.locationId,
+      locationId: locationIdMap.get(func.locationId)!,
     })),
     departments: sourceAttributeTemplate.department.map((department) => ({
       id: createStableUuid(`department:${department.id}`),
       label: department.label,
       value: department.id,
-      functionId: department.functionId,
+      functionId: functionIdMap.get(department.functionId)!,
     })),
     genders: sourceAttributeTemplate.gender.map((option) => option.id),
     ageGroups: sourceAttributeTemplate.age.map((option) => option.id),
@@ -350,7 +371,7 @@ function validateRuntimeAttributeTemplate(
   runtimeAttributeTemplate: RuntimeAttributeTemplate,
 ): PublishValidationIssue[] {
   const issues: PublishValidationIssue[] = [];
-  const sourceIssues = validateAttributeTemplate(sourceAttributeTemplate);
+  const sourceIssues = validateAttributeTemplateHierarchy(sourceAttributeTemplate);
   const hierarchyMaps = buildAttributeTemplateHierarchyMaps(sourceAttributeTemplate);
 
   sourceIssues.forEach((issue) => {
@@ -782,16 +803,6 @@ export function generateRuntimeConfig(
   warnings.push(...brandingValidation.warnings);
 
   validateRuntimeSettings(input.runtimeSettings).forEach((issue) => pushIssue(issues, issue));
-
-  if (!input.sourceAttributeTemplate && input.sourceScanner?.version.attributeTemplateId) {
-    pushIssue(issues, {
-      code: 'ATTRIBUTE_TEMPLATE_SOURCE_MISSING',
-      level: 'attribute-template',
-      path: 'sourceAttributeTemplate',
-      message: 'The scanner references an attribute template that could not be resolved.',
-      blocking: true,
-    });
-  }
 
   const blockingIssues = issues.filter((issue) => issue.blocking);
   if (blockingIssues.length > 0 || !input.sourceScanner || !input.sourceAttributeTemplate) {

@@ -46,6 +46,9 @@ export default function TenantDetailsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+  const [restoreSubdomain, setRestoreSubdomain] = useState('');
 
   const statusMeta = useMemo(
     () => (tenant ? getTenantStatusMeta(tenant.status) : null),
@@ -144,6 +147,46 @@ export default function TenantDetailsPage() {
       setIsActing(false);
     }
   }, [router, tenant]);
+
+  const handleArchive = useCallback(async () => {
+    if (!tenant) return;
+
+    try {
+      setIsActing(true);
+      setError(null);
+      const { error: archiveError } = await tenantService.archive(tenant.id);
+      if (archiveError) {
+        throw new Error(archiveError);
+      }
+      await loadTenant();
+      setShowArchiveConfirm(false);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Failed to archive tenant.');
+    } finally {
+      setIsActing(false);
+    }
+  }, [tenant, loadTenant]);
+
+  const handleRestore = useCallback(async () => {
+    if (!tenant) return;
+
+    try {
+      setIsActing(true);
+      setError(null);
+      const subdomain = restoreSubdomain.trim() || undefined;
+      const { error: restoreError, data } = await tenantService.restore(tenant.id, subdomain);
+      if (restoreError) {
+        throw new Error(restoreError);
+      }
+      await loadTenant();
+      setShowRestoreConfirm(false);
+      setRestoreSubdomain('');
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Failed to restore tenant.');
+    } finally {
+      setIsActing(false);
+    }
+  }, [tenant, restoreSubdomain, loadTenant]);
 
   if (isLoading) {
     return (
@@ -498,12 +541,24 @@ export default function TenantDetailsPage() {
               {(tenant.status === 'disabled' || tenant.status === 'draft') && (
                 <button
                   type="button"
-                  onClick={() => void updateStatus('archived')}
+                  onClick={() => setShowArchiveConfirm(true)}
                   disabled={isActing}
                   className="rounded-lg px-4 py-2.5 text-sm font-medium"
                   style={{ backgroundColor: 'rgba(82, 82, 91, 0.16)', color: '#3f3f46' }}
                 >
                   Archive Tenant
+                </button>
+              )}
+
+              {tenant.status === 'archived' && (
+                <button
+                  type="button"
+                  onClick={() => setShowRestoreConfirm(true)}
+                  disabled={isActing}
+                  className="rounded-lg px-4 py-2.5 text-sm font-medium"
+                  style={{ backgroundColor: 'rgba(34, 197, 94, 0.12)', color: '#166534' }}
+                >
+                  Restore Tenant
                 </button>
               )}
 
@@ -598,6 +653,89 @@ export default function TenantDetailsPage() {
           )}
         </div>
       </div>
+
+      {showArchiveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Archive Tenant</h3>
+            <div className="text-sm text-gray-600 mb-6 space-y-2">
+              <p>Archiving this tenant will:</p>
+              <ul className="list-disc pl-5 space-y-1">
+                <li>Disable the live survey immediately</li>
+                <li>Preserve all historical submissions and reports</li>
+                <li>Remove the tenant from active operational workflows</li>
+                <li>Release the current subdomain for future reuse</li>
+                <li>Prevent respondents from accessing existing survey links</li>
+              </ul>
+              <p className="mt-3 font-medium text-gray-900">
+                This action is reversible, but the released subdomain may no longer be available if reused later.
+              </p>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowArchiveConfirm(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleArchive()}
+                disabled={isActing}
+                className="px-4 py-2 text-sm font-medium text-white bg-gray-600 rounded-lg hover:bg-gray-700 disabled:opacity-50"
+              >
+                {isActing ? 'Archiving...' : 'Archive Tenant'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRestoreConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Restore Tenant</h3>
+            <div className="text-sm text-gray-600 mb-4">
+              <p>Restore this archived tenant to make it operational again.</p>
+              <p className="mt-2">The tenant will be restored in <strong>Disabled</strong> state and must be explicitly activated to go live.</p>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                New Subdomain (optional)
+              </label>
+              <p className="text-xs text-gray-500 mb-2">
+                Original subdomain may be taken. Leave blank to try original.
+              </p>
+              <input
+                type="text"
+                value={restoreSubdomain}
+                onChange={(e) => setRestoreSubdomain(e.target.value)}
+                placeholder={tenant?.subdomain?.replace(/^archived_.*_/, '') || 'new-subdomain'}
+                className="w-full px-3 py-2 border rounded-lg"
+              />
+            </div>
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">
+                {error}
+              </div>
+            )}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setShowRestoreConfirm(false); setError(null); }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleRestore()}
+                disabled={isActing}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {isActing ? 'Restoring...' : 'Restore Tenant'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

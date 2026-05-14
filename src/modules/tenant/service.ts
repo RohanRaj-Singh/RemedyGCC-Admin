@@ -325,26 +325,15 @@ async function resolvePublishingSource(
     : null;
   const sourceVersion = scannerDetail?.draftVersion ?? scannerDetail?.publishedVersion ?? null;
 
-  const selectedTemplate = tenant.draftAttributeTemplateId
+  const sourceTemplate = tenant.draftAttributeTemplateId
     ? await getTemplateById(tenant.draftAttributeTemplateId)
     : null;
-
-  const sourceTemplate = selectedTemplate
-    ?? (sourceVersion?.attributeTemplateId
-      ? await getTemplateById(sourceVersion.attributeTemplateId)
-      : null);
-
-  const templateMismatch = Boolean(
-    tenant.draftAttributeTemplateId
-    && sourceVersion?.attributeTemplateId
-    && tenant.draftAttributeTemplateId !== sourceVersion.attributeTemplateId,
-  );
 
   return {
     scannerDetail,
     sourceVersion,
     sourceTemplate,
-    templateMismatch,
+    templateMismatch: false,
   };
 }
 
@@ -1142,8 +1131,91 @@ export async function publishTenantRuntime(
 }
 
 export async function archiveTenant(tenantId: string): Promise<Tenant> {
-  const tenant = await updateTenant(tenantId, { status: 'archived' });
-  return tenant;
+  await ensureTenantModuleIndexes();
+  const detailData = await getTenantDetailData(tenantId);
+  if (!detailData.tenant) {
+    throw new Error('Tenant not found.');
+  }
+
+  const current = normalizeTenantDocument(detailData.tenant);
+
+  if (current.status === 'archived') {
+    throw new Error('Tenant is already archived.');
+  }
+
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const archivedSubdomain = `archived_${current.slug}_${dateStr}`;
+
+  const archivedTenant = await updateTenant(tenantId, {
+    status: 'archived',
+    subdomain: archivedSubdomain,
+    archivedAt: now.toISOString(),
+  });
+
+  if (!archivedTenant) {
+    throw new Error('Failed to archive tenant.');
+  }
+
+  return archivedTenant;
+}
+
+export async function restoreTenant(
+  tenantId: string,
+  newSubdomain?: string
+): Promise<Tenant> {
+  await ensureTenantModuleIndexes();
+  const detailData = await getTenantDetailData(tenantId);
+  if (!detailData.tenant) {
+    throw new Error('Tenant not found.');
+  }
+
+  const current = normalizeTenantDocument(detailData.tenant);
+
+  if (current.status !== 'archived') {
+    throw new Error('Only archived tenants can be restored.');
+  }
+
+  if (newSubdomain) {
+    const subdomainValidation = validateTenantSubdomain(newSubdomain);
+    if (subdomainValidation.errors.length > 0) {
+      throw new Error(subdomainValidation.errors[0]);
+    }
+
+    const listData = await getTenantListData();
+    const subdomainTaken = listData.tenants.some(
+      (t) => t.subdomain === subdomainValidation.normalized && t.tenantId !== tenantId
+    );
+
+    if (subdomainTaken) {
+      throw new Error(`Subdomain "${subdomainValidation.normalized}" is already in use.`);
+    }
+
+    return updateTenant(tenantId, {
+      status: 'disabled',
+      subdomain: subdomainValidation.normalized,
+      archivedAt: null,
+    });
+  }
+
+  const originalSubdomain = current.subdomain?.replace(/^archived_.*_/, '') || current.slug;
+
+  const listData = await getTenantListData();
+  const originalTaken = listData.tenants.some(
+    (t) => (t.subdomain || t.slug) === originalSubdomain && t.tenantId !== tenantId
+  );
+
+  if (originalTaken) {
+    throw new Error(
+      `The original subdomain "${originalSubdomain}" is already in use. Please provide a new subdomain to restore.`
+    );
+  }
+
+  return updateTenant(tenantId, {
+    status: 'disabled',
+    subdomain: originalSubdomain,
+    archivedAt: null,
+  });
 }
 
 export async function deleteTenant(

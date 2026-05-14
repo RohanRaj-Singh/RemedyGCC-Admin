@@ -1,13 +1,12 @@
 /**
  * Scanner Service
  * Strict admin-side scanner builder domain with MongoDB persistence.
+ * Scanner is now fully decoupled from Attribute Template - composition happens at Tenant level.
  */
 
 'use server';
 
-import { getAllTemplates, getTemplateById as getAttributeTemplateById } from '../attribute-template/service';
-import { AttributeTemplate } from '../attribute-template/types';
-import { Category, CreateScannerDto, LocalizedText, SaveScannerDraftDto, Scanner, ScannerDetail, ScannerFollowUpTrigger, ScannerStatus, ScannerVersion, ScannerVersionSummary, TemplateOption, ValidationResult } from './types';
+import { Category, CreateScannerDto, DuplicateScannerDto, LocalizedText, SaveScannerDraftDto, Scanner, ScannerDetail, ScannerFollowUpTrigger, ScannerStatus, ScannerVersion, ScannerVersionSummary, ScannerVersionStats, TemplateOption, ValidationResult } from './types';
 import { validateScannerDraft } from './utils/validation';
 import { createDefaultCategories, createId } from './utils/builder';
 import {
@@ -31,23 +30,32 @@ function toVersionSummary(version: ScannerVersion): ScannerVersionSummary {
     id: version.id,
     versionNumber: version.versionNumber,
     status: version.status,
+    isActive: version.isActive,
     sourceVersionId: version.sourceVersionId,
     responseCount: version.responseCount,
     publishedAt: version.publishedAt,
+    archivedAt: version.archivedAt,
     createdAt: version.createdAt,
     updatedAt: version.updatedAt,
-    isImmutable: version.status === 'published',
+    isImmutable: version.status === 'published' || version.status === 'archived',
   };
 }
 
-function resolveVersionForSummary(scanner: ScannerDocument): ScannerVersionDocument | null {
-  return scanner.versions.find((version) => version.status === 'draft')
-    ?? scanner.versions.find((version) => version.status === 'published')
-    ?? null;
+function computeVersionStats(versions: ScannerVersion[]): ScannerVersionStats {
+  return {
+    total: versions.length,
+    draft: versions.filter(v => v.status === 'draft').length,
+    published: versions.filter(v => v.status === 'published').length,
+    archived: versions.filter(v => v.status === 'archived').length,
+  };
+}
+
+function findActiveVersion(versions: ScannerVersion[]): ScannerVersion | null {
+  return versions.find(v => v.isActive) ?? null;
 }
 
 function toScannerSummary(scanner: ScannerDocument): Scanner {
-  const activeVersion = resolveVersionForSummary(scanner);
+  const activeVersion = findActiveVersion(scanner.versions);
   const publishedVersion = scanner.versions
     .filter((version) => version.status === 'published')
     .sort((left, right) => right.versionNumber - left.versionNumber)[0] ?? null;
@@ -56,13 +64,17 @@ function toScannerSummary(scanner: ScannerDocument): Scanner {
     .filter((version) => version.status === 'draft')
     .sort((left, right) => right.versionNumber - left.versionNumber)[0] ?? null;
 
-  const categories = activeVersion?.categories ?? [];
+  const categories = activeVersion?.categories ?? publishedVersion?.categories ?? draftVersion?.categories ?? [];
   const subdomainCount = categories.reduce((total, category) => total + category.subdomains.length, 0);
   const questionCount = categories.reduce(
     (total, category) =>
       total + category.subdomains.reduce((subTotal, subdomain) => subTotal + subdomain.questions.length, 0),
     0
   );
+
+  const lastPublished = scanner.versions
+    .filter((v) => v.publishedAt)
+    .sort((left, right) => (right.publishedAt ?? '').localeCompare(left.publishedAt ?? ''))[0];
 
   return {
     id: scanner.id,
@@ -75,8 +87,7 @@ function toScannerSummary(scanner: ScannerDocument): Scanner {
     ),
     draftVersionId: draftVersion?.id ?? null,
     publishedVersionId: publishedVersion?.id ?? null,
-    attributeTemplateId: activeVersion?.attributeTemplateId ?? publishedVersion?.attributeTemplateId ?? null,
-    attributeTemplateName: activeVersion?.attributeTemplateName ?? publishedVersion?.attributeTemplateName,
+    activeVersionId: activeVersion?.id ?? null,
     categoryCount: categories.length,
     subdomainCount,
     questionCount,
@@ -84,6 +95,8 @@ function toScannerSummary(scanner: ScannerDocument): Scanner {
     hasUnpublishedChanges:
       Boolean(draftVersion) &&
       (!publishedVersion || draftVersion.versionNumber !== publishedVersion.versionNumber),
+    versionStats: computeVersionStats(scanner.versions),
+    lastPublishedAt: lastPublished?.publishedAt ?? null,
     createdAt: scanner.createdAt,
     updatedAt: scanner.updatedAt,
   };
@@ -97,11 +110,13 @@ function toScannerDetail(scanner: ScannerDocument): ScannerDetail {
   const publishedVersion = scanner.versions
     .filter((version) => version.status === 'published')
     .sort((left, right) => right.versionNumber - left.versionNumber)[0] ?? null;
+  const activeVersion = findActiveVersion(scanner.versions);
 
   return {
     ...summary,
     draftVersion: draftVersion ? clone(draftVersion) : null,
     publishedVersion: publishedVersion ? clone(publishedVersion) : null,
+    activeVersion: activeVersion ? clone(activeVersion) : null,
     versions: scanner.versions
       .slice()
       .sort((left, right) => right.versionNumber - left.versionNumber)
@@ -112,15 +127,14 @@ function toScannerDetail(scanner: ScannerDocument): ScannerDetail {
 function createVersion(
   scannerId: string,
   versionNumber: number,
-  attributeTemplateId: string,
-  attributeTemplateName: string | undefined,
-  attributeTemplateSnapshot: AttributeTemplate | null,
   categories: Category[],
   followUpTriggers: ScannerFollowUpTrigger[],
   status: ScannerVersion['status'],
   sourceVersionId: string | null,
+  isActive = false,
   responseCount = 0,
-  publishedAt?: string
+  publishedAt?: string,
+  archivedAt?: string
 ): ScannerVersion {
   const now = new Date().toISOString();
   return {
@@ -128,21 +142,16 @@ function createVersion(
     scannerId,
     versionNumber,
     status,
+    isActive,
     sourceVersionId,
-    attributeTemplateId,
-    attributeTemplateName,
-    attributeTemplateSnapshot: attributeTemplateSnapshot ? clone(attributeTemplateSnapshot) : null,
     categories: clone(categories),
     followUpTriggers: clone(followUpTriggers),
     responseCount,
     publishedAt,
+    archivedAt,
     createdAt: now,
     updatedAt: now,
   };
-}
-
-async function resolveTemplateSnapshot(attributeTemplateId: string) {
-  return await getAttributeTemplateById(attributeTemplateId);
 }
 
 export async function getScanners(): Promise<Scanner[]> {
@@ -156,31 +165,18 @@ export async function getScannerById(id: string): Promise<ScannerDetail | null> 
 }
 
 export async function getTemplates(): Promise<TemplateOption[]> {
-  const templates = await getAllTemplates();
-  return templates.map((template) => ({
-    id: template.id,
-    name: template.name,
-    description: template.description,
-    streamCount: template.stream.length,
-    locationCount: template.location.length,
-    functionCount: template.function.length,
-    departmentCount: template.department.length,
-  }));
+  return [];
 }
 
-export async function getTemplateById(id: string): Promise<AttributeTemplate | null> {
-  return await getAttributeTemplateById(id);
+export async function getTemplateById(id: string): Promise<null> {
+  return null;
 }
 
 export async function createScanner(data: CreateScannerDto): Promise<ScannerDetail> {
-  const template = await resolveTemplateSnapshot(data.attributeTemplateId);
   const scannerId = createId('scanner');
   const draftVersion = createVersion(
     scannerId,
     1,
-    data.attributeTemplateId,
-    template?.name,
-    template,
     createDefaultCategories(),
     [],
     'draft',
@@ -193,13 +189,14 @@ export async function createScanner(data: CreateScannerDto): Promise<ScannerDeta
     description: data.description ? clone(data.description) : undefined,
     status: 'draft',
     latestVersionNumber: 1,
-    attributeTemplateId: data.attributeTemplateId,
-    attributeTemplateName: template?.name,
+    activeVersionId: null,
     categoryCount: 5,
     subdomainCount: 0,
     questionCount: 0,
     hasResponses: false,
     hasUnpublishedChanges: true,
+    versionStats: { total: 1, draft: 1, published: 0, archived: 0 },
+    lastPublishedAt: null,
     createdAt: draftVersion.createdAt,
     updatedAt: draftVersion.updatedAt,
   };
@@ -222,13 +219,9 @@ export async function saveScannerDraft(
     throw new Error('Create a new version before editing this scanner.');
   }
 
-  const template = await resolveTemplateSnapshot(data.attributeTemplateId);
   const now = new Date().toISOString();
 
   const versionUpdates: Partial<ScannerVersionDocument> = {
-    attributeTemplateId: data.attributeTemplateId,
-    attributeTemplateName: template?.name,
-    attributeTemplateSnapshot: template ? clone(template) : null,
     categories: clone(data.categories),
     followUpTriggers: clone(data.followUpTriggers),
     updatedAt: now,
@@ -295,11 +288,10 @@ export async function validateDraft(scannerId: string): Promise<ValidationResult
     {
       name: document.name,
       description: document.description,
-      attributeTemplateId: draft.attributeTemplateId,
       categories: draft.categories,
       followUpTriggers: draft.followUpTriggers,
     },
-    draft.attributeTemplateSnapshot
+    null
   );
 }
 
@@ -351,9 +343,6 @@ export async function createNewVersion(scannerId: string): Promise<ScannerDetail
   const newDraft = createVersion(
     document.id,
     nextVersionNumber,
-    latestPublished.attributeTemplateId,
-    latestPublished.attributeTemplateName,
-    latestPublished.attributeTemplateSnapshot,
     latestPublished.categories,
     latestPublished.followUpTriggers,
     'draft',
@@ -385,5 +374,117 @@ export async function archiveScanner(scannerId: string): Promise<ScannerDetail> 
   if (!updatedDocument) {
     throw new Error('Scanner not found');
   }
+  return toScannerDetail(updatedDocument);
+}
+
+export async function duplicateScanner(data: DuplicateScannerDto): Promise<ScannerDetail> {
+  const sourceDocument = await getScannerDetailData(data.sourceScannerId);
+  if (!sourceDocument) {
+    throw new Error('Source scanner not found');
+  }
+
+  const publishedVersion = sourceDocument.versions.find(v => v.status === 'published');
+  const draftVersion = sourceDocument.versions.find(v => v.status === 'draft');
+  const sourceVersion = publishedVersion ?? draftVersion;
+
+  if (!sourceVersion) {
+    throw new Error('Source scanner has no version to duplicate');
+  }
+
+  const scannerId = createId('scanner');
+  const newDraft = createVersion(
+    scannerId,
+    1,
+    sourceVersion.categories,
+    sourceVersion.followUpTriggers,
+    'draft',
+    null
+  );
+
+  const scannerBase: Omit<ScannerDocument, 'versions'> = {
+    id: scannerId,
+    name: clone(data.newName),
+    description: data.newDescription ? clone(data.newDescription) : undefined,
+    status: 'draft',
+    latestVersionNumber: 1,
+    activeVersionId: null,
+    categoryCount: sourceDocument.categoryCount,
+    subdomainCount: sourceDocument.subdomainCount,
+    questionCount: sourceDocument.questionCount,
+    hasResponses: false,
+    hasUnpublishedChanges: true,
+    versionStats: { total: 1, draft: 1, published: 0, archived: 0 },
+    lastPublishedAt: null,
+    createdAt: newDraft.createdAt,
+    updatedAt: newDraft.updatedAt,
+  };
+
+  const document = await insertScannerDocument(scannerBase, newDraft);
+  return toScannerDetail(document);
+}
+
+export async function archiveVersion(scannerId: string, versionId: string): Promise<ScannerDetail> {
+  const document = await getScannerDetailData(scannerId);
+  if (!document) {
+    throw new Error('Scanner not found');
+  }
+
+  const version = document.versions.find(v => v.id === versionId);
+  if (!version) {
+    throw new Error('Version not found');
+  }
+
+  if (version.isActive) {
+    throw new Error('Cannot archive the active version. Activate another version first.');
+  }
+
+  if (version.status === 'draft') {
+    throw new Error('Cannot archive a draft version.');
+  }
+
+  const now = new Date().toISOString();
+  const updatedDocument = await updateScannerDraftDocument(
+    scannerId,
+    versionId,
+    {},
+    { status: 'archived', archivedAt: now, updatedAt: now }
+  );
+
+  if (!updatedDocument) {
+    throw new Error('Failed to archive version');
+  }
+
+  return toScannerDetail(updatedDocument);
+}
+
+export async function activateVersion(scannerId: string, versionId: string): Promise<ScannerDetail> {
+  const document = await getScannerDetailData(scannerId);
+  if (!document) {
+    throw new Error('Scanner not found');
+  }
+
+  const version = document.versions.find(v => v.id === versionId);
+  if (!version) {
+    throw new Error('Version not found');
+  }
+
+  if (version.status !== 'published') {
+    throw new Error('Only published versions can be activated.');
+  }
+
+  const now = new Date().toISOString();
+
+  for (const v of document.versions) {
+    if (v.isActive && v.id !== versionId) {
+      await updateScannerDraftDocument(scannerId, v.id, {}, { isActive: false, updatedAt: now });
+    }
+  }
+
+  const updatedDocument = await updateScannerDraftDocument(scannerId, versionId, {}, { isActive: true, updatedAt: now });
+
+  if (!updatedDocument) {
+    throw new Error('Failed to activate version');
+  }
+
   return toScannerDetail(updatedDocument);
 }

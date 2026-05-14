@@ -166,6 +166,19 @@ class TenantService {
     const { data } = await this.getById(tenantId);
     return data?.branding ?? {};
   }
+
+  async archive(tenantId: string): Promise<ApiResponse<Tenant>> {
+    return request<Tenant>(`${TENANT_API_BASE}/${tenantId}/archive`, {
+      method: 'POST',
+    });
+  }
+
+  async restore(tenantId: string, newSubdomain?: string): Promise<ApiResponse<Tenant>> {
+    return request<Tenant>(`${TENANT_API_BASE}/${tenantId}/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ newSubdomain }),
+    });
+  }
 }
 
 export const tenantService = new TenantService();

@@ -63,6 +63,13 @@ export function DepartmentMappingInput({
     onChange(departments.filter((item) => item.id !== id));
   }
 
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAdd();
+    }
+  }
+
   const groupedDepartments = functions.map((func) => {
     const location = locationById.get(func.locationId) ?? null;
     const stream = location ? streamById.get(location.streamId) ?? null : null;
@@ -150,6 +157,7 @@ export function DepartmentMappingInput({
         <input
           value={newDepartment}
           onChange={(event) => setNewDepartment(event.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder="Department name"
           className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />

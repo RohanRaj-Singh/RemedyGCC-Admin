@@ -1,10 +1,9 @@
 /**
  * Scanner validation engine.
  * Shared by draft save flows and publish flows.
+ * Scanner validation is now decoupled from Attribute Template - tenant handles composition validation.
  */
 
-import { AttributeTemplate } from '../../attribute-template/types';
-import { validateAttributeTemplateHierarchy } from '../../attribute-template/utils';
 import {
   Category,
   LocalizedText,
@@ -273,38 +272,9 @@ function validateCategory(category: Category, issues: ValidationIssue[]) {
   });
 }
 
-export function validateAttributeTemplate(template: AttributeTemplate | null): ValidationIssue[] {
-  const issues: ValidationIssue[] = [];
-
-  if (!template) {
-    pushIssue(issues, {
-      code: 'ATTRIBUTE_TEMPLATE_REQUIRED',
-      level: 'attribute-template',
-      severity: 'error',
-      path: 'attributeTemplateId',
-      message: 'An attribute template is required before a scanner can be published.',
-      blocking: true,
-    });
-    return issues;
-  }
-
-  validateAttributeTemplateHierarchy(template).forEach((issue) => {
-    pushIssue(issues, {
-      code: issue.code,
-      level: 'attribute-template',
-      severity: issue.severity,
-      path: issue.path,
-      message: issue.message,
-      blocking: issue.blocking,
-    });
-  });
-
-  return issues;
-}
-
 export function validateScannerDraft(
   draft: SaveScannerDraftDto,
-  attributeTemplate: AttributeTemplate | null
+  _attributeTemplate: unknown
 ): ValidationResult {
   const issues: ValidationIssue[] = [];
 
@@ -317,17 +287,6 @@ export function validateScannerDraft(
     'scanner.name',
     {}
   );
-
-  if (!draft.attributeTemplateId) {
-    pushIssue(issues, {
-      code: 'ATTRIBUTE_TEMPLATE_REQUIRED',
-      level: 'scanner',
-      severity: 'error',
-      path: 'scanner.attributeTemplateId',
-      message: 'Select an attribute template before publishing.',
-      blocking: true,
-    });
-  }
 
   if (draft.categories.length !== 5) {
     pushIssue(issues, {
@@ -509,8 +468,6 @@ export function validateScannerDraft(
     }
   });
 
-  issues.push(...validateAttributeTemplate(attributeTemplate));
-
   return {
     isValid: issues.every((issue) => !issue.blocking),
     issues,
@@ -521,11 +478,10 @@ export function validatePublishedVersion(version: ScannerVersion): ValidationRes
   return validateScannerDraft(
     {
       name: { en: '', ar: '' },
-      attributeTemplateId: version.attributeTemplateId,
       description: undefined,
       categories: version.categories,
       followUpTriggers: version.followUpTriggers,
     },
-    version.attributeTemplateSnapshot
+    null
   );
 }

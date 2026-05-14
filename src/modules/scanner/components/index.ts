@@ -3,8 +3,6 @@ export { FollowUpTriggerEditor } from './FollowUpTriggerEditor';
 export { QuestionBuilder } from './QuestionBuilder';
 export { QuestionCard } from './QuestionCard';
 export { StepNavigation } from './StepNavigation';
-export { TemplateSelector } from './TemplateSelector';
-export { TemplatePreview } from './TemplatePreview';
 export { ValidationBanner } from './ValidationBanner';
 export { VersionHistory } from './VersionHistory';
 export { WeightSummary } from './WeightSummary';

@@ -121,6 +121,7 @@ export interface UpdateTenantDto {
   draftScannerId?: string | null;
   draftAttributeTemplateId?: string | null;
   branding?: Partial<BrandingConfig>;
+  archivedAt?: string | null;
 }
 
 export interface UpdateBrandingDto {

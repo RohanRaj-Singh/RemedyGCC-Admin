@@ -57,6 +57,13 @@ export function FunctionMappingInput({
     onChange(functions.filter((item) => item.id !== id));
   }
 
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAdd();
+    }
+  }
+
   const groupedFunctions = locations.map((location) => {
     const stream = streamById.get(location.streamId) ?? null;
     return {
@@ -141,6 +148,7 @@ export function FunctionMappingInput({
         <input
           value={newFunction}
           onChange={(event) => setNewFunction(event.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder="Function name"
           className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />

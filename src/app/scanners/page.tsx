@@ -102,13 +102,16 @@ export default function ScannerListPage() {
                     Name
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Template
+                    Versions
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Questions
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Last Published
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -127,9 +130,27 @@ export default function ScannerListPage() {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm text-gray-600">
-                        {scanner.attributeTemplateName || 'N/A'}
-                      </span>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-semibold text-gray-900">{scanner.versionStats.total}</span>
+                        <span className="text-gray-400">total</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                        {scanner.versionStats.draft > 0 && (
+                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
+                            {scanner.versionStats.draft} draft
+                          </span>
+                        )}
+                        {scanner.versionStats.published > 0 && (
+                          <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
+                            {scanner.versionStats.published} published
+                          </span>
+                        )}
+                        {scanner.versionStats.archived > 0 && (
+                          <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">
+                            {scanner.versionStats.archived} archived
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-600">
@@ -142,9 +163,6 @@ export default function ScannerListPage() {
                     <td className="px-6 py-4">
                       <div className="flex flex-col items-start gap-1">
                         {getStatusBadge(scanner.status)}
-                        <span className="text-xs text-gray-500">
-                          v{scanner.latestVersionNumber}
-                        </span>
                         {scanner.hasUnpublishedChanges && (
                           <span className="text-xs text-amber-600">
                             Draft pending
@@ -152,13 +170,30 @@ export default function ScannerListPage() {
                         )}
                       </div>
                     </td>
+                    <td className="px-6 py-4">
+                      {scanner.lastPublishedAt ? (
+                        <span className="text-sm text-gray-600">
+                          {new Date(scanner.lastPublishedAt).toLocaleDateString()}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-400">Not published</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-right">
-                      <Link
-                        href={`/scanners/${scanner.id}/edit`}
-                        className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                      >
-                        Edit
-                      </Link>
+                      <div className="flex items-center justify-end gap-3">
+                        <Link
+                          href={`/scanners/${scanner.id}`}
+                          className="text-gray-500 hover:text-gray-700 text-sm"
+                        >
+                          View
+                        </Link>
+                        <Link
+                          href={`/scanners/${scanner.id}/edit`}
+                          className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                        >
+                          Edit
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}

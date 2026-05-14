@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
@@ -8,15 +8,13 @@ import {
   CheckCircle2,
   CopyPlus,
   Languages,
-  ListTree,
   Save,
   Sparkles,
+  X,
 } from 'lucide-react';
-import { AttributeTemplate } from '../../attribute-template/types';
 import {
   createNewVersion,
   createScanner,
-  getTemplateById,
   publishScanner,
   saveScannerDraft,
 } from '../service';
@@ -31,8 +29,52 @@ import { WeightBuilder } from './WeightBuilder';
 import { FloatingIssueButton } from './FloatingIssueButton';
 import { StepNavigation } from './StepNavigation';
 import { StickyHeader } from './StickyHeader';
-import { TemplatePreview } from './TemplatePreview';
-import { TemplateSelector } from './TemplateSelector';
+
+interface UnsavedChangesDialogProps {
+  isOpen: boolean;
+  onSave: () => void;
+  onDiscard: () => void;
+  onCancel: () => void;
+}
+
+function UnsavedChangesDialog({ isOpen, onSave, onDiscard, onCancel }: UnsavedChangesDialogProps) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="rounded-full bg-amber-100 p-2">
+            <AlertTriangle className="h-5 w-5 text-amber-600" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900">Unsaved Changes</h3>
+        </div>
+        <p className="text-gray-600 mb-6">
+          You have unsaved changes that will be lost if you leave this page.
+        </p>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onDiscard}
+            className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+          >
+            Discard
+          </button>
+          <button
+            onClick={onSave}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+          >
+            Save Draft
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface ScannerFormProps {
   scanner?: ScannerDetail | null;
@@ -41,7 +83,7 @@ interface ScannerFormProps {
 const steps = [
   {
     title: 'Basic Info',
-    description: 'Name the scanner, describe the methodology, and attach the attribute template.',
+    description: 'Name the scanner and describe the methodology.',
   },
   {
     title: 'Structure',
@@ -67,11 +109,6 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
   const [status, setStatus] = useState<ScannerStatus>(scanner?.status ?? 'draft');
   const [name, setName] = useState(scanner?.name ?? emptyText());
   const [description, setDescription] = useState(scanner?.description ?? emptyText());
-  const [attributeTemplateId, setAttributeTemplateId] = useState(
-    scanner?.draftVersion?.attributeTemplateId
-      ?? scanner?.publishedVersion?.attributeTemplateId
-      ?? ''
-  );
   const [categories, setCategories] = useState(() => {
     let initial = scanner?.draftVersion?.categories ?? scanner?.publishedVersion?.categories;
     if (!initial || initial.length !== 5) {
@@ -90,14 +127,11 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
   const [versions, setVersions] = useState(scanner?.versions ?? []);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>(categories[0]?.id);
   const [selectedSubdomainId, setSelectedSubdomainId] = useState<string | undefined>(categories[0]?.subdomains[0]?.id);
-  const [template, setTemplate] = useState<AttributeTemplate | null>(
-    scanner?.draftVersion?.attributeTemplateSnapshot
-      ?? scanner?.publishedVersion?.attributeTemplateSnapshot
-      ?? null
-  );
   const [activeStep, setActiveStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const hasDraftVersion = versions.some((version) => version.status === 'draft') || !scannerId;
   const hasResponses = versions.some((version) => version.responseCount > 0);
@@ -109,29 +143,14 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
     {
       name,
       description,
-      attributeTemplateId,
       categories,
       followUpTriggers,
     },
-    template
+    null
   );
   const blockingIssues = validation.issues.filter((issue) => issue.blocking);
   const counts = getScannerCounts(categories);
   const scannerWeight = sumWeights(categories);
-
-  useEffect(() => {
-    async function loadTemplate() {
-      if (!attributeTemplateId) {
-        setTemplate(null);
-        return;
-      }
-
-      const result = await getTemplateById(attributeTemplateId);
-      setTemplate(result);
-    }
-
-    void loadTemplate();
-  }, [attributeTemplateId]);
 
   useEffect(() => {
     if (!selectedCategoryId || !categories.some((category) => category.id === selectedCategoryId)) {
@@ -190,16 +209,48 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
     }
   }, [categories, selectedCategoryId, selectedSubdomainId]);
 
+  const initialStateRef = useCallback(() => ({
+    name: scanner?.name ?? emptyText(),
+    description: scanner?.description ?? emptyText(),
+    categories: scanner?.draftVersion?.categories ?? scanner?.publishedVersion?.categories ?? createDefaultCategories(),
+    followUpTriggers: scanner?.draftVersion?.followUpTriggers ?? scanner?.publishedVersion?.followUpTriggers ?? [],
+  }), [scanner]);
+
+  const [initialState] = useState(initialStateRef);
+
+  useEffect(() => {
+    const hasChanges =
+      JSON.stringify(name) !== JSON.stringify(initialState.name) ||
+      JSON.stringify(description) !== JSON.stringify(initialState.description) ||
+      JSON.stringify(categories) !== JSON.stringify(initialState.categories) ||
+      JSON.stringify(followUpTriggers) !== JSON.stringify(initialState.followUpTriggers);
+    setHasUnsavedChanges(hasChanges);
+  }, [name, description, categories, followUpTriggers, initialState]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const handleRouteChange = useCallback(() => {
+    if (hasUnsavedChanges) {
+      setShowUnsavedDialog(true);
+      throw new Error('Navigation blocked due to unsaved changes');
+    }
+  }, [hasUnsavedChanges]);
+
   function applyScannerDetail(detail: ScannerDetail) {
     setScannerId(detail.id);
     setStatus(detail.status);
     setName(detail.name);
     setDescription(detail.description ?? emptyText());
-    setAttributeTemplateId(
-      detail.draftVersion?.attributeTemplateId
-        ?? detail.publishedVersion?.attributeTemplateId
-        ?? ''
-    );
     let nextCategories = detail.draftVersion?.categories ?? detail.publishedVersion?.categories;
     if (!nextCategories || nextCategories.length !== 5) {
       nextCategories = createDefaultCategories();
@@ -212,11 +263,7 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
     setCategories(nextCategories);
     setFollowUpTriggers(detail.draftVersion?.followUpTriggers ?? detail.publishedVersion?.followUpTriggers ?? []);
     setVersions(detail.versions);
-    setTemplate(
-      detail.draftVersion?.attributeTemplateSnapshot
-        ?? detail.publishedVersion?.attributeTemplateSnapshot
-        ?? null
-    );
+    setHasUnsavedChanges(false);
   }
 
   async function persistDraft() {
@@ -226,7 +273,6 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
       const created = await createScanner({
         name,
         description,
-        attributeTemplateId,
       });
       nextScannerId = created.id;
       setScannerId(created.id);
@@ -235,7 +281,6 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
     const saved = await saveScannerDraft(nextScannerId, {
       name,
       description,
-      attributeTemplateId,
       categories,
       followUpTriggers,
     });
@@ -526,26 +571,6 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
                     </div>
                   </div>
                 </div>
-
-                <div className="pt-8 border-t border-gray-100">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="rounded-2xl bg-purple-50 p-3 text-purple-600">
-                      <ListTree className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-900">Attribute template</h3>
-                      <p className="mt-1 text-sm text-gray-600">Choose the strict assignment hierarchy for this version.</p>
-                    </div>
-                  </div>
-                  <div className="grid gap-6 md:grid-cols-[300px_minmax(0,1fr)]">
-                    <TemplateSelector
-                      selectedTemplateId={attributeTemplateId}
-                      disabled={!hasDraftVersion || saving}
-                      onSelect={setAttributeTemplateId}
-                    />
-                    <TemplatePreview templateId={attributeTemplateId} />
-                  </div>
-                </div>
               </div>
             )}
 
@@ -677,6 +702,19 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
       </div>
 
       <FloatingIssueButton issues={validation.issues} onNavigate={handleIssueClick} />
+
+      <UnsavedChangesDialog
+        isOpen={showUnsavedDialog}
+        onSave={async () => {
+          setShowUnsavedDialog(false);
+          await handleSaveDraft();
+        }}
+        onDiscard={() => {
+          setShowUnsavedDialog(false);
+          router.push('/scanners');
+        }}
+        onCancel={() => setShowUnsavedDialog(false)}
+      />
     </div>
   );
 }

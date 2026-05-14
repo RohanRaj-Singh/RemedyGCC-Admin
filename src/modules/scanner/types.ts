@@ -1,9 +1,8 @@
 /**
  * Scanner Module Types
  * Strict admin-side scanner builder domain for RemedyGCC.
+ * Scanner is now fully decoupled from Attribute Template - composition happens at Tenant level.
  */
-
-import { AttributeTemplate } from '../attribute-template/types';
 
 export interface LocalizedText {
   en: string;
@@ -11,7 +10,9 @@ export interface LocalizedText {
 }
 
 export type ScannerStatus = 'draft' | 'published' | 'archived';
-export type ScannerVersionStatus = 'draft' | 'published';
+export type ScannerVersionStatus = 'draft' | 'published' | 'archived';
+
+export type ScannerVersionActiveStatus = 'active' | 'inactive';
 
 export interface QuestionOption {
   id: string;
@@ -60,14 +61,13 @@ export interface ScannerVersion {
   scannerId: string;
   versionNumber: number;
   status: ScannerVersionStatus;
+  isActive: boolean;
   sourceVersionId: string | null;
-  attributeTemplateId: string;
-  attributeTemplateName?: string;
-  attributeTemplateSnapshot: AttributeTemplate | null;
   categories: Category[];
   followUpTriggers: ScannerFollowUpTrigger[];
   responseCount: number;
   publishedAt?: string;
+  archivedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -76,12 +76,21 @@ export interface ScannerVersionSummary {
   id: string;
   versionNumber: number;
   status: ScannerVersionStatus;
+  isActive: boolean;
   sourceVersionId: string | null;
   responseCount: number;
   publishedAt?: string;
+  archivedAt?: string;
   createdAt: string;
   updatedAt: string;
   isImmutable: boolean;
+}
+
+export interface ScannerVersionStats {
+  total: number;
+  draft: number;
+  published: number;
+  archived: number;
 }
 
 export interface Scanner {
@@ -92,13 +101,14 @@ export interface Scanner {
   latestVersionNumber: number;
   draftVersionId: string | null;
   publishedVersionId: string | null;
-  attributeTemplateId: string | null;
-  attributeTemplateName?: string;
+  activeVersionId: string | null;
   categoryCount: number;
   subdomainCount: number;
   questionCount: number;
   hasResponses: boolean;
   hasUnpublishedChanges: boolean;
+  versionStats: ScannerVersionStats;
+  lastPublishedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -106,6 +116,7 @@ export interface Scanner {
 export interface ScannerDetail extends Scanner {
   draftVersion: ScannerVersion | null;
   publishedVersion: ScannerVersion | null;
+  activeVersion: ScannerVersion | null;
   versions: ScannerVersionSummary[];
 }
 
@@ -155,13 +166,17 @@ export interface ValidationResult {
 export interface CreateScannerDto {
   name: LocalizedText;
   description?: LocalizedText;
-  attributeTemplateId: string;
+}
+
+export interface DuplicateScannerDto {
+  sourceScannerId: string;
+  newName: LocalizedText;
+  newDescription?: LocalizedText;
 }
 
 export interface SaveScannerDraftDto {
   name: LocalizedText;
   description?: LocalizedText;
-  attributeTemplateId: string;
   categories: Category[];
   followUpTriggers: ScannerFollowUpTrigger[];
 }
