@@ -1,23 +1,40 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Clock, 
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Clock,
   ChevronRight,
   LayoutTemplate,
-  Loader2
+  Loader2,
+  X,
+  AlertTriangle,
+  Building2,
 } from 'lucide-react';
 import { AttributeTemplate } from '../types';
 import { getAllTemplates, deleteTemplate } from '../service';
+import { tenantService } from '@/services/tenant-service';
+
+interface TenantReference {
+  id: string;
+  name: string;
+  subdomain: string;
+  status: string;
+}
 
 export function TemplateList() {
   const [templates, setTemplates] = useState<AttributeTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Delete confirmation state
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState<AttributeTemplate | null>(null);
+  const [usingTenants, setUsingTenants] = useState<TenantReference[]>([]);
+  const [checkingUsage, setCheckingUsage] = useState(false);
 
   useEffect(() => {
     loadTemplates();
@@ -34,21 +51,46 @@ export function TemplateList() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this template?')) {
-      return;
-    }
+  const handleDeleteClick = useCallback((template: AttributeTemplate) => {
+    setTemplateToDelete(template);
+    setCheckingUsage(true);
 
-    setDeletingId(id);
+    // Check which tenants use this template
+    tenantService.getTenantsByTemplate(template.id).then((result) => {
+      setCheckingUsage(false);
+      if (result.data) {
+        setUsingTenants(result.data);
+        setShowConfirmDialog(true);
+      }
+    }).catch(() => {
+      setCheckingUsage(false);
+      setUsingTenants([]);
+      setShowConfirmDialog(true);
+    });
+  }, []);
+
+  const confirmDelete = async () => {
+    if (!templateToDelete) return;
+
+    setDeletingId(templateToDelete.id);
+    setShowConfirmDialog(false);
+
     try {
-      await deleteTemplate(id);
-      setTemplates(templates.filter(t => t.id !== id));
+      await deleteTemplate(templateToDelete.id);
+      setTemplates(templates.filter(t => t.id !== templateToDelete.id));
     } catch (error) {
       console.error('Failed to delete template:', error);
       alert('Failed to delete template. Please try again.');
     } finally {
       setDeletingId(null);
+      setTemplateToDelete(null);
     }
+  };
+
+  const cancelDelete = () => {
+    setShowConfirmDialog(false);
+    setTemplateToDelete(null);
+    setUsingTenants([]);
   };
 
   const formatDate = (dateString: string) => {
@@ -199,12 +241,12 @@ export function TemplateList() {
                     <Edit className="w-4 h-4" />
                   </Link>
                   <button
-                    onClick={() => handleDelete(template.id)}
-                    disabled={deletingId === template.id}
+                    onClick={() => handleDeleteClick(template)}
+                    disabled={deletingId === template.id || checkingUsage}
                     className="p-2 text-gray-500 hover:text-red-600 hover:bg-white rounded-md transition-colors disabled:opacity-50"
                     title="Delete"
                   >
-                    {deletingId === template.id ? (
+                    {deletingId === template.id || checkingUsage ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <Trash2 className="w-4 h-4" />
@@ -227,6 +269,111 @@ export function TemplateList() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={cancelDelete}
+          />
+
+          {/* Dialog */}
+          <div className="relative bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                {usingTenants.length > 0 ? (
+                  <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                    <AlertTriangle className="w-5 h-5 text-red-600" />
+                  </div>
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                    <Trash2 className="w-5 h-5 text-amber-600" />
+                  </div>
+                )}
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {usingTenants.length > 0 ? 'Cannot Delete Template' : 'Delete Template'}
+                </h3>
+              </div>
+              <button
+                onClick={cancelDelete}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              {usingTenants.length > 0 ? (
+                <>
+                  <p className="text-gray-600 mb-4">
+                    This attribute template is currently being used by the following surveys and cannot be deleted:
+                  </p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {usingTenants.map((tenant) => (
+                      <div
+                        key={tenant.id}
+                        className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                      >
+                        <Building2 className="w-4 h-4 text-gray-400" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{tenant.name}</p>
+                          <p className="text-sm text-gray-500">{tenant.subdomain}.remedygcc.com</p>
+                        </div>
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                          tenant.status === 'active'
+                            ? 'bg-green-100 text-green-700'
+                            : tenant.status === 'draft'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {tenant.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-gray-600 mb-4">
+                    Are you sure you want to delete this attribute template? This action cannot be undone.
+                  </p>
+                  {templateToDelete && (
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="font-medium text-gray-900">{templateToDelete.name}</p>
+                      {templateToDelete.description && (
+                        <p className="text-sm text-gray-500 mt-1">{templateToDelete.description}</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-100 bg-gray-50">
+              <button
+                onClick={cancelDelete}
+                className="px-5 py-2.5 font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                {usingTenants.length > 0 ? 'Cancel' : 'Cancel'}
+              </button>
+              {usingTenants.length === 0 && (
+                <button
+                  onClick={confirmDelete}
+                  disabled={deletingId !== null}
+                  className="px-5 py-2.5 font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {deletingId ? 'Deleting...' : 'Delete Template'}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

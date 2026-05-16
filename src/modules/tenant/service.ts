@@ -758,6 +758,16 @@ export async function isSlugAvailable(
   );
 }
 
+export async function checkSubdomainAvailable(subdomain: string): Promise<boolean> {
+  await ensureTenantModuleIndexes();
+  const normalized = subdomain.toLowerCase().trim();
+  const listData = await getTenantListData();
+
+  return !listData.tenants.some(
+    (tenant) => tenant.subdomain === normalized,
+  );
+}
+
 export async function createTenant(data: CreateTenantDto): Promise<Tenant> {
   await ensureTenantModuleIndexes();
   const listData = await getTenantListData();

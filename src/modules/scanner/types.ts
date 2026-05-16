@@ -111,6 +111,7 @@ export interface Scanner {
   lastPublishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  duplicatedFromScannerId?: string | null;
 }
 
 export interface ScannerDetail extends Scanner {

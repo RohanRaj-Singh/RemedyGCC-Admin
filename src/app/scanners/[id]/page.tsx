@@ -168,6 +168,14 @@ export default function ScannerOverviewPage() {
                     {scanner.status.charAt(0).toUpperCase() + scanner.status.slice(1)}
                   </span>
                 </div>
+                {scanner.draftVersionId && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-500">Draft Status</span>
+                    <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                      Editable
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">Active Version</span>
                   <span className="text-sm font-medium text-gray-900">
@@ -175,8 +183,10 @@ export default function ScannerOverviewPage() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Total Versions</span>
-                  <span className="text-sm font-medium text-gray-900">{scanner.versionStats.total}</span>
+                  <span className="text-sm text-gray-500">Version Stats</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {scanner.versionStats.draft} draft, {scanner.versionStats.published} published
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">Last Updated</span>

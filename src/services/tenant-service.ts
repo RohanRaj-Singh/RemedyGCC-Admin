@@ -67,6 +67,13 @@ export interface TenantFilters {
 }
 
 class TenantService {
+  async checkSubdomainAvailability(subdomain: string): Promise<ApiResponse<{ available: boolean }>> {
+    return request<{ available: boolean }>(`${TENANT_API_BASE}/check-subdomain`, {
+      method: 'POST',
+      body: JSON.stringify({ subdomain }),
+    });
+  }
+
   async getAll(filters?: TenantFilters): Promise<ApiResponse<Tenant[]>> {
     const params = new URLSearchParams();
     if (filters?.status) {
@@ -178,6 +185,12 @@ class TenantService {
       method: 'POST',
       body: JSON.stringify({ newSubdomain }),
     });
+  }
+
+  async getTenantsByTemplate(templateId: string): Promise<ApiResponse<{ id: string; name: string; subdomain: string; status: string }[]>> {
+    return request<{ id: string; name: string; subdomain: string; status: string }[]>(
+      `${TENANT_API_BASE}/by-template?templateId=${encodeURIComponent(templateId)}`
+    );
   }
 }
 

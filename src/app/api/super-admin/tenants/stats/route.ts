@@ -1,10 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getTenantStats } from '@/modules/tenant/service';
 import { apiErrorResponse } from '../_utils';
+import { requireApiAuth } from '@/app/api/_utils/auth-guard';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireApiAuth(request);
+  if (!auth.success) return auth.response!;
+
   try {
     const stats = await getTenantStats();
 

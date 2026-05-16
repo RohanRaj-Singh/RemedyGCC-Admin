@@ -17,18 +17,22 @@ import {
   createScanner,
   publishScanner,
   saveScannerDraft,
+  duplicateScanner,
 } from '../service';
-import { ValidationIssue, ScannerDetail, ScannerStatus } from '../types';
+import { ValidationIssue, ScannerDetail, ScannerStatus, ScannerVersion } from '../types';
 import { createDefaultCategories, emptyText } from '../utils/builder';
 import { FIXED_CATEGORIES } from '../constants/categories';
 import { getCategoryMetrics, getScannerCounts, getSubdomainMetrics, sumWeights } from '../utils/metrics';
 import { validateScannerDraft } from '../utils/validation';
+import { detectScannerChanges, checkSaveProtection, type ChangeImpact } from '../utils/change-impact';
 import { StructureBuilder } from './StructureBuilder';
 import { ContentBuilder } from './ContentBuilder';
 import { WeightBuilder } from './WeightBuilder';
 import { FloatingIssueButton } from './FloatingIssueButton';
 import { StepNavigation } from './StepNavigation';
 import { StickyHeader } from './StickyHeader';
+import { BreakingChangeModal } from './BreakingChangeModal';
+import { ChangeImpactIndicator } from './ChangeImpactIndicator';
 
 interface UnsavedChangesDialogProps {
   isOpen: boolean;
@@ -132,9 +136,12 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showBreakingChangeModal, setShowBreakingChangeModal] = useState(false);
+  const [breakingChanges, setBreakingChanges] = useState<ChangeImpact[]>([]);
 
   const hasDraftVersion = versions.some((version) => version.status === 'draft') || !scannerId;
-  const hasResponses = versions.some((version) => version.responseCount > 0);
+  const totalResponses = versions.reduce((sum, v) => sum + v.responseCount, 0);
+  const hasResponses = totalResponses > 0;
   const selectedCategory = categories.find((category) => category.id === selectedCategoryId);
   const selectedSubdomain = selectedCategory?.subdomains.find(
     (subdomain) => subdomain.id === selectedSubdomainId
@@ -290,6 +297,25 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
   }
 
   async function handleSaveDraft() {
+    // Check for breaking changes if scanner has responses
+    if (hasResponses && scanner?.draftVersion) {
+      const changeResult = detectScannerChanges(
+        scanner.draftVersion,
+        {
+          ...scanner.draftVersion,
+          categories,
+          followUpTriggers,
+        } as ScannerVersion
+      );
+      const protection = checkSaveProtection(totalResponses, changeResult.impacts);
+
+      if (protection.blocked) {
+        setBreakingChanges(changeResult.impacts.filter((i: ChangeImpact) => i.type === 'breaking'));
+        setShowBreakingChangeModal(true);
+        return;
+      }
+    }
+
     setSaving(true);
     setError(null);
 
@@ -302,6 +328,20 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
       setError(saveError instanceof Error ? saveError.message : 'Failed to save draft.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDuplicateScanner() {
+    if (!scanner) return;
+
+    try {
+      const duplicated = await duplicateScanner({
+        sourceScannerId: scanner.id,
+        newName: { en: `${scanner.name.en} (Copy)`, ar: `${scanner.name.ar} (Copy)` },
+      });
+      router.push(`/scanners/${duplicated.id}/edit`);
+    } catch (error) {
+      console.error('Failed to duplicate scanner:', error);
     }
   }
 
@@ -470,6 +510,17 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
+        )}
+
+        {hasResponses && scanner?.draftVersion && (
+          <ChangeImpactIndicator
+            impacts={detectScannerChanges(scanner.draftVersion, {
+              ...scanner.draftVersion,
+              categories,
+              followUpTriggers,
+            } as ScannerVersion).impacts}
+            responseCount={totalResponses}
+          />
         )}
 
         {!hasDraftVersion && (
@@ -714,6 +765,20 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
           router.push('/scanners');
         }}
         onCancel={() => setShowUnsavedDialog(false)}
+      />
+
+      <BreakingChangeModal
+        isOpen={showBreakingChangeModal}
+        onClose={() => setShowBreakingChangeModal(false)}
+        onDuplicate={handleDuplicateScanner}
+        scannerName={scanner?.name.en ?? 'Scanner'}
+        scannerId={scanner?.id ?? ''}
+        responseCount={totalResponses}
+        blockingChanges={breakingChanges.map(c => ({
+          code: c.code,
+          message: c.message,
+          path: c.path,
+        }))}
       />
     </div>
   );

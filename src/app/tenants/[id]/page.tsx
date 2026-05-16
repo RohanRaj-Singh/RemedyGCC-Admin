@@ -6,34 +6,116 @@ import Link from 'next/link';
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  ChevronRight,
   Edit,
+  Eye,
+  Globe,
   Loader2,
-  RadioTower,
-  Settings2,
+  Palette,
+  Play,
+  Send,
+  Settings,
+  Shield,
   ShieldOff,
+  Sparkles,
   Trash2,
+  Users,
 } from 'lucide-react';
-import type { RuntimeConfigOption, Tenant } from '@/modules/tenant/types';
+import type { Tenant } from '@/modules/tenant/types';
 import { tenantService } from '@/services/tenant-service';
 import { BrandingPreviewCard } from '@/components/tenants';
-import {
-  getTenantHostname,
-  getTenantPublishStateMeta,
-  getTenantStatusMeta,
-} from '@/modules/tenant/utils';
+import { getTenantHostname } from '@/modules/tenant/utils';
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) {
-    return 'Not available';
-  }
-
+  if (!value) return '—';
   return new Date(value).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+  });
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  return new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+interface StatusConfig {
+  label: string;
+  description: string;
+  badge: string;
+  badgeColor: string;
+  badgeBg: string;
+  iconBg: string;
+  iconColor: string;
+}
+
+const STATUS_MAP: Record<string, StatusConfig> = {
+  draft: {
+    label: 'Draft',
+    description: 'Your survey is being set up.',
+    badge: 'Draft Setup',
+    badgeColor: '#b45309',
+    badgeBg: 'rgba(245, 158, 11, 0.15)',
+    iconBg: 'rgba(245, 158, 11, 0.15)',
+    iconColor: '#d97706',
+  },
+  active: {
+    label: 'Live',
+    description: 'Your survey is collecting responses.',
+    badge: 'Live',
+    badgeColor: '#15803d',
+    badgeBg: 'rgba(34, 197, 94, 0.15)',
+    iconBg: 'rgba(34, 197, 94, 0.15)',
+    iconColor: '#16a34a',
+  },
+  disabled: {
+    label: 'Disabled',
+    description: 'Survey is paused. All data is preserved.',
+    badge: 'Disabled',
+    badgeColor: '#64748b',
+    badgeBg: 'rgba(100, 116, 139, 0.15)',
+    iconBg: 'rgba(100, 116, 139, 0.15)',
+    iconColor: '#64748b',
+  },
+  archived: {
+    label: 'Archived',
+    description: 'Survey is closed for record-keeping.',
+    badge: 'Archived',
+    badgeColor: '#6b7280',
+    badgeBg: 'rgba(107, 114, 128, 0.12)',
+    iconBg: 'rgba(107, 114, 128, 0.12)',
+    iconColor: '#6b7280',
+  },
+};
+
+function getNextAction(tenant: Tenant | null): { message: string; action?: string; complete: boolean } | null {
+  if (!tenant) return null;
+  if (tenant.status === 'archived') return null;
+
+  if (!tenant.draftScannerId) {
+    return { message: 'Connect a survey scanner to define your questions.', action: 'Add Scanner', complete: false };
+  }
+  if (!tenant.draftAttributeTemplateId) {
+    return { message: 'Connect an attribute template to structure responses.', action: 'Add Template', complete: false };
+  }
+  if (tenant.status === 'draft') {
+    return { message: 'Your survey is ready to go live!', action: 'Go Live', complete: false };
+  }
+  if (tenant.status === 'disabled') {
+    return { message: 'Re-enable your survey to collect responses again.', action: 'Re-enable', complete: false };
+  }
+  if (tenant.status === 'active') {
+    return { message: 'Your survey is live and collecting responses.', complete: true };
+  }
+  return null;
 }
 
 export default function TenantDetailsPage() {
@@ -42,48 +124,29 @@ export default function TenantDetailsPage() {
   const tenantId = params.id as string;
 
   const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [runtimeConfigs, setRuntimeConfigs] = useState<RuntimeConfigOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
   const [restoreSubdomain, setRestoreSubdomain] = useState('');
 
-  const statusMeta = useMemo(
-    () => (tenant ? getTenantStatusMeta(tenant.status) : null),
-    [tenant],
-  );
-  const publishStateMeta = useMemo(
-    () => getTenantPublishStateMeta(tenant, tenant?.publishingPreview ?? null),
-    [tenant],
-  );
+  const statusConfig = useMemo(() => {
+    if (!tenant) return null;
+    return STATUS_MAP[tenant.status] || STATUS_MAP.draft;
+  }, [tenant]);
 
-  const isDeleteAllowed = Boolean(
-    tenant
-    && tenant.status === 'draft'
-    && tenant.runtimeConfigCount === 0
-    && tenant.submissionCount === 0
-    && !tenant.activeRuntimeConfigId,
-  );
+  const nextAction = useMemo(() => getNextAction(tenant), [tenant]);
+
+  const canDelete = Boolean(tenant?.status === 'draft' && !tenant?.activeRuntimeConfigId);
 
   const loadTenant = useCallback(async () => {
     try {
       setIsLoading(true);
-      const [tenantResult, runtimeResult] = await Promise.all([
-        tenantService.getById(tenantId),
-        tenantService.getRuntimeConfigOptions(tenantId),
-      ]);
-
-      if (tenantResult.error || !tenantResult.data) {
-        throw new Error(tenantResult.error || 'Tenant not found.');
-      }
-      if (runtimeResult.error) {
-        throw new Error(runtimeResult.error);
-      }
-
-      setTenant(tenantResult.data);
-      setRuntimeConfigs(runtimeResult.data ?? []);
+      const { data, error: loadError } = await tenantService.getById(tenantId);
+      if (loadError || !data) throw new Error(loadError || 'Tenant not found.');
+      setTenant(data);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load tenant.');
@@ -92,57 +155,68 @@ export default function TenantDetailsPage() {
     }
   }, [tenantId]);
 
-  useEffect(() => {
-    void loadTenant();
-  }, [loadTenant]);
+  useEffect(() => { void loadTenant(); }, [loadTenant]);
 
-  const updateStatus = useCallback(async (status: Tenant['status']) => {
-    if (!tenant) {
-      return;
-    }
+  const handleGoLive = useCallback(async () => {
+    if (!tenant) return;
+    if (tenant.status === 'active') return;
 
     try {
       setIsActing(true);
       setError(null);
-      const { data, error: updateError } = await tenantService.update(tenant.id, { status });
-      if (updateError || !data) {
-        throw new Error(updateError || 'Failed to update tenant status.');
+      setSuccessMessage(null);
+
+      if (tenant.status === 'draft' || tenant.status === 'disabled') {
+        if (!tenant.draftScannerId || !tenant.draftAttributeTemplateId) {
+          setError('Please complete the survey setup before going live.');
+          return;
+        }
+        const { error: publishError } = await tenantService.publishRuntime(tenant.id, true);
+        if (publishError) throw new Error(publishError);
       }
 
-      setTenant(data);
+      if (tenant.status === 'disabled') {
+        const { error: updateError } = await tenantService.update(tenant.id, { status: 'active' });
+        if (updateError) throw new Error(updateError);
+      }
+
       await loadTenant();
+      setSuccessMessage(tenant.status === 'disabled' ? 'Survey re-enabled successfully!' : 'Survey is now live!');
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : 'Failed to update tenant.');
+      setError(actionError instanceof Error ? actionError.message : 'Failed to go live.');
     } finally {
       setIsActing(false);
     }
-  }, [loadTenant, tenant]);
+  }, [tenant, loadTenant]);
 
-  const handleDelete = useCallback(async () => {
-    if (!tenant) {
-      return;
-    }
-
-    const confirmationText = window.prompt(
-      `Type "${tenant.slug}" to permanently delete this draft tenant.`,
-      '',
-    );
-
-    if (!confirmationText) {
-      return;
-    }
-
+  const updateStatus = useCallback(async (newStatus: Tenant['status']) => {
+    if (!tenant) return;
     try {
       setIsActing(true);
       setError(null);
-      const { error: deleteError } = await tenantService.delete(tenant.id, confirmationText);
-      if (deleteError) {
-        throw new Error(deleteError);
-      }
+      setSuccessMessage(null);
+      const { data, error: updateError } = await tenantService.update(tenant.id, { status: newStatus });
+      if (updateError || !data) throw new Error(updateError || 'Failed to update.');
+      setTenant(data);
+      setSuccessMessage(newStatus === 'active' ? 'Survey is now live!' : 'Survey has been disabled.');
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Failed to update status.');
+    } finally {
+      setIsActing(false);
+    }
+  }, [tenant]);
 
+  const handleDelete = useCallback(async () => {
+    if (!tenant) return;
+    const confirmationText = window.prompt(`Type "${tenant.slug}" to delete this draft tenant.`);
+    if (!confirmationText) return;
+    try {
+      setIsActing(true);
+      const { error: deleteError } = await tenantService.delete(tenant.id, confirmationText);
+      if (deleteError) throw new Error(deleteError);
       router.push('/tenants');
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : 'Failed to delete tenant.');
+      setError(actionError instanceof Error ? actionError.message : 'Failed to delete.');
     } finally {
       setIsActing(false);
     }
@@ -150,18 +224,15 @@ export default function TenantDetailsPage() {
 
   const handleArchive = useCallback(async () => {
     if (!tenant) return;
-
     try {
       setIsActing(true);
-      setError(null);
       const { error: archiveError } = await tenantService.archive(tenant.id);
-      if (archiveError) {
-        throw new Error(archiveError);
-      }
+      if (archiveError) throw new Error(archiveError);
       await loadTenant();
       setShowArchiveConfirm(false);
+      setSuccessMessage('Survey has been archived.');
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : 'Failed to archive tenant.');
+      setError(actionError instanceof Error ? actionError.message : 'Failed to archive.');
     } finally {
       setIsActing(false);
     }
@@ -169,20 +240,17 @@ export default function TenantDetailsPage() {
 
   const handleRestore = useCallback(async () => {
     if (!tenant) return;
-
     try {
       setIsActing(true);
-      setError(null);
       const subdomain = restoreSubdomain.trim() || undefined;
-      const { error: restoreError, data } = await tenantService.restore(tenant.id, subdomain);
-      if (restoreError) {
-        throw new Error(restoreError);
-      }
+      const { error: restoreError } = await tenantService.restore(tenant.id, subdomain);
+      if (restoreError) throw new Error(restoreError);
       await loadTenant();
       setShowRestoreConfirm(false);
       setRestoreSubdomain('');
+      setSuccessMessage('Survey has been restored. Go live when ready.');
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : 'Failed to restore tenant.');
+      setError(actionError instanceof Error ? actionError.message : 'Failed to restore.');
     } finally {
       setIsActing(false);
     }
@@ -190,547 +258,220 @@ export default function TenantDetailsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-64 items-center justify-center">
+      <div className="flex h-96 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" style={{ color: 'var(--primary)' }} />
-        <span className="ml-3" style={{ color: 'var(--foreground)' }}>
-          Loading tenant...
-        </span>
       </div>
     );
   }
 
   if (!tenant) {
     return (
-      <div className="py-12 text-center">
-        <h2 className="text-xl font-semibold" style={{ color: 'var(--foreground)' }}>
-          Tenant Not Found
-        </h2>
-        <p className="mb-4" style={{ color: 'var(--muted-foreground)' }}>
-          The tenant you&apos;re looking for doesn&apos;t exist.
-        </p>
-        <Link
-          href="/tenants"
-          className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 font-medium"
-          style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Tenants
+      <div className="py-20 text-center">
+        <h2 className="text-xl font-semibold mb-2">Tenant Not Found</h2>
+        <p className="text-muted-foreground mb-6">The tenant you're looking for doesn't exist.</p>
+        <Link href="/tenants" className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 font-medium" style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}>
+          <ArrowLeft className="h-4 w-4" />Back to Tenants
         </Link>
       </div>
     );
   }
 
+  const isLive = tenant.status === 'active';
+  const isReady = tenant.draftScannerId && tenant.draftAttributeTemplateId;
+
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <Link
-          href="/tenants"
-          className="inline-flex items-center gap-2 transition-colors"
-          style={{ color: 'var(--foreground)' }}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Tenants
-        </Link>
-
-        <Link
-          href={`/tenants/${tenant.id}/edit`}
-          className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-colors"
-          style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}
-        >
-          <Edit className="h-4 w-4" />
-          Edit Tenant
-        </Link>
-      </div>
-
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold" style={{ color: 'var(--foreground)' }}>
-          {tenant.name}
-        </h1>
-        <p style={{ color: 'var(--muted-foreground)' }}>
-          {getTenantHostname(tenant.subdomain)} | {publishStateMeta.label}
-        </p>
-      </div>
-
-      {error && (
-        <div
-          className="rounded-lg border p-4 text-sm"
-          style={{
-            backgroundColor: 'hsl(0 84% 60% / 0.1)',
-            borderColor: 'var(--destructive)',
-            color: 'var(--destructive)',
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {[
-          { label: 'Status', value: statusMeta?.label || tenant.status },
-          { label: 'Submissions', value: String(tenant.submissionCount) },
-          { label: 'Published Surveys', value: String(tenant.runtimeConfigCount) },
-          {
-            label: 'Updated',
-            value: new Date(tenant.updatedAt).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            }),
-          },
-        ].map((item) => (
-          <div
-            key={item.label}
-            className="rounded-xl border p-5 shadow-sm"
-            style={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
-          >
-            <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-              {item.label}
-            </p>
-            <p className="mt-2 text-2xl font-semibold" style={{ color: 'var(--foreground)' }}>
-              {item.value}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-6">
-          <div
-            className="rounded-xl border p-6 shadow-sm"
-            style={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
-          >
-            <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-              Tenant Overview
-            </h2>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div>
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Tenant Name
-                </p>
-                <p className="mt-1 font-medium" style={{ color: 'var(--foreground)' }}>
-                  {tenant.name}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Tenant Slug
-                </p>
-                <p className="mt-1 font-medium" style={{ color: 'var(--foreground)' }}>
-                  {tenant.slug}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Survey Address
-                </p>
-                <p className="mt-1 font-medium" style={{ color: 'var(--foreground)' }}>
-                  {getTenantHostname(tenant.subdomain)}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Created
-                </p>
-                <p className="mt-1 font-medium" style={{ color: 'var(--foreground)' }}>
-                  {formatDate(tenant.createdAt)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="rounded-xl border p-6 shadow-sm"
-            style={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
-          >
-            <div className="flex items-center gap-3">
-              <RadioTower className="h-5 w-5" style={{ color: 'var(--primary)' }} />
-              <div>
-                <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                  Survey Status
-                </h2>
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Current live state, publish readiness, and response history.
-                </p>
-              </div>
-            </div>
-
-            <div
-              className="mt-5 rounded-xl border p-4"
-              style={{
-                borderColor:
-                  publishStateMeta.tone === 'success'
-                    ? 'rgba(34, 197, 94, 0.2)'
-                    : publishStateMeta.tone === 'warning'
-                      ? 'rgba(245, 158, 11, 0.25)'
-                      : 'rgba(82, 82, 91, 0.2)',
-                backgroundColor:
-                  publishStateMeta.tone === 'success'
-                    ? 'rgba(34, 197, 94, 0.08)'
-                    : publishStateMeta.tone === 'warning'
-                      ? 'rgba(245, 158, 11, 0.08)'
-                      : 'rgba(82, 82, 91, 0.08)',
-              }}
-            >
-              <p className="font-semibold" style={{ color: 'var(--foreground)' }}>
-                {publishStateMeta.label}
-              </p>
-              <p className="mt-2 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                {publishStateMeta.description}
-              </p>
-            </div>
-
-            {tenant.activeRuntimeConfig ? (
-              <div className="mt-5 space-y-4">
-                <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <p style={{ color: 'var(--muted-foreground)' }}>
-                      Scanner version: <strong style={{ color: 'var(--foreground)' }}>{tenant.activeRuntimeConfig.scannerSummary.version}</strong>
-                    </p>
-                    <p style={{ color: 'var(--muted-foreground)' }}>
-                      Questions: <strong style={{ color: 'var(--foreground)' }}>{tenant.activeRuntimeConfig.scannerSummary.questionCount}</strong>
-                    </p>
-                    <p style={{ color: 'var(--muted-foreground)' }}>
-                      Categories: <strong style={{ color: 'var(--foreground)' }}>{tenant.activeRuntimeConfig.scannerSummary.categoryCount}</strong>
-                    </p>
-                    <p style={{ color: 'var(--muted-foreground)' }}>
-                      Historical submissions: <strong style={{ color: 'var(--foreground)' }}>{tenant.activeRuntimeConfig.submissionCount}</strong>
-                    </p>
-                    <p style={{ color: 'var(--muted-foreground)' }}>
-                      Live since: <strong style={{ color: 'var(--foreground)' }}>{formatDate(tenant.activeRuntimeConfig.activatedAt)}</strong>
-                    </p>
-                    <p style={{ color: 'var(--muted-foreground)' }}>
-                      Published surveys: <strong style={{ color: 'var(--foreground)' }}>{tenant.runtimeConfigCount}</strong>
-                    </p>
-                  </div>
-                </div>
-
-                {runtimeConfigs.length > 1 && (
-                  <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
-                    <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
-                      Published Survey History
-                    </p>
-                    <div className="mt-3 space-y-2">
-                      {runtimeConfigs.map((runtimeConfig) => (
-                        <div
-                          key={runtimeConfig.runtimeConfigId}
-                          className="flex items-center justify-between rounded-lg border px-3 py-2"
-                          style={{ borderColor: 'var(--border)' }}
-                        >
-                          <div>
-                            <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-                              {runtimeConfig.isActive ? 'Current Live Survey' : 'Published Survey'}
-                            </p>
-                            <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                              {formatDate(runtimeConfig.publishedAt)} | {runtimeConfig.scannerSummary.version}
-                            </p>
-                          </div>
-                          <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                            {runtimeConfig.submissionCount} submissions
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div
-                className="mt-5 rounded-xl border p-4 text-sm"
-                style={{
-                  borderColor: 'rgba(245, 158, 11, 0.25)',
-                  backgroundColor: 'rgba(245, 158, 11, 0.08)',
-                }}
-              >
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="mt-0.5 h-4 w-4" style={{ color: '#b45309' }} />
-                  <p style={{ color: '#92400e' }}>
-                    This tenant is not live yet. Choose a scanner and attribute template, then publish the survey.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div
-            className="rounded-xl border p-6 shadow-sm"
-            style={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
-          >
-            <div className="flex items-center gap-3">
-              <Settings2 className="h-5 w-5" style={{ color: '#1d4ed8' }} />
-              <div>
-                <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                  Survey Setup
-                </h2>
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Scanner and attribute template selected for the next publish.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Scanner
-                </p>
-                <p className="mt-2 font-medium" style={{ color: 'var(--foreground)' }}>
-                  {tenant.draftScanner?.label || 'Not connected yet'}
-                </p>
-                {tenant.draftScanner?.description && (
-                  <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                    {tenant.draftScanner.description}
-                  </p>
-                )}
-              </div>
-              <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Attribute Template
-                </p>
-                <p className="mt-2 font-medium" style={{ color: 'var(--foreground)' }}>
-                  {tenant.draftAttributeTemplate?.label || 'Not connected yet'}
-                </p>
-                {tenant.draftAttributeTemplate?.description && (
-                  <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                    {tenant.draftAttributeTemplate.description}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="rounded-xl border p-6 shadow-sm"
-            style={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}
-          >
-            <div className="flex items-center gap-3">
-              <ShieldOff className="h-5 w-5" style={{ color: '#b91c1c' }} />
-              <div>
-                <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
-                  Actions
-                </h2>
-                <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Use safe actions that preserve survey history and submissions.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 flex flex-wrap gap-3">
-              {tenant.status === 'active' && (
-                <button
-                  type="button"
-                  onClick={() => void updateStatus('disabled')}
-                  disabled={isActing}
-                  className="rounded-lg px-4 py-2.5 text-sm font-medium"
-                  style={{ backgroundColor: 'rgba(148, 163, 184, 0.18)', color: '#475569' }}
-                >
-                  Disable Survey
-                </button>
-              )}
-
-              {tenant.status === 'disabled' && (
-                <button
-                  type="button"
-                  onClick={() => void updateStatus('active')}
-                  disabled={isActing || !tenant.activeRuntimeConfigId}
-                  className="rounded-lg px-4 py-2.5 text-sm font-medium"
-                  style={{ backgroundColor: 'rgba(34, 197, 94, 0.12)', color: '#166534' }}
-                >
-                  Reactivate Survey
-                </button>
-              )}
-
-              {(tenant.status === 'disabled' || tenant.status === 'draft') && (
-                <button
-                  type="button"
-                  onClick={() => setShowArchiveConfirm(true)}
-                  disabled={isActing}
-                  className="rounded-lg px-4 py-2.5 text-sm font-medium"
-                  style={{ backgroundColor: 'rgba(82, 82, 91, 0.16)', color: '#3f3f46' }}
-                >
-                  Archive Tenant
-                </button>
-              )}
-
-              {tenant.status === 'archived' && (
-                <button
-                  type="button"
-                  onClick={() => setShowRestoreConfirm(true)}
-                  disabled={isActing}
-                  className="rounded-lg px-4 py-2.5 text-sm font-medium"
-                  style={{ backgroundColor: 'rgba(34, 197, 94, 0.12)', color: '#166534' }}
-                >
-                  Restore Tenant
-                </button>
-              )}
-
-              {isDeleteAllowed && (
-                <button
-                  type="button"
-                  onClick={() => void handleDelete()}
-                  disabled={isActing}
-                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium"
-                  style={{ backgroundColor: 'rgba(239, 68, 68, 0.12)', color: '#b91c1c' }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete Draft Tenant
-                </button>
-              )}
+    <div className="mx-auto max-w-4xl space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/tenants" className="p-2 rounded-lg transition-colors hover:bg-gray-100">
+            <ArrowLeft className="h-5 w-5 text-gray-500" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold">{tenant.name}</h1>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Globe className="h-4 w-4" />
+              <span>{tenant.subdomain}.remedygcc.com</span>
             </div>
           </div>
         </div>
+        <Link href={`/tenants/${tenant.id}/edit`} className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-colors hover:bg-gray-100">
+          <Edit className="h-4 w-4" />Edit
+        </Link>
+      </div>
 
-        <div className="space-y-6">
-          <BrandingPreviewCard
-            branding={tenant.branding}
-            title="Brand Preview"
-            description="Preview how the live survey theme will appear to respondents."
-          />
-
-          {tenant.publishingReadiness?.warnings?.length ? (
-            <div
-              className="rounded-xl border p-5 shadow-sm"
-              style={{
-                backgroundColor: 'rgba(245, 158, 11, 0.08)',
-                borderColor: 'rgba(245, 158, 11, 0.25)',
-              }}
-            >
-              <h3 className="font-semibold" style={{ color: '#92400e' }}>
-                Setup Guidance
-              </h3>
-              <div className="mt-3 space-y-2 text-sm" style={{ color: '#92400e' }}>
-                {tenant.publishingReadiness.warnings.map((warning) => (
-                  <p key={warning}>{warning}</p>
-                ))}
-              </div>
+      {/* Status Banner */}
+      <div className="rounded-2xl p-6" style={{ backgroundColor: statusConfig?.iconBg }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: 'white' }}>
+              {isLive ? (
+                <Sparkles className="h-7 w-7" style={{ color: statusConfig?.iconColor }} />
+              ) : (
+                <Settings className="h-7 w-7" style={{ color: statusConfig?.iconColor }} />
+              )}
             </div>
-          ) : null}
+            <div>
+              <span className="inline-flex rounded-full px-3 py-1 text-sm font-semibold" style={{ backgroundColor: statusConfig?.badgeBg, color: statusConfig?.badgeColor }}>
+                {statusConfig?.badge}
+              </span>
+              <p className="mt-2 text-sm font-medium" style={{ color: '#374151' }}>{statusConfig?.description}</p>
+            </div>
+          </div>
 
-          {(tenant.activeRuntimeConfig || runtimeConfigs.length > 0) && (
-            <details
-              className="rounded-xl border p-5 shadow-sm"
-              style={{ backgroundColor: 'hsl(0 0% 98%)', borderColor: 'var(--border)' }}
+          {tenant.status !== 'archived' && (
+            <button
+              onClick={() => void handleGoLive()}
+              disabled={isActing || isLive || !isReady}
+              className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-base font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ backgroundColor: isLive ? '#6b7280' : 'var(--primary)', color: 'white' }}
             >
-              <summary
-                className="cursor-pointer text-sm font-semibold"
-                style={{ color: 'var(--foreground)' }}
-              >
-                Technical Details
-              </summary>
-              <div className="mt-4 space-y-4 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                {tenant.activeRuntimeConfig && (
-                  <div>
-                    <p className="font-semibold" style={{ color: 'var(--foreground)' }}>
-                      Current live survey snapshot
-                    </p>
-                    <p>Runtime config ID: <code>{tenant.activeRuntimeConfig.runtimeConfigId}</code></p>
-                    <p>Scanner version ID: <code>{tenant.activeRuntimeConfig.scannerSummary.scannerVersionId}</code></p>
-                    <p>
-                      Attribute template version ID:{' '}
-                      <code>{tenant.activeRuntimeConfig.attributeTemplateSummary.attributeTemplateVersionId}</code>
-                    </p>
-                    <p>Branding version ID: <code>{tenant.activeRuntimeConfig.versionRefs.brandingVersionId}</code></p>
-                    <p>Calculation version ID: <code>{tenant.activeRuntimeConfig.versionRefs.calculationVersionId}</code></p>
-                  </div>
-                )}
-
-                {runtimeConfigs.length > 0 && (
-                  <div>
-                    <p className="font-semibold" style={{ color: 'var(--foreground)' }}>
-                      Published survey snapshots
-                    </p>
-                    <div className="mt-2 space-y-2">
-                      {runtimeConfigs.map((runtimeConfig) => (
-                        <div key={runtimeConfig.runtimeConfigId}>
-                          <p>
-                            <code>{runtimeConfig.runtimeConfigId}</code> | {formatDate(runtimeConfig.publishedAt)}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </details>
+              {isActing ? <Loader2 className="h-5 w-5 animate-spin" /> : isLive ? <CheckCircle2 className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+              {isLive ? 'Currently Live' : tenant.status === 'disabled' ? 'Re-enable' : 'Go Live'}
+            </button>
           )}
         </div>
       </div>
 
-      {showArchiveConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Archive Tenant</h3>
-            <div className="text-sm text-gray-600 mb-6 space-y-2">
-              <p>Archiving this tenant will:</p>
-              <ul className="list-disc pl-5 space-y-1">
-                <li>Disable the live survey immediately</li>
-                <li>Preserve all historical submissions and reports</li>
-                <li>Remove the tenant from active operational workflows</li>
-                <li>Release the current subdomain for future reuse</li>
-                <li>Prevent respondents from accessing existing survey links</li>
-              </ul>
-              <p className="mt-3 font-medium text-gray-900">
-                This action is reversible, but the released subdomain may no longer be available if reused later.
-              </p>
+      {/* Success/Error Messages */}
+      {successMessage && (
+        <div className="rounded-lg p-4 text-sm font-medium" style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', color: '#166534', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+          {successMessage}
+        </div>
+      )}
+      {error && (
+        <div className="rounded-lg p-4 text-sm font-medium" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#dc2626', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+          {error}
+        </div>
+      )}
+
+      {/* Next Action Guidance */}
+      {nextAction && !nextAction.complete && tenant.status !== 'archived' && (
+        <div className="rounded-xl p-5 border" style={{ backgroundColor: '#fafafa', borderColor: '#e5e7eb' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)' }}>
+              <ChevronRight className="h-5 w-5 text-blue-600" />
             </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium">{nextAction.message}</p>
+              {nextAction.action && (
+                <p className="text-xs mt-1 text-muted-foreground">Click "Edit" to {nextAction.action.toLowerCase()}.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="rounded-xl border p-5" style={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)' }}>
+              <Users className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{tenant.submissionCount}</p>
+              <p className="text-sm text-muted-foreground">Responses</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border p-5" style={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)' }}>
+              <Sparkles className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{tenant.draftScanner?.label || 'Not set'}</p>
+              <p className="text-sm text-muted-foreground">Scanner</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border p-5" style={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)' }}>
+              <Palette className="h-5 w-5 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{tenant.draftAttributeTemplate?.label || 'Not set'}</p>
+              <p className="text-sm text-muted-foreground">Template</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Survey Preview */}
+      <div className="rounded-2xl border p-6" style={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Eye className="h-5 w-5" />Survey Preview
+          </h3>
+        </div>
+        <BrandingPreviewCard branding={tenant.branding} title="" description="" />
+      </div>
+
+      {/* Operations - Separated */}
+      <div className="rounded-2xl border p-6" style={{ backgroundColor: '#fafafa', borderColor: '#e5e7eb' }}>
+        <h3 className="text-lg font-semibold mb-2">Operations</h3>
+        <p className="text-sm text-muted-foreground mb-5">Manage your survey's operational state.</p>
+
+        <div className="flex flex-wrap gap-3">
+          {isLive && (
+            <button onClick={() => void updateStatus('disabled')} disabled={isActing} className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium" style={{ backgroundColor: 'rgba(107, 114, 128, 0.1)', color: '#4b5563' }}>
+              <ShieldOff className="h-4 w-4" />Pause Survey
+            </button>
+          )}
+          {tenant.status === 'disabled' && (
+            <button onClick={() => void handleGoLive()} disabled={isActing} className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium" style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', color: '#15803d' }}>
+              <Shield className="h-4 w-4" />Resume Survey
+            </button>
+          )}
+          {(tenant.status === 'disabled' || tenant.status === 'draft') && (
+            <button onClick={() => setShowArchiveConfirm(true)} disabled={isActing} className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium" style={{ backgroundColor: 'rgba(107, 114, 128, 0.08)', color: '#4b5563' }}>
+              <Send className="h-4 w-4" />Archive
+            </button>
+          )}
+          {tenant.status === 'archived' && (
+            <button onClick={() => setShowRestoreConfirm(true)} disabled={isActing} className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium" style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', color: '#15803d' }}>
+              <Play className="h-4 w-4" />Restore
+            </button>
+          )}
+          {canDelete && (
+            <button onClick={() => void handleDelete()} disabled={isActing} className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#dc2626' }}>
+              <Trash2 className="h-4 w-4" />Delete
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Archive Modal */}
+      {showArchiveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-semibold mb-3">Archive Survey?</h3>
+            <p className="text-sm text-gray-600 mb-4">This will stop access and release the subdomain. All data is preserved.</p>
             <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowArchiveConfirm(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => void handleArchive()}
-                disabled={isActing}
-                className="px-4 py-2 text-sm font-medium text-white bg-gray-600 rounded-lg hover:bg-gray-700 disabled:opacity-50"
-              >
-                {isActing ? 'Archiving...' : 'Archive Tenant'}
+              <button onClick={() => setShowArchiveConfirm(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
+              <button onClick={() => void handleArchive()} disabled={isActing} className="px-4 py-2 text-sm font-medium text-white bg-gray-600 rounded-lg hover:bg-gray-700 disabled:opacity-50">
+                {isActing ? 'Archiving...' : 'Archive'}
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Restore Modal */}
       {showRestoreConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Restore Tenant</h3>
-            <div className="text-sm text-gray-600 mb-4">
-              <p>Restore this archived tenant to make it operational again.</p>
-              <p className="mt-2">The tenant will be restored in <strong>Disabled</strong> state and must be explicitly activated to go live.</p>
-            </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-semibold mb-3">Restore Survey</h3>
+            <p className="text-sm text-gray-600 mb-4">Restore with a new subdomain (original may be taken).</p>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                New Subdomain (optional)
-              </label>
-              <p className="text-xs text-gray-500 mb-2">
-                Original subdomain may be taken. Leave blank to try original.
-              </p>
-              <input
-                type="text"
-                value={restoreSubdomain}
-                onChange={(e) => setRestoreSubdomain(e.target.value)}
-                placeholder={tenant?.subdomain?.replace(/^archived_.*_/, '') || 'new-subdomain'}
-                className="w-full px-3 py-2 border rounded-lg"
-              />
+              <input type="text" value={restoreSubdomain} onChange={(e) => setRestoreSubdomain(e.target.value)} placeholder="new-subdomain" className="w-full px-3 py-2 border rounded-lg" />
             </div>
-            {error && (
-              <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">
-                {error}
-              </div>
-            )}
             <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => { setShowRestoreConfirm(false); setError(null); }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => void handleRestore()}
-                disabled={isActing}
-                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
-              >
-                {isActing ? 'Restoring...' : 'Restore Tenant'}
+              <button onClick={() => { setShowRestoreConfirm(false); setError(null); }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
+              <button onClick={() => void handleRestore()} disabled={isActing} className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50">
+                {isActing ? 'Restoring...' : 'Restore'}
               </button>
             </div>
           </div>

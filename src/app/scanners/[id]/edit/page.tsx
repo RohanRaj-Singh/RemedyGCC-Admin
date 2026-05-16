@@ -66,7 +66,7 @@ export default function EditScannerPage() {
             </div>
 
             <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-              Published versions stay immutable and any new structural edit moves into a draft.
+              Changes to published scanners create a new draft. Use Save to persist your edits before publishing.
             </div>
           </div>
         </div>

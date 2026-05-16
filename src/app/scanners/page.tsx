@@ -7,12 +7,18 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Scanner } from '@/modules/scanner/types';
-import { getScanners } from '@/modules/scanner/service';
+import { useRouter } from 'next/navigation';
+import { Copy } from 'lucide-react';
+import { Scanner, LocalizedText } from '@/modules/scanner/types';
+import { getScanners, duplicateScanner } from '@/modules/scanner/service';
+import { DuplicateScannerModal } from '@/modules/scanner/components/DuplicateScannerModal';
 
 export default function ScannerListPage() {
+  const router = useRouter();
   const [scanners, setScanners] = useState<Scanner[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [scannerToDuplicate, setScannerToDuplicate] = useState<Scanner | null>(null);
 
   useEffect(() => {
     const loadScanners = async () => {
@@ -27,6 +33,28 @@ export default function ScannerListPage() {
     };
     loadScanners();
   }, []);
+
+  const handleDuplicateClick = (scanner: Scanner) => {
+    setScannerToDuplicate(scanner);
+    setShowDuplicateModal(true);
+  };
+
+  const handleDuplicate = async (name: LocalizedText, description?: LocalizedText) => {
+    if (!scannerToDuplicate) return;
+
+    const duplicated = await duplicateScanner({
+      sourceScannerId: scannerToDuplicate.id,
+      newName: name,
+      newDescription: description,
+    });
+
+    // Refresh the list
+    const data = await getScanners();
+    setScanners(data);
+
+    // Navigate to edit the new scanner
+    router.push(`/scanners/${duplicated.id}/edit`);
+  };
 
   const getStatusBadge = (status: Scanner['status']) => {
     const styles = {
@@ -193,6 +221,13 @@ export default function ScannerListPage() {
                         >
                           Edit
                         </Link>
+                        <button
+                          onClick={() => handleDuplicateClick(scanner)}
+                          className="text-purple-600 hover:text-purple-700 text-sm font-medium flex items-center gap-1"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Duplicate
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -202,6 +237,19 @@ export default function ScannerListPage() {
           </div>
         )}
       </div>
+
+      {scannerToDuplicate && (
+        <DuplicateScannerModal
+          isOpen={showDuplicateModal}
+          onClose={() => {
+            setShowDuplicateModal(false);
+            setScannerToDuplicate(null);
+          }}
+          onDuplicate={handleDuplicate}
+          sourceScannerName={scannerToDuplicate.name.en}
+          sourceScannerId={scannerToDuplicate.id}
+        />
+      )}
     </div>
   );
 }

@@ -5,18 +5,19 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { 
-  LayoutDashboard, 
-  Building2, 
-  Scan, 
-  FileText, 
+import { usePathname, useRouter } from 'next/navigation';
+import {
+  LayoutDashboard,
+  Building2,
+  Scan,
+  FileText,
   Settings,
   FileStack,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -29,6 +30,12 @@ const menuItems = [
   { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
 ];
 
+interface AdminInfo {
+  id: string;
+  email: string;
+  role: string;
+}
+
 export default function ScannersLayout({
   children,
 }: {
@@ -36,6 +43,53 @@ export default function ScannersLayout({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+  const [admin, setAdmin] = useState<AdminInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAdmin(data.admin);
+      } else {
+        // Not authenticated - redirect to login
+        router.push('/login');
+      }
+    } catch {
+      router.push('/login');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } finally {
+      router.push('/login');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -78,39 +132,60 @@ export default function ScannersLayout({
         <nav className="p-3 space-y-1">
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href || 
+            const isActive = pathname === item.href ||
               (item.href !== '/' && pathname.startsWith(item.href));
-            
+
             return (
               <Link
                 key={item.id}
                 href={item.href}
                 className={cn(
                   "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
-                  isActive 
-                    ? "text-white shadow-lg" 
+                  isActive
+                    ? "text-white shadow-lg"
                     : "text-white/60 hover:text-white hover:bg-white/10"
                 )}
                 style={isActive ? { background: 'rgba(255,255,255,0.15)' } : {}}
                 title={collapsed ? item.label : undefined}
               >
-                <Icon className="w-5 h-5 flex-shrink-0" />
+                <Icon className="w-5 h-5 shrink-0" />
                 {!collapsed && <span className="font-medium">{item.label}</span>}
               </Link>
             );
           })}
         </nav>
 
-        {/* Bottom section */}
+        {/* Admin Info & Logout */}
         <div className="absolute bottom-0 left-0 right-0 p-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
+          {admin && (
+            <div className={cn(
+              "mb-2 px-3 py-2 rounded-lg",
+              collapsed && "text-center"
+            )}
+            style={{ background: 'rgba(255,255,255,0.05)' }}
+            >
+              {!collapsed && (
+                <>
+                  <p className="text-white text-sm font-medium truncate">{admin.email}</p>
+                  <p className="text-white/50 text-xs capitalize">{admin.role.replace('_', ' ')}</p>
+                </>
+              )}
+              {collapsed && (
+                <div className="text-white/50 text-xs font-medium">
+                  {admin.email.charAt(0).toUpperCase()}
+                </div>
+              )}
+            </div>
+          )}
           <button
+            onClick={handleLogout}
             className={cn(
               "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/60 hover:text-red-400 hover:bg-white/10 transition-all duration-200",
               collapsed && "justify-center"
             )}
             title={collapsed ? "Logout" : undefined}
           >
-            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
             {!collapsed && <span className="font-medium">Logout</span>}
@@ -119,7 +194,7 @@ export default function ScannersLayout({
       </aside>
 
       {/* Main content */}
-      <main 
+      <main
         className="transition-all duration-300"
         style={{ marginLeft: collapsed ? '4rem' : '16rem' }}
       >
