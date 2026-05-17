@@ -56,6 +56,12 @@ export type {
   UpdateBrandingDto,
   UpdateTenantDto,
 } from '@/modules/tenant/types';
+export type {
+  TenantDashboardAccessCreateInput,
+  TenantDashboardAccessSummary,
+  TenantPasswordResetResult,
+  TenantUserProfile,
+} from '@/modules/tenant-auth/contracts/types';
 
 export interface Scanner {
   id: string;

@@ -319,6 +319,20 @@ __emit(__strip(tenant));
   });
 }
 
+export async function getTenantDocumentById(
+  tenantId: string,
+): Promise<TenantDocument | null> {
+  return runMongoScript<TenantDocument | null>(`
+const tenant = db.tenants.findOne(
+  { tenantId: __payload.tenantId },
+  { projection: { _id: 0 } },
+);
+__emit(__strip(tenant));
+`, {
+    tenantId,
+  });
+}
+
 export async function insertTenantDocument(
   tenant: TenantDocument,
 ): Promise<TenantDocument> {

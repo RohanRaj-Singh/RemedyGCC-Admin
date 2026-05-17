@@ -7,6 +7,9 @@ import type {
   DashboardStats,
   RuntimeConfigOption,
   Tenant,
+  TenantDashboardAccessCreateInput,
+  TenantDashboardAccessSummary,
+  TenantPasswordResetResult,
   TenantPublishingPreview,
   TenantPublishResult,
   TenantStatus,
@@ -190,6 +193,62 @@ class TenantService {
   async getTenantsByTemplate(templateId: string): Promise<ApiResponse<{ id: string; name: string; subdomain: string; status: string }[]>> {
     return request<{ id: string; name: string; subdomain: string; status: string }[]>(
       `${TENANT_API_BASE}/by-template?templateId=${encodeURIComponent(templateId)}`
+    );
+  }
+
+  async getDashboardAccess(
+    tenantId: string,
+  ): Promise<ApiResponse<TenantDashboardAccessSummary>> {
+    return request<TenantDashboardAccessSummary>(
+      `${TENANT_API_BASE}/${tenantId}/dashboard-access`,
+    );
+  }
+
+  async createDashboardAccess(
+    tenantId: string,
+    data: TenantDashboardAccessCreateInput,
+  ): Promise<ApiResponse<TenantDashboardAccessSummary>> {
+    return request<TenantDashboardAccessSummary>(
+      `${TENANT_API_BASE}/${tenantId}/dashboard-access`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    );
+  }
+
+  async disableDashboardAccess(
+    tenantId: string,
+  ): Promise<ApiResponse<TenantDashboardAccessSummary>> {
+    return request<TenantDashboardAccessSummary>(
+      `${TENANT_API_BASE}/${tenantId}/dashboard-access`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ action: 'disable' }),
+      },
+    );
+  }
+
+  async reactivateDashboardAccess(
+    tenantId: string,
+  ): Promise<ApiResponse<TenantDashboardAccessSummary>> {
+    return request<TenantDashboardAccessSummary>(
+      `${TENANT_API_BASE}/${tenantId}/dashboard-access`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ action: 'reactivate' }),
+      },
+    );
+  }
+
+  async resetDashboardPassword(
+    tenantId: string,
+  ): Promise<ApiResponse<TenantPasswordResetResult>> {
+    return request<TenantPasswordResetResult>(
+      `${TENANT_API_BASE}/${tenantId}/dashboard-access/reset-password`,
+      {
+        method: 'POST',
+      },
     );
   }
 }

@@ -8,7 +8,7 @@ import './globals.css';
 import { DevBanner } from '@/components/layout/DevBanner';
 import { ThemeProvider } from '@/context/ThemeProvider';
 import { DEFAULT_BRANDING } from '@/types/branding';
-import { AuthProvider } from '@/context/AuthProvider';
+import { AppShell } from './AppShell';
 
 export const metadata: Metadata = {
   title: 'RemedyGCC | Super Admin',
@@ -25,11 +25,7 @@ export default function RootLayout({
       <body className="antialiased">
         <DevBanner />
         <ThemeProvider defaultBranding={DEFAULT_BRANDING}>
-          <AuthProvider>
-            <div className="min-h-screen">
-              {children}
-            </div>
-          </AuthProvider>
+          <AppShell>{children}</AppShell>
         </ThemeProvider>
       </body>
     </html>

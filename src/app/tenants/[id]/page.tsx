@@ -27,6 +27,7 @@ import type { Tenant } from '@/modules/tenant/types';
 import { tenantService } from '@/services/tenant-service';
 import { BrandingPreviewCard } from '@/components/tenants';
 import { getTenantHostname } from '@/modules/tenant/utils';
+import { TenantDashboardAccessPanel } from '@/modules/tenant/components';
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return '—';
@@ -442,6 +443,11 @@ export default function TenantDetailsPage() {
           )}
         </div>
       </div>
+
+      <TenantDashboardAccessPanel
+        tenantId={tenant.id}
+        tenantStatus={tenant.status}
+      />
 
       {/* Archive Modal */}
       {showArchiveConfirm && (

@@ -57,6 +57,7 @@ import {
   validateTenantSlug,
   validateTenantSubdomain,
 } from './utils';
+import { deleteTenantAccessForTenant } from '@/modules/tenant-auth/services/auth-service';
 
 const CALCULATION_VERSION_ID = 'calc_demo_placeholder_v1';
 
@@ -921,6 +922,10 @@ export async function updateTenant(
     throw new Error('Tenant update failed.');
   }
 
+  if (nextStatus !== 'active') {
+    await deleteTenantAccessForTenant(id);
+  }
+
   const hydrated = await getTenantById(id);
   if (!hydrated) {
     throw new Error('Tenant was updated but could not be loaded.');
@@ -1252,6 +1257,7 @@ export async function deleteTenant(
     throw new Error(`Type the tenant slug "${current.slug}" to confirm deletion.`);
   }
 
+  await deleteTenantAccessForTenant(tenantId);
   await deleteTenantDocument(tenantId);
 }
 

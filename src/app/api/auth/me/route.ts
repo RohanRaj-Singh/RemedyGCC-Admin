@@ -8,6 +8,7 @@ import { validateSession } from '@/modules/auth/service';
 import { getSessionCookie } from '@/modules/auth/utils';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
