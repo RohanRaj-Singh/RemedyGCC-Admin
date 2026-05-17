@@ -43,15 +43,15 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-white">
+      <Header />
+      
       <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />
       
       <main 
         className="transition-all duration-300"
         style={{ marginLeft: '16rem' }}
       >
-        <Header />
-        
-          <div className="p-6">
+        <div className="p-6">
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: 'var(--primary)' }}></div>
@@ -73,31 +73,106 @@ export default function DashboardPage() {
                     />
                     <StatsCard
                       title="Active Scanners"
-                      value={stats.activeScanners ?? 0}
-                      change="+5% from last month"
+                      value={stats.totalScanners}
+                      change="8 running"
                       changeType="positive"
                       icon={Scan}
-                      iconColor="bg-gradient-to-br from-emerald-400 to-teal-600"
+                      iconColor="bg-gradient-to-br from-green-400 to-emerald-600"
                     />
                     <StatsCard
                       title="Total Submissions"
-                      value={(stats.totalSubmissions ?? 0).toLocaleString()}
-                      change="+23% from last month"
+                      value={stats.totalSubmissions}
+                      change="+5% from last week"
                       changeType="positive"
                       icon={Activity}
-                      iconColor="bg-gradient-to-br from-purple-400 to-pink-600"
+                      iconColor="bg-gradient-to-br from-purple-400 to-violet-600"
                     />
                     <StatsCard
-                      title="System Logs"
-                      value={stats.totalLogs}
-                      change="2 critical alerts"
-                      changeType="negative"
+                      title="Response Rate"
+                      value={`${stats.responseRate}%`}
+                      change="Above average"
+                      changeType="positive"
                       icon={FileText}
                       iconColor="bg-gradient-to-br from-amber-400 to-orange-600"
                     />
                   </div>
 
-                  {/* Branding Stats */}
+                  {/* Two Column Layout */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Recent Tenants */}
+                    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>Recent Tenants</h2>
+                        <Link 
+                          href="/tenants"
+                          className="text-sm text-blue-600 hover:text-blue-700"
+                        >
+                          View all
+                        </Link>
+                      </div>
+                      <div className="space-y-3">
+                        {tenants.slice(0, 5).map((tenant) => (
+                          <div key={tenant.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <div>
+                              <p className="font-medium" style={{ color: 'var(--foreground)' }}>{tenant.name}</p>
+                              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{tenant.domain}</p>
+                            </div>
+                            <div className="text-right">
+                              <span className={`inline-block px-2 py-1 text-xs rounded-full ${
+                                tenant.status === 'active' ? 'bg-green-100 text-green-700' :
+                                tenant.status === 'inactive' ? 'bg-gray-100 text-gray-700' :
+                                'bg-red-100 text-red-700'
+                              }`}>
+                                {tenant.status}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Scanner Status */}
+                    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>Scanner Status</h2>
+                        <Link 
+                          href="/scanners"
+                          className="text-sm text-blue-600 hover:text-blue-700"
+                        >
+                          View all
+                        </Link>
+                      </div>
+                      <div className="space-y-3">
+                        {scanners.slice(0, 5).map((scanner) => (
+                          <div key={scanner.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <div>
+                              <p className="font-medium" style={{ color: 'var(--foreground)' }}>{scanner.name}</p>
+                              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                {scanner.submissions} submissions
+                              </p>
+                            </div>
+                            <span className={`inline-block px-2 py-1 text-xs rounded-full ${
+                              scanner.status === 'active' ? 'bg-green-100 text-green-700' :
+                              scanner.status === 'inactive' ? 'bg-gray-100 text-gray-700' :
+                              'bg-amber-100 text-amber-700'
+                            }`}>
+                              {scanner.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recent Logs */}
+                  <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+                    <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--foreground)' }}>Recent System Logs</h2>
+                    <div className="overflow-x-auto">
+                      <LogsTable logs={logs.slice(0, 10)} />
+                    </div>
+                  </div>
+
+                  {/* Tenant Statistics by Branding */}
                   {stats.tenantsByBranding && (
                     <div 
                       className="rounded-xl border p-4"
