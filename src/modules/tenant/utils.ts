@@ -81,8 +81,20 @@ export function validateTenantSubdomain(value: string): IdentifierValidationResu
   return validateTenantIdentifier(value, 'Subdomain');
 }
 
+export function getTenantRootDomain(): string {
+  const configuredRootDomain =
+    process.env.NEXT_PUBLIC_ROOT_DOMAIN?.trim() ||
+    process.env.ROOT_DOMAIN?.trim();
+
+  return configuredRootDomain || 'remedygcc.com';
+}
+
+export function getTenantHostnameSuffix(): string {
+  return `.${getTenantRootDomain()}`;
+}
+
 export function getTenantHostname(subdomain: string): string {
-  return `${subdomain}.remedygcc.com`;
+  return `${subdomain}.${getTenantRootDomain()}`;
 }
 
 export function isTenantIdentityLocked(

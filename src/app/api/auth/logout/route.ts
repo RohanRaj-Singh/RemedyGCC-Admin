@@ -5,7 +5,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { logout } from '@/modules/auth/service';
-import { getSessionCookie, clearSessionCookie } from '@/modules/auth/utils';
+import {
+  clearSessionCookieOnResponse,
+  getSessionCookie,
+} from '@/modules/auth/utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,10 +20,7 @@ export async function POST(request: NextRequest) {
       await logout(sessionToken);
     }
 
-    // Clear session cookie
-    await clearSessionCookie();
-
-    return NextResponse.json({ success: true });
+    return clearSessionCookieOnResponse(NextResponse.json({ success: true }));
   } catch (error) {
     console.error('Logout API error:', error);
     return NextResponse.json(

@@ -269,7 +269,7 @@ export default function TenantDetailsPage() {
     return (
       <div className="py-20 text-center">
         <h2 className="text-xl font-semibold mb-2">Tenant Not Found</h2>
-        <p className="text-muted-foreground mb-6">The tenant you're looking for doesn't exist.</p>
+        <p className="text-muted-foreground mb-6">The requested tenant could not be found.</p>
         <Link href="/tenants" className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 font-medium" style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}>
           <ArrowLeft className="h-4 w-4" />Back to Tenants
         </Link>
@@ -292,7 +292,7 @@ export default function TenantDetailsPage() {
             <h1 className="text-2xl font-bold">{tenant.name}</h1>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Globe className="h-4 w-4" />
-              <span>{tenant.subdomain}.remedygcc.com</span>
+              <span>{getTenantHostname(tenant.subdomain)}</span>
             </div>
           </div>
         </div>
@@ -356,7 +356,7 @@ export default function TenantDetailsPage() {
             <div className="flex-1">
               <p className="text-sm font-medium">{nextAction.message}</p>
               {nextAction.action && (
-                <p className="text-xs mt-1 text-muted-foreground">Click "Edit" to {nextAction.action.toLowerCase()}.</p>
+                <p className="text-xs mt-1 text-muted-foreground">Use the Edit action to {nextAction.action.toLowerCase()}.</p>
               )}
             </div>
           </div>
@@ -413,7 +413,7 @@ export default function TenantDetailsPage() {
       {/* Operations - Separated */}
       <div className="rounded-2xl border p-6" style={{ backgroundColor: '#fafafa', borderColor: '#e5e7eb' }}>
         <h3 className="text-lg font-semibold mb-2">Operations</h3>
-        <p className="text-sm text-muted-foreground mb-5">Manage your survey's operational state.</p>
+        <p className="text-sm text-muted-foreground mb-5">Manage the operational state of this survey.</p>
 
         <div className="flex flex-wrap gap-3">
           {isLive && (

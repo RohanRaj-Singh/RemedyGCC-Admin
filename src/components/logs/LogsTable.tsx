@@ -64,7 +64,7 @@ export function LogsTable({ logs }: LogsTableProps) {
           <tbody>
             {logs.map((log) => {
               const LevelIcon = levelConfig[log.level].icon;
-              const module = moduleConfig[log.module];
+              const moduleMeta = moduleConfig[log.module];
               
               return (
                 <tr 
@@ -82,8 +82,8 @@ export function LogsTable({ logs }: LogsTableProps) {
                     <p className="text-sm" style={{ color: 'var(--foreground)' }}>{log.message}</p>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={cn("px-2.5 py-1 rounded-full text-xs font-medium", module.color)}>
-                      {module.label}
+                    <span className={cn("px-2.5 py-1 rounded-full text-xs font-medium", moduleMeta.color)}>
+                      {moduleMeta.label}
                     </span>
                   </td>
                   <td className="px-6 py-4">

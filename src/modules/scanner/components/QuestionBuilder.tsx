@@ -42,6 +42,16 @@ export function QuestionBuilder({
   onTriggersChange,
 }: QuestionBuilderProps) {
   const [openQuestionId, setOpenQuestionId] = useState<string | undefined>(undefined);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   if (!category || !subdomain) {
     return (
@@ -81,18 +91,6 @@ export function QuestionBuilder({
     });
     setOpenQuestionId(newQuestion.id);
   }
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
 

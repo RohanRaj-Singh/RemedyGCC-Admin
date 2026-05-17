@@ -5,7 +5,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSession } from '@/modules/auth/service';
-import { getSessionCookie } from '@/modules/auth/utils';
+import {
+  clearSessionCookieOnResponse,
+  getSessionCookie,
+} from '@/modules/auth/utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,9 +27,11 @@ export async function GET(request: NextRequest) {
     const sessionInfo = await validateSession(sessionToken);
 
     if (!sessionInfo) {
-      return NextResponse.json(
-        { error: 'Session expired or invalid' },
-        { status: 401 }
+      return clearSessionCookieOnResponse(
+        NextResponse.json(
+          { error: 'Session expired or invalid' },
+          { status: 401 }
+        )
       );
     }
 

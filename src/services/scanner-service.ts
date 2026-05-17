@@ -6,7 +6,7 @@ import { Scanner } from '@/types';
 import { apiClient, ApiResponse } from './api-client';
 import { scanners as mockScanners } from '@/data/mockData';
 
-const USE_MOCK_DATA = true;
+const USE_MOCK_DATA = process.env.NODE_ENV !== 'production';
 
 export interface ScannerFilters {
   tenantId?: string;

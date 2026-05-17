@@ -8,6 +8,7 @@ import {
   resolveBrandingConfig,
 } from '@/types/branding';
 import type { TenantStatus } from '@/modules/tenant/types';
+import { getTenantHostname } from '@/modules/tenant/utils';
 
 interface BrandingWrapperProps {
   branding: BrandingConfig | null | undefined;
@@ -90,7 +91,7 @@ export function TenantBrandingCard({
               {name}
             </h3>
             <code className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-              {slug}.remedygcc.com
+              {getTenantHostname(slug)}
             </code>
           </div>
         </div>

@@ -20,6 +20,7 @@ import type { BrandingConfig, TenantSetupOption, TenantStatus } from '@/modules/
 import { getAllTemplates } from '@/modules/attribute-template/service';
 import { getScanners } from '@/modules/scanner/service';
 import { BrandingPanel, BrandingPreviewCard } from '@/components/tenants';
+import { getTenantHostname, getTenantHostnameSuffix } from '@/modules/tenant/utils';
 import { tenantService } from '@/services/tenant-service';
 
 interface TenantRuntimeConfig {
@@ -214,7 +215,7 @@ export default function EditTenantPage() {
     return (
       <div className="mx-auto max-w-3xl py-12 text-center">
         <h2 className="text-xl font-semibold">Survey Not Found</h2>
-        <p className="text-muted-foreground mt-2 mb-6">The survey you're looking for doesn't exist.</p>
+        <p className="text-muted-foreground mt-2 mb-6">The requested survey could not be found.</p>
         <Link href="/tenants" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium" style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}>
           <ArrowLeft className="h-4 w-4" />Back to Surveys
         </Link>
@@ -344,7 +345,7 @@ export default function EditTenantPage() {
                     className="flex-1 px-4 py-3 rounded-xl border text-lg disabled:opacity-50"
                     style={{ borderColor: 'var(--border)' }}
                   />
-                  <span className="text-muted-foreground text-sm">.remedygcc.com</span>
+                  <span className="text-muted-foreground text-sm">{getTenantHostnameSuffix()}</span>
                 </div>
                 {isLive && <p className="text-xs text-muted-foreground mt-2">Subdomain is locked while survey is live.</p>}
               </div>
@@ -468,7 +469,7 @@ export default function EditTenantPage() {
               <Globe className="h-5 w-5" style={{ color: 'var(--primary)' }} />
               <h3 className="font-semibold">Survey URL</h3>
             </div>
-            <p className="text-lg font-medium" style={{ color: 'var(--foreground)' }}>{tenant.subdomain}.remedygcc.com</p>
+            <p className="text-lg font-medium" style={{ color: 'var(--foreground)' }}>{getTenantHostname(tenant.subdomain)}</p>
             {isLive && <p className="text-xs text-muted-foreground mt-2">This URL is currently accessible to respondents.</p>}
           </div>
 

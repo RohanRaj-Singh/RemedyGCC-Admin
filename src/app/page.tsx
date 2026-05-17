@@ -14,6 +14,7 @@ import { ScannerCard } from '@/components/scanners';
 import { LogsTable } from '@/components/logs';
 import { TemplateList } from '@/modules/attribute-template/components';
 import { TenantList } from '@/modules/tenant/components';
+import { getTenantHostname } from '@/modules/tenant/utils';
 import { useDashboard, useTenants, useScanners, useLogs } from '@/hooks';
 
 type TabType = 'dashboard' | 'tenants' | 'scanners' | 'logs' | 'attribute-templates' | 'settings';
@@ -72,25 +73,25 @@ export default function DashboardPage() {
                       iconColor="bg-gradient-to-br from-cyan-400 to-blue-600"
                     />
                     <StatsCard
-                      title="Active Scanners"
-                      value={stats.totalScanners}
-                      change="8 running"
+                      title="Active Tenants"
+                      value={stats.activeTenants}
+                      change={`${stats.draftTenants ?? 0} still in draft`}
                       changeType="positive"
                       icon={Scan}
                       iconColor="bg-gradient-to-br from-green-400 to-emerald-600"
                     />
                     <StatsCard
                       title="Total Submissions"
-                      value={stats.totalSubmissions}
+                      value={stats.totalSubmissions ?? 0}
                       change="+5% from last week"
                       changeType="positive"
                       icon={Activity}
                       iconColor="bg-gradient-to-br from-purple-400 to-violet-600"
                     />
                     <StatsCard
-                      title="Response Rate"
-                      value={`${stats.responseRate}%`}
-                      change="Above average"
+                      title="Active Runtime Configs"
+                      value={stats.activeRuntimeConfigs ?? 0}
+                      change={`${stats.archivedTenants ?? 0} archived tenants`}
                       changeType="positive"
                       icon={FileText}
                       iconColor="bg-gradient-to-br from-amber-400 to-orange-600"
@@ -115,13 +116,16 @@ export default function DashboardPage() {
                           <div key={tenant.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                             <div>
                               <p className="font-medium" style={{ color: 'var(--foreground)' }}>{tenant.name}</p>
-                              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{tenant.domain}</p>
+                              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                                {getTenantHostname(tenant.subdomain)}
+                              </p>
                             </div>
                             <div className="text-right">
                               <span className={`inline-block px-2 py-1 text-xs rounded-full ${
                                 tenant.status === 'active' ? 'bg-green-100 text-green-700' :
-                                tenant.status === 'inactive' ? 'bg-gray-100 text-gray-700' :
-                                'bg-red-100 text-red-700'
+                                tenant.status === 'disabled' ? 'bg-slate-100 text-slate-700' :
+                                tenant.status === 'archived' ? 'bg-zinc-100 text-zinc-700' :
+                                'bg-amber-100 text-amber-700'
                               }`}>
                                 {tenant.status}
                               </span>
@@ -146,14 +150,14 @@ export default function DashboardPage() {
                         {scanners.slice(0, 5).map((scanner) => (
                           <div key={scanner.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                             <div>
-                              <p className="font-medium" style={{ color: 'var(--foreground)' }}>{scanner.name}</p>
+                              <p className="font-medium" style={{ color: 'var(--foreground)' }}>{scanner.name.en}</p>
                               <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                                {scanner.submissions} submissions
+                                v{scanner.latestVersionNumber} • {scanner.questionCount} questions
                               </p>
                             </div>
                             <span className={`inline-block px-2 py-1 text-xs rounded-full ${
-                              scanner.status === 'active' ? 'bg-green-100 text-green-700' :
-                              scanner.status === 'inactive' ? 'bg-gray-100 text-gray-700' :
+                              scanner.status === 'published' ? 'bg-green-100 text-green-700' :
+                              scanner.status === 'archived' ? 'bg-slate-100 text-slate-700' :
                               'bg-amber-100 text-amber-700'
                             }`}>
                               {scanner.status}
@@ -234,8 +238,6 @@ export default function DashboardPage() {
                       <ScannerCard 
                         key={scanner.id} 
                         scanner={scanner}
-                        onEdit={(scanner) => console.log('Edit', scanner)}
-                        onDelete={(id) => console.log('Delete', id)}
                       />
                     ))}
                   </div>

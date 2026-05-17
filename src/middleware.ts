@@ -11,8 +11,11 @@ import {
   isValidTenantSessionTokenFormat,
   shouldForceTenantPasswordChange,
 } from '@/modules/tenant-auth/middleware/route-protection';
-
-const ADMIN_SESSION_COOKIE = 'admin_session';
+import { clearTenantAuthCookiesOnResponse } from '@/modules/tenant-auth/utils/cookies';
+import {
+  SESSION_COOKIE_NAME as ADMIN_SESSION_COOKIE,
+  clearSessionCookieOnResponse,
+} from '@/modules/auth/utils';
 
 const ADMIN_PUBLIC_PATHS = [
   '/login',
@@ -99,10 +102,7 @@ export async function middleware(request: NextRequest) {
     }
 
     if (!isValidTenantSessionTokenFormat(sessionToken)) {
-      const response = redirectToTenantLogin(request, pathname);
-      response.cookies.delete(TENANT_SESSION_COOKIE);
-      response.cookies.delete(TENANT_PASSWORD_CHANGE_COOKIE);
-      return response;
+      return clearTenantAuthCookiesOnResponse(redirectToTenantLogin(request, pathname));
     }
 
     if (
@@ -138,8 +138,7 @@ export async function middleware(request: NextRequest) {
       }
 
       const response = NextResponse.redirect(new URL('/login', request.url));
-      response.cookies.delete(ADMIN_SESSION_COOKIE);
-      return response;
+      return clearSessionCookieOnResponse(response);
     }
   }
 

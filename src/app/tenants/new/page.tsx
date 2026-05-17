@@ -21,6 +21,7 @@ import {
 import type { BrandingConfig, TenantSetupOption } from '@/modules/tenant/types';
 import { getAllTemplates } from '@/modules/attribute-template/service';
 import { getScanners } from '@/modules/scanner/service';
+import { getTenantHostname, getTenantHostnameSuffix } from '@/modules/tenant/utils';
 import { tenantService } from '@/services/tenant-service';
 import { BrandingPanel, BrandingPreviewCard } from '@/components/tenants';
 
@@ -306,7 +307,7 @@ export default function NewTenantPage() {
                 className="w-full px-4 py-3 rounded-xl border text-lg"
                 style={{ borderColor: 'var(--border)' }}
               />
-              <p className="text-xs text-muted-foreground mt-2">This is for your reference - respondents won't see it.</p>
+              <p className="text-xs text-muted-foreground mt-2">This is for your reference and respondents will not see it.</p>
             </div>
 
             <div>
@@ -325,7 +326,7 @@ export default function NewTenantPage() {
                     <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-600" />
                   )}
                 </div>
-                <span className="text-muted-foreground text-sm whitespace-nowrap">.remedygcc.com</span>
+                <span className="text-muted-foreground text-sm whitespace-nowrap">{getTenantHostnameSuffix()}</span>
               </div>
               {getSubdomainStatusUI()}
               <p className="text-xs text-muted-foreground mt-2">
@@ -442,7 +443,7 @@ export default function NewTenantPage() {
             <div className="grid gap-4">
               <div className="p-4 rounded-xl border" style={{ backgroundColor: 'var(--muted)', borderColor: 'var(--border)' }}>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1"><Globe className="h-4 w-4" />Survey Address</div>
-                <div className="text-lg font-semibold">{subdomain}.remedygcc.com</div>
+                <div className="text-lg font-semibold">{getTenantHostname(subdomain)}</div>
               </div>
               <div className="p-4 rounded-xl border" style={{ backgroundColor: 'var(--muted)', borderColor: 'var(--border)' }}>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1"><Users className="h-4 w-4" />Scanner</div>

@@ -8,15 +8,30 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-const DEFAULT_MONGODB_URI = 'mongodb://localhost:27017/tenantapp';
-const DEFAULT_MONGOSH_PATH = 'C:\\mongosh\\bin\\mongosh.exe';
+const DEFAULT_DEVELOPMENT_MONGODB_URI = 'mongodb://127.0.0.1:27017/remedygcc';
 
 function getMongoUri(): string {
-  return process.env.MONGODB_URI?.trim() || DEFAULT_MONGODB_URI;
+  const configuredUri = process.env.MONGODB_URI?.trim();
+
+  if (configuredUri) {
+    return configuredUri;
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    return DEFAULT_DEVELOPMENT_MONGODB_URI;
+  }
+
+  throw new Error('MONGODB_URI must be configured before starting the admin app in production.');
 }
 
 function getMongoshPath(): string {
-  return process.env.MONGOSH_PATH?.trim() || DEFAULT_MONGOSH_PATH;
+  const configuredPath = process.env.MONGOSH_PATH?.trim();
+
+  if (configuredPath) {
+    return configuredPath;
+  }
+
+  return process.platform === 'win32' ? 'C:\\mongosh\\bin\\mongosh.exe' : 'mongosh';
 }
 
 function buildScript(scriptBody: string, payload: unknown): string {

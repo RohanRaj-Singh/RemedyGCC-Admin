@@ -16,6 +16,7 @@ import {
   resolveBrandingConfig,
   validateBrandingConfig,
 } from '@/types/branding';
+import { getTenantHostname } from '@/modules/tenant/utils';
 import { ImageUploader } from './ImageUploader';
 import { ColorPicker } from './ColorPicker';
 
@@ -117,7 +118,7 @@ function BrandingPreview({ branding }: { branding: Partial<BrandingConfig> }) {
                 {resolved.appName}
               </p>
               <p className="text-xs" style={{ color: '#4b5563' }}>
-                survey.remedygcc.com
+                {getTenantHostname('survey')}
               </p>
             </div>
           </div>

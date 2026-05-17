@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "test": "tsx --test \"src/modules/tenant-auth/tests/**/*.test.ts\"",
     "seed:admin": "cross-env NEXT_RUNTIME=nodejs tsx scripts/seed-admin.ts",
     "migrate:branding": "ts-node scripts/migrate-branding.ts",

@@ -5,7 +5,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSession } from '@/modules/auth/service';
-import { getSessionCookie } from '@/modules/auth/utils';
+import {
+  clearSessionCookieOnResponse,
+  getSessionCookie,
+} from '@/modules/auth/utils';
 
 export interface AuthGuardResult {
   success: boolean;
@@ -37,9 +40,11 @@ export async function requireApiAuth(request: NextRequest): Promise<AuthGuardRes
   if (!sessionInfo) {
     return {
       success: false,
-      response: NextResponse.json(
-        { error: 'Session expired. Please log in again.' },
-        { status: 401 }
+      response: clearSessionCookieOnResponse(
+        NextResponse.json(
+          { error: 'Session expired. Please log in again.' },
+          { status: 401 }
+        )
       ),
     };
   }

@@ -4,19 +4,22 @@
  */
 
 import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
+import { getAdminAuthCookieBaseOptions } from './cookie-options';
 
-const SESSION_COOKIE_NAME = 'admin_session';
+export const SESSION_COOKIE_NAME = 'admin_session';
 
-// Cookie configuration
-function getCookieOptions() {
-  const isProduction = process.env.NODE_ENV === 'production';
-
+function getSessionCookieOptions() {
   return {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax' as const,
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
+    ...getAdminAuthCookieBaseOptions(),
+    maxAge: 7 * 24 * 60 * 60,
+  };
+}
+
+function getExpiredSessionCookieOptions() {
+  return {
+    ...getAdminAuthCookieBaseOptions(),
+    maxAge: 0,
   };
 }
 
@@ -25,7 +28,7 @@ function getCookieOptions() {
  */
 export async function setSessionCookie(sessionToken: string): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE_NAME, sessionToken, getCookieOptions());
+  cookieStore.set(SESSION_COOKIE_NAME, sessionToken, getSessionCookieOptions());
 }
 
 /**
@@ -41,7 +44,12 @@ export async function getSessionCookie(): Promise<string | undefined> {
  */
 export async function clearSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.delete(SESSION_COOKIE_NAME);
+  cookieStore.set(SESSION_COOKIE_NAME, '', getExpiredSessionCookieOptions());
+}
+
+export function clearSessionCookieOnResponse(response: NextResponse): NextResponse {
+  response.cookies.set(SESSION_COOKIE_NAME, '', getExpiredSessionCookieOptions());
+  return response;
 }
 
 /**

@@ -17,6 +17,7 @@ import {
 import { AttributeTemplate } from '../types';
 import { getAllTemplates, deleteTemplate } from '../service';
 import { tenantService } from '@/services/tenant-service';
+import { getTenantHostname } from '@/modules/tenant/utils';
 
 interface TenantReference {
   id: string;
@@ -323,7 +324,7 @@ export function TemplateList() {
                         <Building2 className="w-4 h-4 text-gray-400" />
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-gray-900 truncate">{tenant.name}</p>
-                          <p className="text-sm text-gray-500">{tenant.subdomain}.remedygcc.com</p>
+                          <p className="text-sm text-gray-500">{getTenantHostname(tenant.subdomain)}</p>
                         </div>
                         <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
                           tenant.status === 'active'
