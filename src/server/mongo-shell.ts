@@ -128,10 +128,16 @@ export async function runMongoScript<T>(
 
   return parsed as T;
 
-} catch (error: any) {
+} catch (error: unknown) {
   console.error('MONGOSH EXEC ERROR:', error);
-  console.error('MONGOSH STDERR:', error?.stderr);
-  console.error('MONGOSH STDOUT:', error?.stdout);
+
+  if (error && typeof error === 'object' && 'stdout' in error) {
+    console.error('MONGOSH STDOUT:', error.stdout);
+  }
+
+  if (error && typeof error === 'object' && 'stderr' in error) {
+    console.error('MONGOSH STDERR:', error.stderr);
+  }
 
   throw error;
 } finally {
