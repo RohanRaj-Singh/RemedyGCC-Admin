@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
-import { sumWeights } from '../utils/metrics';
+import { getWeightBalance, sumWeights } from '../utils/metrics';
 import { validateScannerDraft } from '../utils/validation';
 
 interface StickyHeaderProps {
@@ -14,17 +14,16 @@ interface StickyHeaderProps {
 
 export function StickyHeader({ activeStep, steps, categories, validation }: StickyHeaderProps) {
   const [scannerWeight, setScannerWeight] = useState(0);
-  const [isValid, setIsValid] = useState(true);
 
   useEffect(() => {
     const weight = sumWeights(categories);
     setScannerWeight(weight);
-    setIsValid(validation.isValid);
-  }, [categories, validation]);
+  }, [categories]);
 
   const step = steps[activeStep];
   const issueCount = validation.issues.length;
   const blockingIssueCount = validation.issues.filter(i => i.blocking).length;
+  const scannerBalance = getWeightBalance(scannerWeight, 100);
 
   return (
     <div className="sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-gray-100">
@@ -36,9 +35,9 @@ export function StickyHeader({ activeStep, steps, categories, validation }: Stic
           <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
             <div className="flex items-center gap-3 text-sm">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg">
-                {scannerWeight === 100 ? (
+                {scannerBalance.isExact ? (
                   <CheckCircle2 className="h-4 w-4 text-green-600" />
-                ) : scannerWeight > 100 ? (
+                ) : scannerBalance.overflow > 0 ? (
                   <AlertTriangle className="h-4 w-4 text-red-500" />
                 ) : (
                   <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
@@ -49,11 +48,11 @@ export function StickyHeader({ activeStep, steps, categories, validation }: Stic
                   {scannerWeight}% Weight
                 </div>
                 <div className="text-xs text-gray-500">
-                  {scannerWeight === 100
-                    ? 'Balanced ✅'
-                    : scannerWeight > 100
-                    ? `Overflow ${scannerWeight - 100}%`
-                    : `Incomplete ${100 - scannerWeight}% remaining`}
+                  {scannerBalance.isExact
+                    ? 'Balanced'
+                    : scannerBalance.overflow > 0
+                    ? `Overflow ${scannerBalance.overflow}%`
+                    : `Incomplete ${scannerBalance.remaining}% remaining`}
                 </div>
               </div>
             </div>

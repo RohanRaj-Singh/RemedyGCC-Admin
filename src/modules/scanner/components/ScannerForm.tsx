@@ -22,7 +22,7 @@ import {
 import { ValidationIssue, ScannerDetail, ScannerStatus, ScannerVersion } from '../types';
 import { createDefaultCategories, emptyText } from '../utils/builder';
 import { FIXED_CATEGORIES } from '../constants/categories';
-import { getCategoryMetrics, getScannerCounts, getSubdomainMetrics, sumWeights } from '../utils/metrics';
+import { getCategoryMetrics, getScannerCounts, getSubdomainMetrics, getWeightBalance, sumWeights } from '../utils/metrics';
 import { validateScannerDraft } from '../utils/validation';
 import { detectScannerChanges, checkSaveProtection, type ChangeImpact } from '../utils/change-impact';
 import { StructureBuilder } from './StructureBuilder';
@@ -158,6 +158,7 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
   const blockingIssues = validation.issues.filter((issue) => issue.blocking);
   const counts = getScannerCounts(categories);
   const scannerWeight = sumWeights(categories);
+  const scannerBalance = getWeightBalance(scannerWeight, 100);
 
   useEffect(() => {
     if (!selectedCategoryId || !categories.some((category) => category.id === selectedCategoryId)) {
@@ -478,13 +479,13 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
       return categories.every(cat => cat.subdomains.every(sub => sub.questions.length > 0));
     }
     if (activeStep === 3) {
-      if (scannerWeight !== 100) return false;
+      if (!scannerBalance.isExact) return false;
       return categories.every(cat => {
         const catMetrics = getCategoryMetrics(cat);
-        if (catMetrics.subdomainWeightTotal !== cat.weight) return false;
+        if (!catMetrics.balance.isExact) return false;
         return cat.subdomains.every(sub => {
           const subMetrics = getSubdomainMetrics(sub);
-          return subMetrics.questionWeightTotal === sub.weight;
+          return subMetrics.balance.isExact;
         });
       });
     }
@@ -674,7 +675,7 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
                     <div className="text-xs uppercase tracking-wider font-semibold text-gray-500 mt-1">Questions</div>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
-                    <div className={`text-2xl font-bold ${scannerWeight === 100 ? 'text-emerald-600' : 'text-rose-600'}`}>{scannerWeight}%</div>
+                    <div className={`text-2xl font-bold ${scannerBalance.isExact ? 'text-emerald-600' : 'text-rose-600'}`}>{scannerWeight}%</div>
                     <div className="text-xs uppercase tracking-wider font-semibold text-gray-500 mt-1">Total Weight</div>
                   </div>
                 </div>

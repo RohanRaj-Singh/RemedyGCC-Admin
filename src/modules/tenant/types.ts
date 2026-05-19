@@ -101,6 +101,7 @@ export interface TenantSetupOption {
   id: string;
   label: string;
   description?: string;
+  disabled?: boolean;
 }
 
 export interface CreateTenantDto {

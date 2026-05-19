@@ -18,7 +18,6 @@ export const GENDER_OPTIONS = [
   { id: 'male', label: 'Male', questionType: 'buttonRadio' as QuestionType },
   { id: 'female', label: 'Female', questionType: 'buttonRadio' as QuestionType },
   { id: 'other', label: 'Other', questionType: 'buttonRadio' as QuestionType },
-  { id: 'prefer-not-to-say', label: 'Prefer not to say', questionType: 'buttonRadio' as QuestionType },
 ] as const;
 
 // Fixed options for Age (not editable)

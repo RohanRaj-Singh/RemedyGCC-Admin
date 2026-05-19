@@ -1,15 +1,12 @@
 'use client';
 
 import { Category } from '../types';
+import { areWeightsEqual, sumWeights } from '../utils/metrics';
 
 interface WeightSummaryProps {
   categories: Category[];
   selectedCategoryId?: string;
   selectedSubdomainId?: string;
-}
-
-function sumWeights(items: Array<{ weight?: number }>) {
-  return items.reduce((total, item) => total + (item.weight || 0), 0);
 }
 
 function statusTone(isValid: boolean) {
@@ -37,19 +34,19 @@ export function WeightSummary({
       label: 'Scanner total',
       value: scannerTotal,
       target: 100,
-      isValid: scannerTotal === 100,
+      isValid: areWeightsEqual(scannerTotal, 100),
     },
     selectedCategory && {
       label: `${selectedCategory.name.en || `Category ${selectedCategory.slot}`} subdomains`,
       value: subdomainTotal,
       target: selectedCategory.weight,
-      isValid: subdomainTotal === selectedCategory.weight,
+      isValid: areWeightsEqual(subdomainTotal, selectedCategory.weight),
     },
     selectedSubdomain && {
       label: `${selectedSubdomain.name.en || 'Selected subdomain'} questions`,
       value: questionTotal,
       target: selectedSubdomain.weight,
-      isValid: questionTotal === selectedSubdomain.weight,
+      isValid: areWeightsEqual(questionTotal, selectedSubdomain.weight),
     },
   ].filter(Boolean) as Array<{
     label: string;

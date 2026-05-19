@@ -15,6 +15,7 @@ import {
   ValidationResult,
   ValidationIssueSeverity,
 } from '../types';
+import { areWeightsEqual, normalizeWeight, sumWeights } from './metrics';
 
 function pushIssue(issues: ValidationIssue[], issue: Omit<ValidationIssue, 'id'>) {
   issues.push({
@@ -25,10 +26,6 @@ function pushIssue(issues: ValidationIssue[], issue: Omit<ValidationIssue, 'id'>
 
 function isLocalizedTextComplete(value?: LocalizedText): boolean {
   return Boolean(value?.en.trim() && value?.ar.trim());
-}
-
-function sumWeights(items: Array<{ weight?: number }>): number {
-  return items.reduce((total, item) => total + (item.weight || 0), 0);
 }
 
 function validateLocalizedText(
@@ -183,13 +180,14 @@ function validateSubdomain(subdomain: Subdomain, category: Category, issues: Val
   }
 
   const questionWeightTotal = sumWeights(subdomain.questions);
-  if (questionWeightTotal !== subdomain.weight) {
+  // Normalize and compare with a small tolerance so valid decimals do not fail due to JS float math.
+  if (!areWeightsEqual(questionWeightTotal, subdomain.weight)) {
     pushIssue(issues, {
       code: 'SUBDOMAIN_WEIGHT_MISMATCH',
       level: 'subdomain',
       severity: 'error',
       path: `subdomain.${subdomain.id}.weight`,
-      message: `Question weights must total ${subdomain.weight} for this subdomain. Current total is ${questionWeightTotal}.`,
+      message: `Question weights must total ${normalizeWeight(subdomain.weight)} for this subdomain. Current total is ${questionWeightTotal}.`,
       blocking: true,
       ...context,
     });
@@ -242,13 +240,13 @@ function validateCategory(category: Category, issues: ValidationIssue[]) {
   }
 
   const subdomainWeightTotal = sumWeights(category.subdomains);
-  if (subdomainWeightTotal !== category.weight) {
+  if (!areWeightsEqual(subdomainWeightTotal, category.weight)) {
     pushIssue(issues, {
       code: 'CATEGORY_WEIGHT_MISMATCH',
       level: 'category',
       severity: 'error',
       path: `category.${category.id}.weight`,
-      message: `Subdomain weights must total ${category.weight} for this category. Current total is ${subdomainWeightTotal}.`,
+      message: `Subdomain weights must total ${normalizeWeight(category.weight)} for this category. Current total is ${subdomainWeightTotal}.`,
       blocking: true,
       ...context,
     });
@@ -300,7 +298,7 @@ export function validateScannerDraft(
   }
 
   const categoryWeightTotal = sumWeights(draft.categories);
-  if (categoryWeightTotal !== 100) {
+  if (!areWeightsEqual(categoryWeightTotal, 100)) {
     pushIssue(issues, {
       code: 'SCANNER_WEIGHT_INVALID',
       level: 'scanner',

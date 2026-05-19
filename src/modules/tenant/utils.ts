@@ -11,6 +11,7 @@ export const RESERVED_TENANT_IDENTIFIERS = [
 
 const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_DNS_LABEL_LENGTH = 63;
+const MIN_SUBDOMAIN_LENGTH = 2;
 
 export interface IdentifierValidationResult {
   normalized: string;
@@ -78,7 +79,13 @@ export function validateTenantSlug(value: string): IdentifierValidationResult {
 }
 
 export function validateTenantSubdomain(value: string): IdentifierValidationResult {
-  return validateTenantIdentifier(value, 'Subdomain');
+  const result = validateTenantIdentifier(value, 'Subdomain');
+
+  if (result.normalized && result.normalized.length < MIN_SUBDOMAIN_LENGTH) {
+    result.errors.push(`Subdomain must be at least ${MIN_SUBDOMAIN_LENGTH} characters.`);
+  }
+
+  return result;
 }
 
 export function getTenantRootDomain(): string {

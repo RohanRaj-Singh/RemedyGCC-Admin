@@ -5,19 +5,37 @@
 
 import { Category, Question, Subdomain } from '../types';
 
+export const WEIGHT_EPSILON = 0.001;
+
+export function normalizeWeight(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Number(value.toFixed(2));
+}
+
+// Use a small tolerance so valid decimal totals are not rejected by floating point drift.
+export function areWeightsEqual(total: number, target: number): boolean {
+  return Math.abs(normalizeWeight(total) - normalizeWeight(target)) < WEIGHT_EPSILON;
+}
+
 export function sumWeights(items: Array<{ weight?: number }>): number {
-  return items.reduce((total, item) => total + (item.weight || 0), 0);
+  return normalizeWeight(items.reduce((total, item) => total + (item.weight || 0), 0));
 }
 
 export function getWeightBalance(total: number, target: number) {
-  const delta = target - total;
+  const normalizedTotal = normalizeWeight(total);
+  const normalizedTarget = normalizeWeight(target);
+  const isExact = areWeightsEqual(normalizedTotal, normalizedTarget);
+  const delta = isExact ? 0 : normalizeWeight(normalizedTarget - normalizedTotal);
 
   return {
-    total,
-    target,
+    total: normalizedTotal,
+    target: normalizedTarget,
     remaining: delta > 0 ? delta : 0,
     overflow: delta < 0 ? Math.abs(delta) : 0,
-    isExact: delta === 0,
+    isExact,
   };
 }
 

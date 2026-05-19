@@ -3,7 +3,7 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Category } from '../types';
-import { getCategoryMetrics, getSubdomainMetrics, sumWeights } from '../utils/metrics';
+import { getCategoryMetrics, getSubdomainMetrics, getWeightBalance, normalizeWeight, sumWeights } from '../utils/metrics';
 
 interface WeightBuilderProps {
   categories: Category[];
@@ -19,8 +19,9 @@ export function WeightBuilder({
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
 
   const scannerTotal = sumWeights(categories);
-  const isScannerBalanced = scannerTotal === 100;
-  const scannerOverflow = scannerTotal > 100;
+  const scannerBalance = getWeightBalance(scannerTotal, 100);
+  const isScannerBalanced = scannerBalance.isExact;
+  const scannerOverflow = scannerBalance.overflow > 0;
 
   function toggle(id: string) {
     setExpandedItems(prev => ({ ...prev, [id]: !prev[id] }));
@@ -41,8 +42,8 @@ export function WeightBuilder({
           'bg-amber-50 border-amber-200 text-amber-700'
         }`}>
           {scannerTotal} / 100% Total
-          {!isScannerBalanced && !scannerOverflow && ` (${100 - scannerTotal}% rem)`}
-          {scannerOverflow && ` (${scannerTotal - 100}% over)`}
+          {!isScannerBalanced && !scannerOverflow && ` (${scannerBalance.remaining}% rem)`}
+          {scannerOverflow && ` (${scannerBalance.overflow}% over)`}
         </div>
       </div>
 
@@ -52,7 +53,7 @@ export function WeightBuilder({
           const isCatExpanded = expandedItems[category.id];
           const catBalanced = catMetrics.balance.isExact;
           const catOverflow = catMetrics.balance.overflow > 0;
-          const maxCatAllowed = (100 - scannerTotal) + category.weight;
+          const maxCatAllowed = normalizeWeight(scannerBalance.remaining + category.weight);
 
           return (
             <div key={category.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
@@ -91,7 +92,7 @@ export function WeightBuilder({
                       value={category.weight === 0 ? '' : category.weight}
                       onChange={(e) => {
                         const val = Number(e.target.value);
-                        const clamped = Math.max(0, Math.min(val, maxCatAllowed));
+                        const clamped = normalizeWeight(Math.max(0, Math.min(val, maxCatAllowed)));
                         onCategoryChange({ ...category, weight: clamped });
                       }}
                       placeholder="0"
@@ -109,7 +110,7 @@ export function WeightBuilder({
                     const isSubExpanded = expandedItems[subdomain.id];
                     const subBalanced = subMetrics.balance.isExact;
                     const subOverflow = subMetrics.balance.overflow > 0;
-                    const maxSubAllowed = catMetrics.balance.remaining + subdomain.weight;
+                    const maxSubAllowed = normalizeWeight(catMetrics.balance.remaining + subdomain.weight);
 
                     return (
                       <div key={subdomain.id} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -149,7 +150,7 @@ export function WeightBuilder({
                                 value={subdomain.weight === 0 ? '' : subdomain.weight}
                                 onChange={(e) => {
                                   const val = Number(e.target.value);
-                                  const clamped = Math.max(0, Math.min(val, maxSubAllowed));
+                                  const clamped = normalizeWeight(Math.max(0, Math.min(val, maxSubAllowed)));
                                   onCategoryChange({
                                     ...category,
                                     subdomains: category.subdomains.map(s => 
@@ -168,7 +169,7 @@ export function WeightBuilder({
                         {isSubExpanded && (
                           <div className="p-4 border-t border-gray-100 space-y-3">
                             {subdomain.questions.map((question, qIndex) => {
-                              const maxQAllowed = subMetrics.balance.remaining + (question.weight || 0);
+                              const maxQAllowed = normalizeWeight(subMetrics.balance.remaining + (question.weight || 0));
 
                               return (
                                 <div key={question.id} className="flex items-center justify-between gap-4 p-3 rounded-lg border border-gray-100 bg-white shadow-sm">
@@ -197,7 +198,7 @@ export function WeightBuilder({
                                         value={question.weight === 0 ? '' : (question.weight || '')}
                                         onChange={(e) => {
                                           const val = Number(e.target.value);
-                                          const clamped = Math.max(0, Math.min(val, maxQAllowed));
+                                          const clamped = normalizeWeight(Math.max(0, Math.min(val, maxQAllowed)));
                                           onCategoryChange({
                                             ...category,
                                             subdomains: category.subdomains.map(s => 

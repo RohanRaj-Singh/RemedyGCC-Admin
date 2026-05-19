@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import type { BrandingConfig, TenantSetupOption, TenantStatus } from '@/modules/tenant/types';
 import { getAllTemplates } from '@/modules/attribute-template/service';
-import { getScanners } from '@/modules/scanner/service';
+import { getPublishedScanners } from '@/modules/scanner/service';
 import { BrandingPanel, BrandingPreviewCard } from '@/components/tenants';
 import { getTenantHostname, getTenantHostnameSuffix } from '@/modules/tenant/utils';
 import { tenantService } from '@/services/tenant-service';
@@ -40,6 +40,7 @@ interface TenantData {
   draftScannerId: string | null;
   draftAttributeTemplateId: string | null;
   branding: Partial<BrandingConfig> | null;
+  draftScanner?: TenantSetupOption | null;
   activeRuntimeConfig?: TenantRuntimeConfig | null;
 }
 
@@ -87,7 +88,7 @@ export default function EditTenantPage() {
     async function loadData() {
       try {
         const [scanners, templates, tenantResult] = await Promise.all([
-          getScanners(),
+          getPublishedScanners(),
           getAllTemplates(),
           tenantService.getById(tenantId),
         ]);
@@ -115,7 +116,22 @@ export default function EditTenantPage() {
           branding: t.branding || {},
         });
 
-        setScannerOptions(scanners.map(s => ({ id: s.id, label: s.name.en || s.id, description: s.description?.en })));
+        const publishedScannerOptions: TenantSetupOption[] = scanners.map((scanner) => ({
+          id: scanner.id,
+          label: scanner.name.en || scanner.id,
+          description: scanner.description?.en,
+        }));
+
+        if (t.draftScannerId && !publishedScannerOptions.some((option) => option.id === t.draftScannerId)) {
+          publishedScannerOptions.unshift({
+            id: t.draftScannerId,
+            label: t.draftScanner?.label || 'Previously selected scanner',
+            description: 'Unpublished scanner. Choose a published scanner before saving.',
+            disabled: true,
+          });
+        }
+
+        setScannerOptions(publishedScannerOptions);
         setAttributeTemplateOptions(templates.map(tmpl => ({ id: tmpl.id, label: tmpl.name, description: tmpl.description })));
       } catch (e) {
         if (isMounted) setError('Failed to load survey data.');
@@ -377,7 +393,7 @@ export default function EditTenantPage() {
                 >
                   <option value="">Select a scanner...</option>
                   {scannerOptions.map(opt => (
-                    <option key={opt.id} value={opt.id}>{opt.label}{opt.description ? ` - ${opt.description}` : ''}</option>
+                    <option key={opt.id} value={opt.id} disabled={opt.disabled}>{opt.label}{opt.description ? ` - ${opt.description}` : ''}</option>
                   ))}
                 </select>
               </div>

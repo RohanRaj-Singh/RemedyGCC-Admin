@@ -20,14 +20,16 @@ function progressWidth(total: number, target: number) {
 }
 
 function toneForBalance(total: number, target: number) {
-  if (total === target) {
+  const balance = getWeightBalance(total, target);
+
+  if (balance.isExact) {
     return {
       bar: 'bg-emerald-500',
       chip: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     };
   }
 
-  if (total > target) {
+  if (balance.overflow > 0) {
     return {
       bar: 'bg-rose-500',
       chip: 'bg-rose-50 text-rose-700 border-rose-200',

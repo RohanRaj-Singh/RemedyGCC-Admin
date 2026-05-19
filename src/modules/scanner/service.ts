@@ -155,9 +155,23 @@ function createVersion(
   };
 }
 
-export async function getScanners(): Promise<Scanner[]> {
-  const documents = await getScannersListData();
-  return documents.map(toScannerSummary);
+function isProvisioningReadyScanner(scanner: Scanner): boolean {
+  return scanner.status === 'published' && Boolean(scanner.publishedVersionId);
+}
+
+export async function getScanners(options: { publishedOnly?: boolean } = {}): Promise<Scanner[]> {
+  const documents = await getScannersListData({ publishedOnly: options.publishedOnly });
+  const scanners = documents.map(toScannerSummary);
+
+  if (options.publishedOnly) {
+    return scanners.filter(isProvisioningReadyScanner);
+  }
+
+  return scanners;
+}
+
+export async function getPublishedScanners(): Promise<Scanner[]> {
+  return getScanners({ publishedOnly: true });
 }
 
 export async function getScannerById(id: string): Promise<ScannerDetail | null> {

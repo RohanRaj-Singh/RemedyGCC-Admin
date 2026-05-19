@@ -338,7 +338,7 @@ export const TenantForm = memo(function TenantForm({
             >
               <option value="">Select scanner</option>
               {scannerOptions.map((option) => (
-                <option key={option.id} value={option.id}>
+                <option key={option.id} value={option.id} disabled={option.disabled}>
                   {option.label}
                 </option>
               ))}

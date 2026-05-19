@@ -10,6 +10,7 @@
  */
 
 import type { Category, Question, ScannerVersion, Subdomain } from '../types';
+import { areWeightsEqual, normalizeWeight } from './metrics';
 
 export type ChangeImpactType = 'safe' | 'additive' | 'breaking';
 
@@ -252,12 +253,12 @@ function detectCategoryChanges(before: Category[], after: Category[]): ChangeImp
     const afterCat = afterMap.get(id);
     if (!afterCat) continue;
 
-    if (beforeCat.weight !== afterCat.weight) {
+    if (!areWeightsEqual(beforeCat.weight, afterCat.weight)) {
       impacts.push({
         type: 'breaking',
         severity: 'blocking',
         code: 'CATEGORY_WEIGHT_CHANGED',
-        message: `Category weight changed from ${beforeCat.weight}% to ${afterCat.weight}%`,
+        message: `Category weight changed from ${normalizeWeight(beforeCat.weight)}% to ${normalizeWeight(afterCat.weight)}%`,
         path: `categories.${id}.weight`,
       });
     }

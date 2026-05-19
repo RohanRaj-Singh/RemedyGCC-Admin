@@ -15,6 +15,10 @@ export type ScannerDocument = Omit<Scanner, 'draftVersionId' | 'publishedVersion
 
 export type ScannerVersionDocument = ScannerVersion;
 
+interface ScannerListFilters {
+  publishedOnly?: boolean;
+}
+
 let indexPromise: Promise<void> | null = null;
 
 export async function ensureScannerModuleIndexes(): Promise<void> {
@@ -54,10 +58,13 @@ __emit(null);
   await indexPromise;
 }
 
-export async function getScannersListData(): Promise<ScannerDocument[]> {
+export async function getScannersListData(
+  filters: ScannerListFilters = {},
+): Promise<ScannerDocument[]> {
   await ensureScannerModuleIndexes();
   return runMongoScript<ScannerDocument[]>(`
-const scanners = db.scanners.find({}, { projection: { _id: 0 } }).sort({ updatedAt: -1 }).toArray();
+const scannerQuery = __payload.publishedOnly ? { status: 'published' } : {};
+const scanners = db.scanners.find(scannerQuery, { projection: { _id: 0 } }).sort({ updatedAt: -1 }).toArray();
 
 const result = scanners.map(scanner => {
   const versions = db.adminScannerVersions.find({ scannerId: scanner.id }, { projection: { _id: 0 } }).toArray();
@@ -65,7 +72,7 @@ const result = scanners.map(scanner => {
 });
 
 __emit(__strip(result));
-`);
+`, { publishedOnly: filters.publishedOnly ?? false });
 }
 
 export async function getScannerDetailData(scannerId: string): Promise<ScannerDocument | null> {

@@ -324,7 +324,10 @@ async function resolvePublishingSource(
   const scannerDetail = tenant.draftScannerId
     ? await getScannerById(tenant.draftScannerId)
     : null;
-  const sourceVersion = scannerDetail?.draftVersion ?? scannerDetail?.publishedVersion ?? null;
+  const sourceVersion =
+    scannerDetail?.status === 'published' && scannerDetail.publishedVersion
+      ? scannerDetail.publishedVersion
+      : null;
 
   const sourceTemplate = tenant.draftAttributeTemplateId
     ? await getTemplateById(tenant.draftAttributeTemplateId)
@@ -345,6 +348,23 @@ function assertTenantName(name: string | undefined): string {
   }
 
   return trimmed;
+}
+
+async function assertPublishedTenantScanner(
+  scannerId: string | null | undefined,
+): Promise<void> {
+  if (!scannerId) {
+    return;
+  }
+
+  const scannerDetail = await getScannerById(scannerId);
+  if (!scannerDetail) {
+    throw new Error('Selected scanner was not found.');
+  }
+
+  if (scannerDetail.status !== 'published' || !scannerDetail.publishedVersion) {
+    throw new Error('Only published scanners can be assigned to a tenant.');
+  }
 }
 
 function assertUniqueIdentifier(
@@ -442,6 +462,26 @@ async function buildPublishingPreview(
       level: 'tenant',
       path: 'draftScannerId',
       message: 'Choose a scanner before publishing this survey.',
+      blocking: true,
+    });
+  }
+
+  if (tenant.draftScannerId && !resolvedSource.scannerDetail) {
+    issues.push({
+      code: 'TENANT_SCANNER_MISSING',
+      level: 'tenant',
+      path: 'draftScannerId',
+      message: 'The selected scanner no longer exists. Choose a published scanner before publishing this survey.',
+      blocking: true,
+    });
+  }
+
+  if (tenant.draftScannerId && resolvedSource.scannerDetail && !resolvedSource.sourceVersion) {
+    issues.push({
+      code: 'TENANT_SCANNER_NOT_PUBLISHED',
+      level: 'tenant',
+      path: 'draftScannerId',
+      message: 'Only published scanners can be assigned to a tenant. Select a published scanner before publishing this survey.',
       blocking: true,
     });
   }
@@ -797,6 +837,8 @@ export async function createTenant(data: CreateTenantDto): Promise<Tenant> {
     throw new Error('New tenants start in Draft Setup. Publish the survey before making it live.');
   }
 
+  await assertPublishedTenantScanner(data.draftScannerId ?? null);
+
   const now = new Date().toISOString();
   const document: TenantDocument = {
     tenantId: createTenantId(slugValidation.normalized),
@@ -898,6 +940,10 @@ export async function updateTenant(
     throw new Error(brandingValidation.errors[0]);
   }
 
+  const nextDraftScannerId =
+    data.draftScannerId !== undefined ? data.draftScannerId : current.draftScannerId;
+  await assertPublishedTenantScanner(nextDraftScannerId);
+
   const nextStatus = data.status ?? current.status;
   assertSafeStatus(current, nextStatus, Boolean(current.activeRuntimeConfigId));
 
@@ -907,8 +953,7 @@ export async function updateTenant(
     slug: nextSlug,
     subdomain: nextSubdomain,
     status: nextStatus,
-    draftScannerId:
-      data.draftScannerId !== undefined ? data.draftScannerId : current.draftScannerId,
+    draftScannerId: nextDraftScannerId,
     draftAttributeTemplateId:
       data.draftAttributeTemplateId !== undefined
         ? data.draftAttributeTemplateId

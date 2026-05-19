@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import type { BrandingConfig, TenantSetupOption } from '@/modules/tenant/types';
 import { getAllTemplates } from '@/modules/attribute-template/service';
-import { getScanners } from '@/modules/scanner/service';
+import { getPublishedScanners } from '@/modules/scanner/service';
 import { getTenantHostname, getTenantHostnameSuffix } from '@/modules/tenant/utils';
 import { tenantService } from '@/services/tenant-service';
 import { BrandingPanel, BrandingPreviewCard } from '@/components/tenants';
@@ -54,7 +54,7 @@ function normalizeSubdomain(value: string): string {
 // Validate subdomain format
 function isValidSubdomain(value: string): boolean {
   const normalized = normalizeSubdomain(value);
-  return normalized.length >= 3 && normalized.length <= 63 && /^[a-z09][a-z0-9-]*[a-z0-9]$/.test(normalized);
+  return normalized.length >= 2 && normalized.length <= 63 && /^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(normalized);
 }
 
 // Check if subdomain is reserved
@@ -88,7 +88,7 @@ export default function NewTenantPage() {
     let isMounted = true;
     async function loadOptions() {
       try {
-        const [scanners, templates] = await Promise.all([getScanners(), getAllTemplates()]);
+        const [scanners, templates] = await Promise.all([getPublishedScanners(), getAllTemplates()]);
         if (!isMounted) return;
         setScannerOptions(scanners.map(s => ({ id: s.id, label: s.name.en || s.id, description: s.description?.en })));
         setAttributeTemplateOptions(templates.map(t => ({ id: t.id, label: t.name, description: t.description })));
@@ -109,7 +109,7 @@ export default function NewTenantPage() {
       if (generated !== subdomain) {
         setSubdomain(generated);
         // Reset validation when auto-generating
-        if (generated.length >= 3) {
+        if (generated.length >= 2) {
           validateSubdomain(generated);
         }
       }
@@ -158,7 +158,7 @@ export default function NewTenantPage() {
     }
 
     // Debounce validation
-    if (normalized.length >= 3) {
+    if (normalized.length >= 2) {
       checkTimeoutRef.current = setTimeout(() => {
         validateSubdomain(normalized);
       }, 500);
@@ -169,7 +169,7 @@ export default function NewTenantPage() {
 
   const canProceed = () => {
     if (currentStep === 1) {
-      return name.trim().length > 0 && subdomain.trim().length >= 3 && subdomainStatus !== 'taken' && subdomainStatus !== 'reserved' && subdomainStatus !== 'invalid';
+      return name.trim().length > 0 && subdomain.trim().length >= 2 && subdomainStatus !== 'taken' && subdomainStatus !== 'reserved' && subdomainStatus !== 'invalid';
     }
     if (currentStep === 2) return draftScannerId !== null && draftAttributeTemplateId !== null;
     return true;
@@ -208,13 +208,13 @@ export default function NewTenantPage() {
 
   // Subdomain status UI
   const getSubdomainStatusUI = () => {
-    if (subdomainStatus === 'idle' || subdomain.length < 3) return null;
+    if (subdomainStatus === 'idle' || subdomain.length < 2) return null;
 
     const statusConfig = {
       checking: { icon: Loader2, class: 'text-blue-600', message: 'Checking availability...' },
       available: { icon: Check, class: 'text-green-600', message: 'This subdomain is available.' },
       taken: { icon: XCircle, class: 'text-red-600', message: 'This subdomain is already in use. Choose another.' },
-      invalid: { icon: AlertCircle, class: 'text-amber-600', message: 'Subdomains may only contain lowercase letters, numbers, and hyphens.' },
+      invalid: { icon: AlertCircle, class: 'text-amber-600', message: 'Subdomains must be 2-63 characters and use only lowercase letters, numbers, and hyphens.' },
       reserved: { icon: XCircle, class: 'text-red-600', message: 'This subdomain is reserved and cannot be used.' },
     };
 
@@ -362,7 +362,7 @@ export default function NewTenantPage() {
               >
                 <option value="">Select a scanner...</option>
                 {scannerOptions.map(opt => (
-                  <option key={opt.id} value={opt.id}>{opt.label}{opt.description ? ` - ${opt.description}` : ''}</option>
+                  <option key={opt.id} value={opt.id} disabled={opt.disabled}>{opt.label}{opt.description ? ` - ${opt.description}` : ''}</option>
                 ))}
               </select>
               {scannerOptions.length === 0 && (
