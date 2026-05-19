@@ -15,6 +15,7 @@ import {
   ValidationResult,
   ValidationIssueSeverity,
 } from '../types';
+import { normalizeCategories } from './builder';
 import { areWeightsEqual, normalizeWeight, sumWeights } from './metrics';
 
 function pushIssue(issues: ValidationIssue[], issue: Omit<ValidationIssue, 'id'>) {
@@ -275,6 +276,9 @@ export function validateScannerDraft(
   _attributeTemplate: unknown
 ): ValidationResult {
   const issues: ValidationIssue[] = [];
+  // Order fields are derived from array position in the builder, so normalize
+  // them here to avoid false validation failures after client-side reordering.
+  const normalizedCategories = normalizeCategories(draft.categories);
 
   validateLocalizedText(
     issues,
@@ -286,7 +290,7 @@ export function validateScannerDraft(
     {}
   );
 
-  if (draft.categories.length !== 5) {
+  if (normalizedCategories.length !== 5) {
     pushIssue(issues, {
       code: 'CATEGORY_COUNT_INVALID',
       level: 'scanner',
@@ -297,7 +301,7 @@ export function validateScannerDraft(
     });
   }
 
-  const categoryWeightTotal = sumWeights(draft.categories);
+  const categoryWeightTotal = sumWeights(normalizedCategories);
   if (!areWeightsEqual(categoryWeightTotal, 100)) {
     pushIssue(issues, {
       code: 'SCANNER_WEIGHT_INVALID',
@@ -312,7 +316,7 @@ export function validateScannerDraft(
   const seenQuestionIds = new Set<string>();
   const questionMap = new Map<string, { question: Question, category: Category, subdomain: Subdomain }>();
   
-  draft.categories.forEach((category) => {
+  normalizedCategories.forEach((category) => {
     validateCategory(category, issues);
 
     category.subdomains.forEach((subdomain) => {

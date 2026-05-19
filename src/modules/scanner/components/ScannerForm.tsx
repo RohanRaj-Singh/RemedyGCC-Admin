@@ -20,7 +20,7 @@ import {
   duplicateScanner,
 } from '../service';
 import { ValidationIssue, ScannerDetail, ScannerStatus, ScannerVersion } from '../types';
-import { createDefaultCategories, emptyText } from '../utils/builder';
+import { createDefaultCategories, emptyText, normalizeCategories } from '../utils/builder';
 import { FIXED_CATEGORIES } from '../constants/categories';
 import { getCategoryMetrics, getScannerCounts, getSubdomainMetrics, getWeightBalance, sumWeights } from '../utils/metrics';
 import { validateScannerDraft } from '../utils/validation';
@@ -107,24 +107,30 @@ const steps = [
   },
 ] as const;
 
+function prepareCategories(
+  categories?: ScannerVersion['categories'] | null,
+) {
+  if (!categories || categories.length !== 5) {
+    return createDefaultCategories();
+  }
+
+  return normalizeCategories(
+    categories.map((cat, i) => ({
+      ...cat,
+      name: { en: FIXED_CATEGORIES[i], ar: FIXED_CATEGORIES[i] },
+    }))
+  );
+}
+
 export function ScannerForm({ scanner }: ScannerFormProps) {
   const router = useRouter();
   const [scannerId, setScannerId] = useState<string | null>(scanner?.id ?? null);
   const [status, setStatus] = useState<ScannerStatus>(scanner?.status ?? 'draft');
   const [name, setName] = useState(scanner?.name ?? emptyText());
   const [description, setDescription] = useState(scanner?.description ?? emptyText());
-  const [categories, setCategories] = useState(() => {
-    let initial = scanner?.draftVersion?.categories ?? scanner?.publishedVersion?.categories;
-    if (!initial || initial.length !== 5) {
-      initial = createDefaultCategories();
-    } else {
-      initial = initial.map((cat, i) => ({
-        ...cat,
-        name: { en: FIXED_CATEGORIES[i], ar: FIXED_CATEGORIES[i] }
-      }));
-    }
-    return initial;
-  });
+  const [categories, setCategories] = useState(() =>
+    prepareCategories(scanner?.draftVersion?.categories ?? scanner?.publishedVersion?.categories)
+  );
   const [followUpTriggers, setFollowUpTriggers] = useState(() => {
     return scanner?.draftVersion?.followUpTriggers ?? scanner?.publishedVersion?.followUpTriggers ?? [];
   });
@@ -142,6 +148,12 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
   const hasDraftVersion = versions.some((version) => version.status === 'draft') || !scannerId;
   const totalResponses = versions.reduce((sum, v) => sum + v.responseCount, 0);
   const hasResponses = totalResponses > 0;
+  const baselineDraftVersion = scanner?.draftVersion
+    ? {
+        ...scanner.draftVersion,
+        categories: prepareCategories(scanner.draftVersion.categories),
+      }
+    : null;
   const selectedCategory = categories.find((category) => category.id === selectedCategoryId);
   const selectedSubdomain = selectedCategory?.subdomains.find(
     (subdomain) => subdomain.id === selectedSubdomainId
@@ -220,7 +232,9 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
   const initialStateRef = useCallback(() => ({
     name: scanner?.name ?? emptyText(),
     description: scanner?.description ?? emptyText(),
-    categories: scanner?.draftVersion?.categories ?? scanner?.publishedVersion?.categories ?? createDefaultCategories(),
+    categories: prepareCategories(
+      scanner?.draftVersion?.categories ?? scanner?.publishedVersion?.categories
+    ),
     followUpTriggers: scanner?.draftVersion?.followUpTriggers ?? scanner?.publishedVersion?.followUpTriggers ?? [],
   }), [scanner]);
 
@@ -259,15 +273,9 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
     setStatus(detail.status);
     setName(detail.name);
     setDescription(detail.description ?? emptyText());
-    let nextCategories = detail.draftVersion?.categories ?? detail.publishedVersion?.categories;
-    if (!nextCategories || nextCategories.length !== 5) {
-      nextCategories = createDefaultCategories();
-    } else {
-      nextCategories = nextCategories.map((cat, i) => ({
-        ...cat,
-        name: { en: FIXED_CATEGORIES[i], ar: FIXED_CATEGORIES[i] }
-      }));
-    }
+    const nextCategories = prepareCategories(
+      detail.draftVersion?.categories ?? detail.publishedVersion?.categories
+    );
     setCategories(nextCategories);
     setFollowUpTriggers(detail.draftVersion?.followUpTriggers ?? detail.publishedVersion?.followUpTriggers ?? []);
     setVersions(detail.versions);
@@ -299,11 +307,11 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
 
   async function handleSaveDraft() {
     // Check for breaking changes if scanner has responses
-    if (hasResponses && scanner?.draftVersion) {
+    if (hasResponses && baselineDraftVersion) {
       const changeResult = detectScannerChanges(
-        scanner.draftVersion,
+        baselineDraftVersion,
         {
-          ...scanner.draftVersion,
+          ...baselineDraftVersion,
           categories,
           followUpTriggers,
         } as ScannerVersion
@@ -392,9 +400,11 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
   }
 
   function updateCategory(updatedCategory: typeof categories[number]) {
-    setCategories(
-      categories.map((category) =>
+    setCategories((currentCategories) =>
+      normalizeCategories(
+        currentCategories.map((category) =>
         category.id === updatedCategory.id ? updatedCategory : category
+        )
       )
     );
   }
@@ -513,10 +523,10 @@ export function ScannerForm({ scanner }: ScannerFormProps) {
           </div>
         )}
 
-        {hasResponses && scanner?.draftVersion && (
+        {hasResponses && baselineDraftVersion && (
           <ChangeImpactIndicator
-            impacts={detectScannerChanges(scanner.draftVersion, {
-              ...scanner.draftVersion,
+            impacts={detectScannerChanges(baselineDraftVersion, {
+              ...baselineDraftVersion,
               categories,
               followUpTriggers,
             } as ScannerVersion).impacts}

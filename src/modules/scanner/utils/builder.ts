@@ -46,6 +46,41 @@ export function createEmptySubdomain(categoryId: string, order: number): Subdoma
   };
 }
 
+function normalizeQuestionOptions(options: Question['options']): Question['options'] {
+  return options.map((option, index) => ({
+    ...option,
+    order: index + 1,
+  }));
+}
+
+function normalizeQuestions(subdomainId: string, questions: Question[]): Question[] {
+  return questions.map((question, index) => ({
+    ...question,
+    order: index + 1,
+    subdomainId,
+    options: normalizeQuestionOptions(question.options),
+  }));
+}
+
+function normalizeSubdomains(categoryId: string, subdomains: Subdomain[]): Subdomain[] {
+  return subdomains.map((subdomain, index) => ({
+    ...subdomain,
+    order: index + 1,
+    categoryId,
+    questions: normalizeQuestions(subdomain.id, subdomain.questions),
+  }));
+}
+
+// The builder UI uses array position as the source of truth, so we rewrite
+// derived order fields after add/remove/reorder operations to keep validation in sync.
+export function normalizeCategories(categories: Category[]): Category[] {
+  return categories.map((category, index) => ({
+    ...category,
+    order: index + 1,
+    subdomains: normalizeSubdomains(category.id, category.subdomains),
+  }));
+}
+
 export function createDefaultCategories(): Category[] {
   return FIXED_CATEGORIES.map((name, index) => {
     const slot = (index + 1) as Category['slot'];

@@ -8,7 +8,7 @@
 
 import { Category, CreateScannerDto, DuplicateScannerDto, LocalizedText, SaveScannerDraftDto, Scanner, ScannerDetail, ScannerFollowUpTrigger, ScannerStatus, ScannerVersion, ScannerVersionSummary, ScannerVersionStats, TemplateOption, ValidationResult } from './types';
 import { validateScannerDraft } from './utils/validation';
-import { createDefaultCategories, createId } from './utils/builder';
+import { createDefaultCategories, createId, normalizeCategories } from './utils/builder';
 import { detectScannerChanges, checkSubmissionProtection, type ChangeImpact } from './utils/change-impact';
 import {
   getScannersListData,
@@ -145,7 +145,7 @@ function createVersion(
     status,
     isActive,
     sourceVersionId,
-    categories: clone(categories),
+    categories: normalizeCategories(categories),
     followUpTriggers: clone(followUpTriggers),
     responseCount,
     publishedAt,
@@ -258,9 +258,10 @@ export async function saveScannerDraft(
   }
 
   const now = new Date().toISOString();
+  const normalizedCategories = normalizeCategories(data.categories);
 
   const versionUpdates: Partial<ScannerVersionDocument> = {
-    categories: clone(data.categories),
+    categories: normalizedCategories,
     followUpTriggers: clone(data.followUpTriggers),
     updatedAt: now,
   };
@@ -379,6 +380,21 @@ export async function publishScanner(scannerId: string): Promise<ScannerDetail> 
   }
 
   const now = new Date().toISOString();
+  const normalizedDraftCategories = normalizeCategories(draft.categories);
+
+  if (JSON.stringify(normalizedDraftCategories) !== JSON.stringify(draft.categories)) {
+    const normalizedDraft = await updateScannerDraftDocument(
+      scannerId,
+      draft.id,
+      {},
+      { categories: normalizedDraftCategories, updatedAt: now }
+    );
+
+    if (!normalizedDraft) {
+      throw new Error('Failed to normalize scanner draft before publishing.');
+    }
+  }
+
   const updatedDocument = await publishScannerVersionDocument(scannerId, draft.id, now);
 
   if (!updatedDocument) {
