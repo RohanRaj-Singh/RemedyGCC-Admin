@@ -341,6 +341,8 @@ db.tenants.insertOne(__payload.tenant);
 __emit(__strip(__payload.tenant));
 `, {
     tenant,
+  }, {
+    label: 'tenant.insert-document',
   });
 }
 
@@ -362,6 +364,8 @@ __emit(__strip(updatedTenant));
 `, {
     tenantId,
     updates,
+  }, {
+    label: 'tenant.update-document',
   });
 }
 
@@ -428,7 +432,9 @@ __emit({
   tenant: __strip(tenant),
   runtimeConfig: __strip(runtimeConfig),
 });
-`, payload);
+`, payload, {
+  label: 'tenant.activate-runtime-config',
+});
 }
 
 export async function publishTenantRuntimeDocuments(payload: {
@@ -502,7 +508,9 @@ __emit({
   tenant: __strip(tenant),
   runtimeConfig: __strip(runtimeConfig),
 });
-`, payload);
+`, payload, {
+  label: 'tenant.publish-runtime-documents',
+});
 }
 
 export async function deleteTenantDocument(

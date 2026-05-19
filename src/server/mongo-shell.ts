@@ -10,6 +10,22 @@ const execFileAsync = promisify(execFile);
 
 const DEFAULT_DEVELOPMENT_MONGODB_URI = 'mongodb://127.0.0.1:27017/remedygcc';
 
+interface RunMongoScriptOptions {
+  label?: string;
+}
+
+interface MongoshScriptErrorPayload {
+  name?: string;
+  message?: string;
+  code?: string | number | null;
+  stack?: string | null;
+  cause?: string | null;
+}
+
+interface MongoshParsedError {
+  __error?: string | MongoshScriptErrorPayload;
+}
+
 function getMongoUri(): string {
   const configuredUri = process.env.MONGODB_URI?.trim();
 
@@ -68,7 +84,13 @@ const __strip = (value) => {
     ${scriptBody}
   } catch (error) {
     __emit({
-      __error: error?.message ?? String(error),
+      __error: {
+        name: error?.name ?? 'Error',
+        message: error?.message ?? String(error),
+        code: error?.code ?? null,
+        stack: error?.stack ?? null,
+        cause: error?.cause?.message ?? (error?.cause ? String(error.cause) : null),
+      },
     });
     quit(1);
   }
@@ -76,12 +98,77 @@ const __strip = (value) => {
 `;
 }
 
+function maskMongoUri(uri: string): string {
+  return uri.replace(
+    /(mongodb(?:\+srv)?:\/\/[^:/?#]+:)([^@]+)(@)/i,
+    '$1***$3',
+  );
+}
+
+function toText(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Buffer.isBuffer(value)) {
+    return value.toString('utf8');
+  }
+
+  return value == null ? '' : String(value);
+}
+
+function getLastNonEmptyLine(output: string): string | null {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .pop() ?? null;
+}
+
+function parseMongoshPayload<T>(output: string): T | null {
+  const lastLine = getLastNonEmptyLine(output);
+
+  if (!lastLine) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(lastLine) as T;
+  } catch {
+    return null;
+  }
+}
+
+function formatMongoshScriptError(
+  error: string | MongoshScriptErrorPayload | undefined,
+): string {
+  if (!error) {
+    return 'Mongo shell request failed.';
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  const parts = [
+    error.message,
+    error.code ? `code=${error.code}` : null,
+    error.cause ? `cause=${error.cause}` : null,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(' | ') : 'Mongo shell request failed.';
+}
+
 export async function runMongoScript<T>(
   scriptBody: string,
   payload?: unknown,
+  options: RunMongoScriptOptions = {},
 ): Promise<T> {
   const tempDir = await mkdtemp(join(tmpdir(), 'remedygcc-mongosh-'));
   const scriptPath = join(tempDir, 'script.js');
+  const mongoshPath = getMongoshPath();
+  const mongoUri = getMongoUri();
+  const label = options.label ?? 'mongo-script';
 
   try {
   // Use a temp file instead of --eval so large branding payloads do not exceed
@@ -89,9 +176,9 @@ export async function runMongoScript<T>(
   await writeFile(scriptPath, buildScript(scriptBody, payload ?? null), 'utf8');
 
   const { stdout, stderr } = await execFileAsync(
-    getMongoshPath(),
+    mongoshPath,
     [
-      getMongoUri(),
+      mongoUri,
       '--quiet',
       '--file',
       scriptPath,
@@ -107,36 +194,53 @@ export async function runMongoScript<T>(
   );
 
   if (stderr?.trim()) {
-    console.error('MONGOSH STDERR:', stderr);
+    console.error(`MONGOSH STDERR [${label}]:`, stderr);
   }
 
-  const lastLine = stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .pop();
-
-  if (!lastLine) {
+  const parsed = parseMongoshPayload<T | MongoshParsedError>(stdout);
+  if (!parsed) {
     return null as T;
   }
 
-  const parsed = JSON.parse(lastLine) as T | { __error?: string };
-
   if (parsed && typeof parsed === 'object' && '__error' in parsed) {
-    throw new Error(parsed.__error || 'Mongo shell request failed.');
+    throw new Error(formatMongoshScriptError(parsed.__error));
   }
 
   return parsed as T;
 
 } catch (error: unknown) {
-  console.error('MONGOSH EXEC ERROR:', error);
+  const stdout = error && typeof error === 'object' && 'stdout' in error
+    ? toText(error.stdout)
+    : '';
+  const stderr = error && typeof error === 'object' && 'stderr' in error
+    ? toText(error.stderr)
+    : '';
+  const parsedError = parseMongoshPayload<MongoshParsedError>(stdout);
 
-  if (error && typeof error === 'object' && 'stdout' in error) {
-    console.error('MONGOSH STDOUT:', error.stdout);
+  console.error(`MONGOSH EXEC ERROR [${label}]:`, error);
+  console.error(`MONGOSH EXEC CONTEXT [${label}]:`, {
+    mongoshPath,
+    mongoUri: maskMongoUri(mongoUri),
+    scriptPath,
+    nodeEnv: process.env.NODE_ENV ?? 'development',
+  });
+
+  if (stdout) {
+    console.error(`MONGOSH STDOUT [${label}]:`, stdout);
   }
 
-  if (error && typeof error === 'object' && 'stderr' in error) {
-    console.error('MONGOSH STDERR:', error.stderr);
+  if (stderr) {
+    console.error(`MONGOSH STDERR [${label}]:`, stderr);
+  }
+
+  if (parsedError?.__error) {
+    console.error(`MONGOSH SCRIPT ERROR [${label}]:`, parsedError.__error);
+
+    if (typeof parsedError.__error === 'object' && parsedError.__error?.stack) {
+      console.error(`MONGOSH SCRIPT STACK [${label}]:`, parsedError.__error.stack);
+    }
+
+    throw new Error(formatMongoshScriptError(parsedError.__error));
   }
 
   throw error;
