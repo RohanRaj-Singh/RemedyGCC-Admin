@@ -123,6 +123,46 @@ const __ensureIndex = (collectionName, key, options = {}) => {
   return collection.createIndex(key, options);
 };
 
+const __dropIndexIfPresent = (collectionName, predicate) => {
+  const collection = db.getCollection(collectionName);
+  const index = collection.getIndexes().find(predicate);
+
+  if (index && index.name !== '_id_') {
+    collection.dropIndex(index.name);
+  }
+};
+
+// Backfill legacy tenant identifier aliases before index management runs.
+db.tenants.updateMany(
+  {
+    $or: [
+      { tenantId: { $exists: false }, id: { $type: 'string' } },
+      { id: { $exists: false }, tenantId: { $type: 'string' } },
+      { id: null, tenantId: { $type: 'string' } },
+    ],
+  },
+  [
+    {
+      $set: {
+        tenantId: { $ifNull: ['$tenantId', '$id'] },
+        id: { $ifNull: ['$id', '$tenantId'] },
+      },
+    },
+  ],
+);
+
+// The current schema uses tenantId as the canonical key. Drop the old unique
+// id index so inserts do not fail with dup key { id: null } on legacy databases.
+__dropIndexIfPresent(
+  'tenants',
+  (index) =>
+    index.name === 'id_1'
+    || (
+      __stable(index.key) === __stable({ id: 1 })
+      && Boolean(index.unique)
+    ),
+);
+
 __ensureIndex('tenants', { tenantId: 1 }, { unique: true, name: 'tenant_id_unique' });
 __ensureIndex('tenants', { slug: 1 }, { unique: true, name: 'tenant_slug_unique' });
 __ensureIndex(
@@ -199,7 +239,9 @@ __ensureIndex(
   { name: 'raw_response_tenant_runtime_config_submitted' },
 );
 __emit(null);
-`).catch((error) => {
+`, undefined, {
+      label: 'tenant.ensure-indexes',
+    }).catch((error) => {
       indexPromise = null;
       throw error;
     });
@@ -337,8 +379,13 @@ export async function insertTenantDocument(
   tenant: TenantDocument,
 ): Promise<TenantDocument> {
   return runMongoScript<TenantDocument>(`
-db.tenants.insertOne(__payload.tenant);
-__emit(__strip(__payload.tenant));
+const tenantToInsert = {
+  ...__payload.tenant,
+  id: __payload.tenant.id ?? __payload.tenant.tenantId,
+};
+
+db.tenants.insertOne(tenantToInsert);
+__emit(__strip(tenantToInsert));
 `, {
     tenant,
   }, {
