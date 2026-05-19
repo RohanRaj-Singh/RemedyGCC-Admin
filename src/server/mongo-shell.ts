@@ -21,7 +21,9 @@ function getMongoUri(): string {
     return DEFAULT_DEVELOPMENT_MONGODB_URI;
   }
 
-  throw new Error('MONGODB_URI must be configured before starting the admin app in production.');
+  throw new Error(
+    'MONGODB_URI must be configured before starting the admin app in production.',
+  );
 }
 
 function getMongoshPath(): string {
@@ -82,45 +84,57 @@ export async function runMongoScript<T>(
   const scriptPath = join(tempDir, 'script.js');
 
   try {
-    // Use a temp file instead of --eval so large branding payloads do not exceed
-    // Windows command-line limits when tenants include uploaded data URLs.
-    await writeFile(scriptPath, buildScript(scriptBody, payload ?? null), 'utf8');
+  // Use a temp file instead of --eval so large branding payloads do not exceed
+  // Windows command-line limits when tenants include uploaded data URLs.
+  await writeFile(scriptPath, buildScript(scriptBody, payload ?? null), 'utf8');
 
-    const { stdout } = await execFileAsync(
-      getMongoshPath(),
-      [
-        getMongoUri(),
-        '--quiet',
-        '--file',
-        scriptPath,
-      ],
-      {
-        windowsHide: true,
-        maxBuffer: 16 * 1024 * 1024,
-        env: {
-          ...process.env,
-          MONGOSH_DISABLE_TELEMETRY: '1',
-        },
+  const { stdout, stderr } = await execFileAsync(
+    getMongoshPath(),
+    [
+      getMongoUri(),
+      '--quiet',
+      '--file',
+      scriptPath,
+    ],
+    {
+      windowsHide: true,
+      maxBuffer: 16 * 1024 * 1024,
+      env: {
+        ...process.env,
+        MONGOSH_DISABLE_TELEMETRY: '1',
       },
-    );
+    },
+  );
 
-    const lastLine = stdout
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .pop();
+  if (stderr?.trim()) {
+    console.error('MONGOSH STDERR:', stderr);
+  }
 
-    if (!lastLine) {
-      return null as T;
-    }
+  const lastLine = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .pop();
 
-    const parsed = JSON.parse(lastLine) as T | { __error?: string };
-    if (parsed && typeof parsed === 'object' && '__error' in parsed) {
-      throw new Error(parsed.__error || 'Mongo shell request failed.');
-    }
+  if (!lastLine) {
+    return null as T;
+  }
 
-    return parsed as T;
-  } finally {
+  const parsed = JSON.parse(lastLine) as T | { __error?: string };
+
+  if (parsed && typeof parsed === 'object' && '__error' in parsed) {
+    throw new Error(parsed.__error || 'Mongo shell request failed.');
+  }
+
+  return parsed as T;
+
+} catch (error: any) {
+  console.error('MONGOSH EXEC ERROR:', error);
+  console.error('MONGOSH STDERR:', error?.stderr);
+  console.error('MONGOSH STDOUT:', error?.stdout);
+
+  throw error;
+} finally {
     await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
   }
 }
