@@ -132,36 +132,53 @@ const __dropIndexIfPresent = (collectionName, predicate) => {
   }
 };
 
-// Backfill legacy tenant identifier aliases before index management runs.
-db.tenants.updateMany(
-  {
-    $or: [
-      { tenantId: { $exists: false }, id: { $type: 'string' } },
-      { id: { $exists: false }, tenantId: { $type: 'string' } },
-      { id: null, tenantId: { $type: 'string' } },
-    ],
-  },
-  [
-    {
-      $set: {
-        tenantId: { $ifNull: ['$tenantId', '$id'] },
-        id: { $ifNull: ['$id', '$tenantId'] },
-      },
-    },
-  ],
-);
+const __backfillLegacyIdAliases = (collectionName, canonicalField) => {
+  const collection = db.getCollection(collectionName);
+  const canonicalPath = '$' + canonicalField;
 
-// The current schema uses tenantId as the canonical key. Drop the old unique
-// id index so inserts do not fail with dup key { id: null } on legacy databases.
-__dropIndexIfPresent(
-  'tenants',
-  (index) =>
-    index.name === 'id_1'
-    || (
-      __stable(index.key) === __stable({ id: 1 })
-      && Boolean(index.unique)
-    ),
-);
+  collection.updateMany(
+    {
+      $or: [
+        { [canonicalField]: { $exists: false }, id: { $type: 'string' } },
+        { id: { $exists: false }, [canonicalField]: { $type: 'string' } },
+        { id: null, [canonicalField]: { $type: 'string' } },
+      ],
+    },
+    [
+      {
+        $set: {
+          [canonicalField]: { $ifNull: [canonicalPath, '$id'] },
+          id: { $ifNull: ['$id', canonicalPath] },
+        },
+      },
+    ],
+  );
+};
+
+const __dropLegacyIdIndex = (collectionName) => {
+  __dropIndexIfPresent(
+    collectionName,
+    (index) =>
+      index.name === 'id_1'
+      || (
+        __stable(index.key) === __stable({ id: 1 })
+        && Boolean(index.unique)
+      ),
+  );
+};
+
+// The current schema uses dedicated canonical ids. Backfill legacy "id" aliases
+// and drop stale unique id indexes so legacy databases do not reject inserts
+// with dup key { id: null }.
+__backfillLegacyIdAliases('tenants', 'tenantId');
+__backfillLegacyIdAliases('runtimeConfigs', 'runtimeConfigId');
+__backfillLegacyIdAliases('scannerVersions', 'scannerVersionId');
+__backfillLegacyIdAliases('attributeTemplateVersions', 'attributeTemplateVersionId');
+
+__dropLegacyIdIndex('tenants');
+__dropLegacyIdIndex('runtimeConfigs');
+__dropLegacyIdIndex('scannerVersions');
+__dropLegacyIdIndex('attributeTemplateVersions');
 
 __ensureIndex('tenants', { tenantId: 1 }, { unique: true, name: 'tenant_id_unique' });
 __ensureIndex('tenants', { slug: 1 }, { unique: true, name: 'tenant_slug_unique' });
@@ -496,8 +513,25 @@ export async function publishTenantRuntimeDocuments(payload: {
   runtimeConfig: RuntimeConfigDocument | null;
 }> {
   return runMongoScript(`
+const scannerVersionToInsert = {
+  ...__payload.scannerVersion,
+  id: __payload.scannerVersion.id ?? __payload.scannerVersion.scannerVersionId,
+};
+
+const attributeTemplateVersionToInsert = {
+  ...__payload.attributeTemplateVersion,
+  id:
+    __payload.attributeTemplateVersion.id
+    ?? __payload.attributeTemplateVersion.attributeTemplateVersionId,
+};
+
+const runtimeConfigToInsert = {
+  ...__payload.runtimeConfig,
+  id: __payload.runtimeConfig.id ?? __payload.runtimeConfig.runtimeConfigId,
+};
+
 const existingRuntime = db.runtimeConfigs.findOne(
-  { runtimeConfigId: __payload.runtimeConfig.runtimeConfigId },
+  { runtimeConfigId: runtimeConfigToInsert.runtimeConfigId },
   { projection: { runtimeConfigId: 1 } },
 );
 
@@ -506,21 +540,21 @@ if (existingRuntime) {
 }
 
 const existingScannerVersion = db.scannerVersions.findOne(
-  { scannerVersionId: __payload.scannerVersion.scannerVersionId },
+  { scannerVersionId: scannerVersionToInsert.scannerVersionId },
   { projection: { scannerVersionId: 1 } },
 );
 
 if (!existingScannerVersion) {
-  db.scannerVersions.insertOne(__payload.scannerVersion);
+  db.scannerVersions.insertOne(scannerVersionToInsert);
 }
 
 const existingAttributeTemplateVersion = db.attributeTemplateVersions.findOne(
-  { attributeTemplateVersionId: __payload.attributeTemplateVersion.attributeTemplateVersionId },
+  { attributeTemplateVersionId: attributeTemplateVersionToInsert.attributeTemplateVersionId },
   { projection: { attributeTemplateVersionId: 1 } },
 );
 
 if (!existingAttributeTemplateVersion) {
-  db.attributeTemplateVersions.insertOne(__payload.attributeTemplateVersion);
+  db.attributeTemplateVersions.insertOne(attributeTemplateVersionToInsert);
 }
 
 if (__payload.activate) {
@@ -529,13 +563,13 @@ if (__payload.activate) {
     {
       $set: {
         isActive: false,
-        updatedAt: __payload.runtimeConfig.updatedAt,
+        updatedAt: runtimeConfigToInsert.updatedAt,
       },
     },
   );
 }
 
-db.runtimeConfigs.insertOne(__payload.runtimeConfig);
+db.runtimeConfigs.insertOne(runtimeConfigToInsert);
 
 const tenant = db.tenants.findOneAndUpdate(
   { tenantId: __payload.tenantId },
@@ -547,7 +581,7 @@ const tenant = db.tenants.findOneAndUpdate(
 );
 
 const runtimeConfig = db.runtimeConfigs.findOne(
-  { runtimeConfigId: __payload.runtimeConfig.runtimeConfigId },
+  { runtimeConfigId: runtimeConfigToInsert.runtimeConfigId },
   { projection: { _id: 0 } },
 );
 
