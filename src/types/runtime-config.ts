@@ -1,5 +1,10 @@
 import type { BrandingConfig } from './branding';
 
+export interface LocalizedText {
+  en: string;
+  ar: string;
+}
+
 export type RuntimeConfigStatus =
   | 'draft'
   | 'published'
@@ -68,6 +73,7 @@ export interface RuntimeScannerAnswerOption {
   id: string;
   order: number;
   label: string;
+  labelTranslations?: LocalizedText;
   score: number;
 }
 
@@ -75,6 +81,7 @@ export interface RuntimeScannerQuestion {
   id: string;
   order: number;
   questionText: string;
+  questionTextTranslations?: LocalizedText;
   weight: number;
   kind: 'primary' | 'follow-up';
   answers: RuntimeScannerAnswerOption[];
@@ -85,7 +92,9 @@ export interface RuntimeScannerSubdomain {
   id: string;
   order: number;
   label: string;
+  labelTranslations?: LocalizedText;
   description: string;
+  descriptionTranslations?: LocalizedText;
   weight: number;
   questions: RuntimeScannerQuestion[];
 }
@@ -94,7 +103,9 @@ export interface RuntimeScannerCategory {
   id: string;
   order: number;
   label: string;
+  labelTranslations?: LocalizedText;
   description: string;
+  descriptionTranslations?: LocalizedText;
   weight: number;
   subdomains: RuntimeScannerSubdomain[];
 }

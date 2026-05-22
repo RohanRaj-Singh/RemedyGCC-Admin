@@ -202,6 +202,23 @@ function pickLocalizedValue(
   return value.en.trim() || value.ar.trim();
 }
 
+function normalizeLocalizedText(value: LocalizedText | undefined): LocalizedText | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = {
+    en: value.en.trim(),
+    ar: value.ar.trim(),
+  };
+
+  if (!normalized.en && !normalized.ar) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
 function pushIssue(
   issues: PublishValidationIssue[],
   issue: PublishValidationIssue,
@@ -500,24 +517,30 @@ function buildRuntimeScannerVersion(
       id: createStableUuid(`category:${category.id}`),
       order: category.order,
       label: pickLocalizedValue(category.name, runtimeSettings.language),
+      labelTranslations: normalizeLocalizedText(category.name),
       description: pickLocalizedValue(category.name, runtimeSettings.language),
+      descriptionTranslations: normalizeLocalizedText(category.name),
       weight: category.weight,
       subdomains: category.subdomains.map((subdomain) => ({
         id: createStableUuid(`subdomain:${subdomain.id}`),
         order: subdomain.order,
         label: pickLocalizedValue(subdomain.name, runtimeSettings.language),
+        labelTranslations: normalizeLocalizedText(subdomain.name),
         description: pickLocalizedValue(subdomain.name, runtimeSettings.language),
+        descriptionTranslations: normalizeLocalizedText(subdomain.name),
         weight: subdomain.weight,
         questions: subdomain.questions.map((question) => ({
           id: mapQuestionId(question.id),
           order: question.order,
           questionText: pickLocalizedValue(question.text, runtimeSettings.language),
+          questionTextTranslations: normalizeLocalizedText(question.text),
           weight: question.weight ?? 0,
           kind: question.kind,
           answers: question.options.map((option) => ({
             id: createStableUuid(`answer:${question.id}:${option.id}`),
             order: option.order,
             label: pickLocalizedValue(option.label, runtimeSettings.language),
+            labelTranslations: normalizeLocalizedText(option.label),
             score: option.score,
           })),
         })),
