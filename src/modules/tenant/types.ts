@@ -3,6 +3,8 @@ import type {
   BrandingValidationResult,
   ResolvedBrandingConfig,
 } from '@/types/branding';
+import type { TenantContentConfig } from '@/types/content';
+export type { TenantContentConfig } from '@/types/content';
 import type {
   RuntimeConfigStatus,
   RuntimeVersionRefs,
@@ -84,6 +86,7 @@ export interface Tenant {
   draftAttributeTemplateId: string | null;
   activeRuntimeConfigId: string | null;
   branding: BrandingConfig;
+  content: TenantContentConfig;
   createdAt: string;
   updatedAt: string;
   archivedAt?: string | null;
@@ -112,6 +115,7 @@ export interface CreateTenantDto {
   draftScannerId?: string | null;
   draftAttributeTemplateId?: string | null;
   branding?: Partial<BrandingConfig>;
+  content?: TenantContentConfig;
 }
 
 export interface UpdateTenantDto {
@@ -122,11 +126,14 @@ export interface UpdateTenantDto {
   draftScannerId?: string | null;
   draftAttributeTemplateId?: string | null;
   branding?: Partial<BrandingConfig>;
+  content?: TenantContentConfig;
   archivedAt?: string | null;
 }
 
 export interface UpdateBrandingDto {
   appName?: string;
+  logo?: string;
+  backgroundImage?: string;
   logoUrl?: string;
   primaryColor?: string;
   secondaryColor?: string;

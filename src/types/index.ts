@@ -8,6 +8,15 @@ export type {
   BrandingValidationResult,
   ResolvedBrandingConfig,
 } from './branding';
+export type {
+  TenantContentConfig,
+  TenantContentText,
+  TenantPageContentConfig,
+} from './content';
+export {
+  normalizeTenantContentConfig,
+  normalizeTenantContentText,
+} from './content';
 export {
   DEFAULT_BRANDING,
   brandingToCSSVars,

@@ -25,10 +25,12 @@ async function request<T>(
   init: RequestInit = {},
 ): Promise<ApiResponse<T>> {
   try {
+    const isFormDataBody =
+      typeof FormData !== 'undefined' && init.body instanceof FormData;
     const response = await fetch(input, {
       ...init,
       headers: {
-        'Content-Type': 'application/json',
+        ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
         ...(init.headers ?? {}),
       },
     });
@@ -70,6 +72,33 @@ export interface TenantFilters {
 }
 
 class TenantService {
+  async uploadAssets(
+    tenantSlug: string,
+    assets: {
+      logo?: File | null;
+      backgroundImage?: File | null;
+    },
+  ): Promise<ApiResponse<{ logo: string | null; backgroundImage: string | null }>> {
+    const formData = new FormData();
+    formData.set('tenantSlug', tenantSlug);
+
+    if (assets.logo) {
+      formData.set('logo', assets.logo);
+    }
+
+    if (assets.backgroundImage) {
+      formData.set('backgroundImage', assets.backgroundImage);
+    }
+
+    return request<{ logo: string | null; backgroundImage: string | null }>(
+      `${TENANT_API_BASE}/upload-assets`,
+      {
+        method: 'POST',
+        body: formData,
+      },
+    );
+  }
+
   async checkSubdomainAvailability(subdomain: string): Promise<ApiResponse<{ available: boolean }>> {
     return request<{ available: boolean }>(`${TENANT_API_BASE}/check-subdomain`, {
       method: 'POST',

@@ -1,51 +1,68 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, DragEvent, ChangeEvent } from 'react';
-import { Upload, X, Image as ImageIcon, ImageOff } from 'lucide-react';
+import { Loader2, Upload, Image as ImageIcon, ImageOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ImageUploaderProps {
   value?: string;
-  onChange: (url: string | null) => void;
+  onUpload: (file: File) => Promise<void> | void;
   label?: string;
   acceptedFormats?: string[];
   maxSizeMB?: number;
   placeholder?: string;
+  isUploading?: boolean;
 }
 
-const DEFAULT_FORMATS = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'];
+const DEFAULT_FORMATS = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
 const DEFAULT_MAX_SIZE_MB = 5;
 
 export function ImageUploader({
   value,
-  onChange,
+  onUpload,
   label = 'Branding Image',
   acceptedFormats = DEFAULT_FORMATS,
   maxSizeMB = DEFAULT_MAX_SIZE_MB,
   placeholder = 'Upload branding image',
+  isUploading = false,
 }: ImageUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(value || null);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const objectUrlRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setPreviewUrl(value || null);
-    setImageLoadFailed(false);
+    if (value) {
+      setPreviewUrl(value);
+      setImageLoadFailed(false);
+    } else if (!objectUrlRef.current) {
+      setPreviewUrl(null);
+    }
   }, [value]);
+
+  useEffect(() => () => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+    }
+  }, []);
 
   const validateFile = (file: File): string | null => {
     if (!acceptedFormats.includes(file.type)) {
-      return `Invalid file type. Accepted formats: ${acceptedFormats.map(f => f.split('/')[1].toUpperCase()).join(', ')}`;
+      return `Invalid file type. Accepted formats: ${acceptedFormats
+        .map((format) => format.split('/')[1].toUpperCase())
+        .join(', ')}`;
     }
+
     if (file.size > maxSizeMB * 1024 * 1024) {
       return `File size exceeds ${maxSizeMB}MB limit`;
     }
+
     return null;
   };
 
-  const handleFile = useCallback((file: File) => {
+  const handleFile = useCallback(async (file: File) => {
     const validationError = validateFile(file);
     if (validationError) {
       setError(validationError);
@@ -53,74 +70,60 @@ export function ImageUploader({
     }
 
     setError(null);
-    
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result as string;
-      setImageLoadFailed(false);
-      setPreviewUrl(result);
-      onChange(result);
-    };
-    reader.readAsDataURL(file);
-  }, [onChange, acceptedFormats, maxSizeMB]);
+    setImageLoadFailed(false);
 
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    objectUrlRef.current = objectUrl;
+    setPreviewUrl(objectUrl);
+
+    try {
+      await onUpload(file);
+      objectUrlRef.current = null;
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error ? uploadError.message : 'Failed to upload image.',
+      );
+    }
+  }, [acceptedFormats, maxSizeMB, onUpload]);
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     setIsDragging(true);
   };
 
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     setIsDragging(false);
   };
 
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     setIsDragging(false);
 
-    const files = e.dataTransfer.files;
+    const files = event.dataTransfer.files;
     if (files.length > 0) {
-      handleFile(files[0]);
+      void handleFile(files[0]);
     }
   };
 
-  const handleFileInput = (e: ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  const handleFileInput = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
     if (files && files.length > 0) {
-      handleFile(files[0]);
-    }
-  };
-
-  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) {
-          handleFile(file);
-          break;
-        }
-      }
-    }
-  }, [handleFile]);
-
-  const handleClear = () => {
-    setPreviewUrl(null);
-    onChange(null);
-    setError(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      void handleFile(files[0]);
     }
   };
 
   const handleClick = () => {
-    fileInputRef.current?.click();
+    if (!isUploading) {
+      fileInputRef.current?.click();
+    }
   };
 
   return (
@@ -130,7 +133,7 @@ export function ImageUploader({
           {label}
         </label>
       )}
-      
+
       <input
         ref={fileInputRef}
         type="file"
@@ -141,76 +144,79 @@ export function ImageUploader({
       />
 
       {previewUrl ? (
-        <div className="relative rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+        <button
+          type="button"
+          onClick={handleClick}
+          className="relative block w-full overflow-hidden rounded-lg border text-left"
+          style={{ borderColor: 'var(--border)' }}
+        >
           {imageLoadFailed ? (
-            <div className="w-full h-40 bg-slate-50 flex flex-col items-center justify-center px-4 text-center">
-              <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center mb-3">
-                <ImageOff className="w-5 h-5 text-slate-500" />
+            <div className="flex h-40 w-full flex-col items-center justify-center bg-slate-50 px-4 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-200">
+                <ImageOff className="h-5 w-5 text-slate-500" />
               </div>
               <p className="text-sm font-medium text-slate-700">Preview unavailable</p>
-              <p className="text-xs text-slate-500 mt-1 break-all">
-                {previewUrl}
-              </p>
+              <p className="mt-1 break-all text-xs text-slate-500">{previewUrl}</p>
             </div>
           ) : (
             <img
               src={previewUrl}
               alt="Branding preview"
-              className="w-full h-40 object-contain bg-slate-50"
+              className="h-40 w-full bg-slate-50 object-contain"
               onError={() => setImageLoadFailed(true)}
             />
           )}
-          <div className="absolute top-2 right-2 flex gap-1">
-            <button
-              type="button"
-              onClick={handleClick}
-              className="p-1.5 rounded-lg bg-white/90 hover:bg-white shadow-sm transition-colors"
-              title="Replace image"
-            >
-              <Upload className="w-4 h-4" style={{ color: 'var(--muted-foreground)' }} />
-            </button>
-            <button
-              type="button"
-              onClick={handleClear}
-              className="p-1.5 rounded-lg bg-white/90 hover:bg-white shadow-sm transition-colors"
-              title="Remove image"
-            >
-              <X className="w-4 h-4 text-red-500" />
-            </button>
+
+          <div className="absolute right-2 top-2 flex items-center gap-2 rounded-lg bg-white/90 px-2 py-1 text-xs font-medium shadow-sm">
+            {isUploading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Uploading...
+              </>
+            ) : (
+              <>
+                <Upload className="h-3.5 w-3.5" />
+                Replace
+              </>
+            )}
           </div>
-        </div>
+        </button>
       ) : (
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={handleClick}
-          onPaste={handlePaste}
           role="button"
           tabIndex={0}
           aria-label={placeholder}
           className={cn(
-            "relative flex flex-col items-center justify-center h-40 rounded-lg border-2 border-dashed cursor-pointer transition-colors",
+            'relative flex h-40 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed transition-colors',
+            isUploading && 'pointer-events-none opacity-70',
             isDragging
-              ? "border-[var(--primary)] bg-[var(--primary)]/5"
-              : "border-[var(--border)] hover:border-[var(--primary)]/50 hover:bg-slate-50"
+              ? 'border-[var(--primary)] bg-[var(--primary)]/5'
+              : 'border-[var(--border)] hover:border-[var(--primary)]/50 hover:bg-slate-50',
           )}
         >
-          <div className={cn(
-            "w-12 h-12 rounded-full flex items-center justify-center mb-3",
-            isDragging ? "bg-[var(--primary)]/10" : "bg-slate-100"
-          )}>
-            {isDragging ? (
-              <Upload className="w-6 h-6" style={{ color: 'var(--primary)' }} />
+          <div
+            className={cn(
+              'mb-3 flex h-12 w-12 items-center justify-center rounded-full',
+              isDragging ? 'bg-[var(--primary)]/10' : 'bg-slate-100',
+            )}
+          >
+            {isUploading ? (
+              <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--primary)' }} />
+            ) : isDragging ? (
+              <Upload className="h-6 w-6" style={{ color: 'var(--primary)' }} />
             ) : (
-              <ImageIcon className="w-6 h-6" style={{ color: 'var(--muted-foreground)' }} />
+              <ImageIcon className="h-6 w-6" style={{ color: 'var(--muted-foreground)' }} />
             )}
           </div>
           <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
-            {isDragging ? 'Drop image here' : placeholder}
+            {isUploading ? 'Uploading image...' : isDragging ? 'Drop image here' : placeholder}
           </p>
-          <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-            PNG, JPG, SVG up to {maxSizeMB}MB
+          <p className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+            PNG, JPG, JPEG, WEBP up to {maxSizeMB}MB
           </p>
         </div>
       )}

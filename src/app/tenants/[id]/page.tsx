@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Edit,
   Eye,
+  FileText,
   Globe,
   Loader2,
   Palette,
@@ -408,6 +409,20 @@ export default function TenantDetailsPage() {
           </h3>
         </div>
         <BrandingPreviewCard branding={tenant.branding} title="" description="" />
+      </div>
+
+      <div className="rounded-2xl border p-6" style={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <FileText className="h-5 w-5" />Subdomain Content
+          </h3>
+        </div>
+        <div className="rounded-xl border p-4" style={{ backgroundColor: 'hsl(0 0% 98%)', borderColor: 'var(--border)' }}>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">About Us Intro</p>
+          <p className="mt-3 text-sm leading-7 text-slate-700">
+            {tenant.content?.pages?.about?.intro?.en?.trim() || 'Using the default About page intro copy.'}
+          </p>
+        </div>
       </div>
 
       {/* Operations - Separated */}

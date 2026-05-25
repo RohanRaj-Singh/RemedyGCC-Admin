@@ -10,6 +10,7 @@ import {
 import { getScannerById, getScanners } from '@/modules/scanner/service';
 import type { Scanner, ScannerDetail, ScannerVersion } from '@/modules/scanner/types';
 import { resolveBrandingConfig, validateBrandingConfig } from '@/types/branding';
+import { normalizeTenantContentConfig } from '@/types/content';
 import type {
   RuntimeAttributeTemplate,
   RuntimeScannerVersion,
@@ -58,6 +59,11 @@ import {
   validateTenantSubdomain,
 } from './utils';
 import { deleteTenantAccessForTenant } from '@/modules/tenant-auth/services/auth-service';
+import {
+  ensureTenantAssetDirectory,
+  rebaseTenantBrandingAssetPaths,
+  syncTenantAssetDirectory,
+} from '@/lib/uploads/tenant-assets';
 
 const CALCULATION_VERSION_ID = 'calc_demo_placeholder_v1';
 
@@ -91,6 +97,7 @@ function normalizeTenantDocument(document: TenantDocument): TenantDocument {
     ...document,
     subdomain: document.subdomain || document.slug,
     branding: document.branding ?? {},
+    content: normalizeTenantContentConfig(document.content),
     draftScannerId: document.draftScannerId ?? null,
     draftAttributeTemplateId: document.draftAttributeTemplateId ?? null,
     activeRuntimeConfigId: document.activeRuntimeConfigId ?? null,
@@ -516,6 +523,7 @@ async function buildPublishingPreview(
   const generated = generateRuntimeConfig({
     tenant: createTenantSummary(tenant),
     branding: tenant.branding ?? {},
+    content: tenant.content ?? {},
     runtimeSettings: clone(DEFAULT_RUNTIME_SETTINGS),
     sourceScanner:
       resolvedSource.scannerDetail && resolvedSource.sourceVersion
@@ -657,6 +665,7 @@ async function hydrateTenant(
     draftAttributeTemplateId: normalized.draftAttributeTemplateId ?? null,
     activeRuntimeConfigId: normalized.activeRuntimeConfigId ?? null,
     branding: clone(normalized.branding ?? {}),
+    content: clone(normalized.content ?? {}),
     createdAt: normalized.createdAt,
     updatedAt: normalized.updatedAt,
     archivedAt: normalized.archivedAt ?? null,
@@ -840,13 +849,20 @@ export async function createTenant(data: CreateTenantDto): Promise<Tenant> {
   await assertPublishedTenantScanner(data.draftScannerId ?? null);
 
   const now = new Date().toISOString();
+  const normalizedBranding = {
+    ...(data.branding ?? {}),
+    logo: data.branding?.logo ?? data.branding?.logoUrl,
+    logoUrl: data.branding?.logo ?? data.branding?.logoUrl,
+  };
+  const normalizedContent = normalizeTenantContentConfig(data.content);
   const document: TenantDocument = {
     tenantId: createTenantId(slugValidation.normalized),
     name,
     slug: slugValidation.normalized,
     subdomain: subdomainValidation.normalized,
     status,
-    branding: data.branding ?? {},
+    branding: normalizedBranding,
+    content: normalizedContent,
     activeRuntimeConfigId: null,
     activeRuntimeConfigPublishedAt: null,
     brandingVersionId: null,
@@ -857,6 +873,7 @@ export async function createTenant(data: CreateTenantDto): Promise<Tenant> {
     archivedAt: null,
   };
 
+  await ensureTenantAssetDirectory(slugValidation.normalized);
   await insertTenantDocument(document);
   const createdTenant = await getTenantById(document.tenantId);
   if (!createdTenant) {
@@ -925,6 +942,16 @@ export async function updateTenant(
   const mergedBranding = {
     ...current.branding,
     ...data.branding,
+    logo:
+      data.branding?.logo
+      ?? data.branding?.logoUrl
+      ?? current.branding?.logo
+      ?? current.branding?.logoUrl,
+    logoUrl:
+      data.branding?.logo
+      ?? data.branding?.logoUrl
+      ?? current.branding?.logo
+      ?? current.branding?.logoUrl,
     gradient: {
       ...(current.branding?.gradient ?? {}),
       ...(data.branding?.gradient ?? {}),
@@ -934,6 +961,18 @@ export async function updateTenant(
       ...(data.branding?.metadata ?? {}),
     },
   };
+  const mergedContent = normalizeTenantContentConfig({
+    ...current.content,
+    ...data.content,
+    pages: {
+      ...(current.content?.pages ?? {}),
+      ...(data.content?.pages ?? {}),
+      about: {
+        ...(current.content?.pages?.about ?? {}),
+        ...(data.content?.pages?.about ?? {}),
+      },
+    },
+  });
 
   const brandingValidation = validateBrandingConfig(mergedBranding);
   if (brandingValidation.errors.length > 0) {
@@ -946,6 +985,12 @@ export async function updateTenant(
 
   const nextStatus = data.status ?? current.status;
   assertSafeStatus(current, nextStatus, Boolean(current.activeRuntimeConfigId));
+  const normalizedBranding = rebaseTenantBrandingAssetPaths(
+    mergedBranding,
+    current.slug,
+    nextSlug,
+  );
+  await syncTenantAssetDirectory(current.slug, nextSlug);
 
   const now = new Date().toISOString();
   const updatedTenant = await updateTenantDocument(id, {
@@ -958,7 +1003,8 @@ export async function updateTenant(
       data.draftAttributeTemplateId !== undefined
         ? data.draftAttributeTemplateId
         : current.draftAttributeTemplateId,
-    branding: mergedBranding,
+    branding: normalizedBranding,
+    content: mergedContent,
     updatedAt: now,
     archivedAt: nextStatus === 'archived' ? now : current.archivedAt ?? null,
   });
@@ -1078,6 +1124,7 @@ export async function publishTenantRuntime(
   const generated = generateRuntimeConfig({
     tenant: createTenantSummary(current),
     branding: current.branding ?? {},
+    content: current.content ?? {},
     runtimeSettings: clone(DEFAULT_RUNTIME_SETTINGS),
     sourceScanner: {
       scannerId: resolvedSource.scannerDetail.id,

@@ -18,12 +18,13 @@ import {
   Users,
   XCircle,
 } from 'lucide-react';
-import type { BrandingConfig, TenantSetupOption } from '@/modules/tenant/types';
+import type { BrandingConfig, TenantContentConfig, TenantSetupOption } from '@/modules/tenant/types';
 import { getAllTemplates } from '@/modules/attribute-template/service';
 import { getPublishedScanners } from '@/modules/scanner/service';
 import { getTenantHostname, getTenantHostnameSuffix } from '@/modules/tenant/utils';
 import { tenantService } from '@/services/tenant-service';
 import { BrandingPanel, BrandingPreviewCard } from '@/components/tenants';
+import { TenantContentPanel } from '@/modules/tenant/components/TenantContentPanel';
 
 interface Step {
   id: number;
@@ -35,7 +36,8 @@ const STEPS: Step[] = [
   { id: 1, title: 'Basic Info', description: 'Name and address for your survey' },
   { id: 2, title: 'Survey Setup', description: 'Choose scanner and template' },
   { id: 3, title: 'Branding', description: 'Customize the look and feel' },
-  { id: 4, title: 'Review', description: 'Confirm your settings' },
+  { id: 4, title: 'Content', description: 'Customize tenant page copy' },
+  { id: 5, title: 'Review', description: 'Confirm your settings' },
 ];
 
 // Reserved subdomains that cannot be used
@@ -77,6 +79,11 @@ export default function NewTenantPage() {
   const [draftScannerId, setDraftScannerId] = useState<string | null>(null);
   const [draftAttributeTemplateId, setDraftAttributeTemplateId] = useState<string | null>(null);
   const [branding, setBranding] = useState<Partial<BrandingConfig>>({});
+  const [content, setContent] = useState<TenantContentConfig>({});
+  const [uploadingAssets, setUploadingAssets] = useState<{ logo: boolean; backgroundImage: boolean }>({
+    logo: false,
+    backgroundImage: false,
+  });
 
   const [scannerOptions, setScannerOptions] = useState<TenantSetupOption[]>([]);
   const [attributeTemplateOptions, setAttributeTemplateOptions] = useState<TenantSetupOption[]>([]);
@@ -176,7 +183,7 @@ export default function NewTenantPage() {
   };
 
   const handleNext = () => {
-    if (currentStep < 4) setCurrentStep(currentStep + 1);
+    if (currentStep < 5) setCurrentStep(currentStep + 1);
   };
 
   const handleBack = () => {
@@ -196,6 +203,7 @@ export default function NewTenantPage() {
         draftScannerId,
         draftAttributeTemplateId,
         branding,
+        content,
       });
       if (createError || !tenant) throw new Error(createError || 'Failed to create.');
       router.push(`/tenants/${tenant.id}`);
@@ -205,6 +213,37 @@ export default function NewTenantPage() {
       setIsLoading(false);
     }
   };
+
+  const handleAssetUpload = useCallback(async (
+    assetType: 'logo' | 'backgroundImage',
+    file: File,
+  ) => {
+    const slug = normalizeSubdomain(subdomain || name);
+    if (!slug) {
+      throw new Error('Add the tenant name or address before uploading assets.');
+    }
+
+    setUploadingAssets((current) => ({ ...current, [assetType]: true }));
+
+    try {
+      const { data, error: uploadError } = await tenantService.uploadAssets(slug, {
+        logo: assetType === 'logo' ? file : null,
+        backgroundImage: assetType === 'backgroundImage' ? file : null,
+      });
+
+      if (uploadError || !data) {
+        throw new Error(uploadError || 'Asset upload failed.');
+      }
+
+      setBranding((current) => ({
+        ...current,
+        ...(data.logo ? { logo: data.logo, logoUrl: data.logo } : {}),
+        ...(data.backgroundImage ? { backgroundImage: data.backgroundImage } : {}),
+      }));
+    } finally {
+      setUploadingAssets((current) => ({ ...current, [assetType]: false }));
+    }
+  }, [name, subdomain]);
 
   // Subdomain status UI
   const getSubdomainStatusUI = () => {
@@ -412,6 +451,8 @@ export default function NewTenantPage() {
                   onChange={setBranding}
                   title="Customize Appearance"
                   showPreviewSection={false}
+                  onAssetUpload={handleAssetUpload}
+                  uploadState={uploadingAssets}
                 />
               </div>
 
@@ -427,8 +468,27 @@ export default function NewTenantPage() {
           </div>
         )}
 
-        {/* Step 4: Review */}
         {currentStep === 4 && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(245, 158, 11, 0.12)' }}>
+                <Sparkles className="h-6 w-6 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold">Subdomain Content</h2>
+                <p className="text-sm text-muted-foreground">Customize page copy for this tenant</p>
+              </div>
+            </div>
+
+            <TenantContentPanel
+              content={content}
+              onChange={setContent}
+            />
+          </div>
+        )}
+
+        {/* Step 5: Review */}
+        {currentStep === 5 && (
           <div className="space-y-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)' }}>
@@ -465,6 +525,12 @@ export default function NewTenantPage() {
                   )}
                 </div>
               )}
+              {content.pages?.about?.intro?.en && (
+                <div className="p-4 rounded-xl border" style={{ backgroundColor: 'var(--muted)', borderColor: 'var(--border)' }}>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1"><Sparkles className="h-4 w-4" />About Page Intro</div>
+                  <div className="text-sm font-medium">{content.pages.about.intro.en}</div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -480,7 +546,7 @@ export default function NewTenantPage() {
           <ArrowLeft className="h-4 w-4" />{currentStep === 1 ? 'Cancel' : 'Back'}
         </button>
 
-        {currentStep < 4 ? (
+        {currentStep < 5 ? (
           <button
             onClick={handleNext}
             disabled={!canProceed()}

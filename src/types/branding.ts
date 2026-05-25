@@ -13,6 +13,8 @@ export interface BrandingGradients {
 
 export interface BrandingConfig {
   appName?: string;
+  logo?: string;
+  backgroundImage?: string;
   logoUrl?: string;
   primaryColor?: string;
   secondaryColor?: string;
@@ -25,6 +27,8 @@ export interface BrandingConfig {
 
 export interface ResolvedBrandingConfig {
   appName: string;
+  logo: string;
+  backgroundImage: string;
   logoUrl: string;
   primaryColor: string;
   secondaryColor: string;
@@ -42,12 +46,15 @@ export interface BrandingValidationResult {
 
 const DEFAULT_PRIMARY = '#f58220';
 const DEFAULT_SECONDARY = '#f37820';
-const DEFAULT_LOGO = '/images/logo.png';
+const DEFAULT_LOGO = '/default/logo.png';
+const DEFAULT_BACKGROUND_IMAGE = '/default/background.png';
 const DEFAULT_TENANT_NAME = 'RemedyGCC';
 const DEFAULT_FAVICON = '/favicon.ico';
 
 export const DEFAULT_BRANDING: ResolvedBrandingConfig = {
   appName: DEFAULT_TENANT_NAME,
+  logo: DEFAULT_LOGO,
+  backgroundImage: DEFAULT_BACKGROUND_IMAGE,
   logoUrl: DEFAULT_LOGO,
   primaryColor: DEFAULT_PRIMARY,
   secondaryColor: DEFAULT_SECONDARY,
@@ -248,12 +255,26 @@ export function isSafeAssetReference(value: string | null | undefined): boolean 
   );
 }
 
+function getLogoReference(branding: BrandingConfig | null | undefined): string | undefined {
+  return branding?.logo?.trim() || branding?.logoUrl?.trim() || undefined;
+}
+
 export function isValidBrandingConfig(brand: unknown): brand is BrandingConfig {
   if (!isRecord(brand)) {
     return false;
   }
 
   if ('appName' in brand && brand.appName !== undefined && typeof brand.appName !== 'string') {
+    return false;
+  }
+  if ('logo' in brand && brand.logo !== undefined && typeof brand.logo !== 'string') {
+    return false;
+  }
+  if (
+    'backgroundImage' in brand
+    && brand.backgroundImage !== undefined
+    && typeof brand.backgroundImage !== 'string'
+  ) {
     return false;
   }
   if ('logoUrl' in brand && brand.logoUrl !== undefined && typeof brand.logoUrl !== 'string') {
@@ -327,8 +348,13 @@ export function validateBrandingConfig(
     errors.push('Secondary color must be a valid hex value such as #f37820.');
   }
 
-  if (branding.logoUrl && !isSafeAssetReference(branding.logoUrl)) {
+  const logoReference = getLogoReference(branding);
+  if (logoReference && !isSafeAssetReference(logoReference)) {
     errors.push('Logo must use a relative asset path, HTTPS URL, or data image URL.');
+  }
+
+  if (branding.backgroundImage && !isSafeAssetReference(branding.backgroundImage)) {
+    errors.push('Background image must use a relative asset path, HTTPS URL, or data image URL.');
   }
 
   if (branding.faviconUrl && !isSafeAssetReference(branding.faviconUrl)) {
@@ -339,8 +365,12 @@ export function validateBrandingConfig(
     warnings.push('App name is missing. The default survey name will be used.');
   }
 
-  if (!branding.logoUrl?.trim()) {
+  if (!logoReference) {
     warnings.push('Logo is missing. The default logo will be used.');
+  }
+
+  if (!branding.backgroundImage?.trim()) {
+    warnings.push('Background image is missing. The default background will be used.');
   }
 
   if (!branding.primaryColor?.trim()) {
@@ -395,9 +425,17 @@ export function resolveBrandingConfig(
 
   return {
     appName: branding?.appName?.trim() || DEFAULT_TENANT_NAME,
+    logo:
+      getLogoReference(branding) && isSafeAssetReference(getLogoReference(branding))
+        ? getLogoReference(branding)!.trim()
+        : DEFAULT_LOGO,
+    backgroundImage:
+      branding?.backgroundImage && isSafeAssetReference(branding.backgroundImage)
+        ? branding.backgroundImage.trim()
+        : DEFAULT_BACKGROUND_IMAGE,
     logoUrl:
-      branding?.logoUrl && isSafeAssetReference(branding.logoUrl)
-        ? branding.logoUrl.trim()
+      getLogoReference(branding) && isSafeAssetReference(getLogoReference(branding))
+        ? getLogoReference(branding)!.trim()
         : DEFAULT_LOGO,
     primaryColor,
     secondaryColor,
@@ -426,7 +464,8 @@ export function brandingToCSSVars(
   return {
     '--brand-primary': resolved.primaryColor,
     '--brand-secondary': resolved.secondaryColor,
-    '--brand-logo': resolved.logoUrl,
+    '--brand-logo': resolved.logo,
+    '--brand-background-image': `url("${resolved.backgroundImage}")`,
     '--brand-favicon': resolved.faviconUrl,
     '--brand-gradient': resolved.gradient.brandGradient,
     '--brand-hero-gradient': resolved.gradient.heroGradient,

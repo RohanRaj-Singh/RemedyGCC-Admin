@@ -25,6 +25,11 @@ interface BrandingPanelProps {
   onChange: Dispatch<SetStateAction<Partial<BrandingConfig>>>;
   title?: string;
   showPreviewSection?: boolean;
+  onAssetUpload?: (assetType: 'logo' | 'backgroundImage', file: File) => Promise<void>;
+  uploadState?: {
+    logo?: boolean;
+    backgroundImage?: boolean;
+  };
 }
 
 interface BrandingPreviewCardProps {
@@ -95,7 +100,14 @@ function BrandingPreview({ branding }: { branding: Partial<BrandingConfig> }) {
   return (
     <div
       className="overflow-hidden rounded-2xl border shadow-sm"
-      style={{ borderColor: 'var(--border)', backgroundColor: '#ffffff' }}
+      style={{
+        borderColor: 'var(--border)',
+        backgroundColor: '#ffffff',
+        backgroundImage: `linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.88)), url("${resolved.backgroundImage}")`,
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundSize: 'cover',
+      }}
     >
       <div className="h-3 w-full" style={{ background: resolved.gradient.brandGradient }} />
 
@@ -181,6 +193,8 @@ export function BrandingPanel({
   onChange,
   title = 'Branding',
   showPreviewSection = true,
+  onAssetUpload,
+  uploadState,
 }: BrandingPanelProps) {
   const resolved = useMemo(() => resolveBrandingConfig(branding), [branding]);
   const validation = useMemo(() => validateBrandingConfig(branding), [branding]);
@@ -220,6 +234,8 @@ export function BrandingPanel({
   const handleReset = useCallback(() => {
     onChange({
       appName: DEFAULT_BRANDING.appName,
+      logo: DEFAULT_BRANDING.logo,
+      backgroundImage: DEFAULT_BRANDING.backgroundImage,
       logoUrl: DEFAULT_BRANDING.logoUrl,
       primaryColor: DEFAULT_BRANDING.primaryColor,
       secondaryColor: DEFAULT_BRANDING.secondaryColor,
@@ -337,10 +353,17 @@ export function BrandingPanel({
             style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}
           >
             <ImageUploader
-              value={branding.logoUrl}
-              onChange={(url) => updateBrandingField('logoUrl', url ?? '')}
+              value={branding.logo ?? branding.logoUrl}
+              onUpload={async (file) => {
+                if (!onAssetUpload) {
+                  return;
+                }
+
+                await onAssetUpload('logo', file);
+              }}
               label="Logo"
               placeholder="Upload company logo"
+              isUploading={uploadState?.logo}
             />
           </div>
 
@@ -349,11 +372,17 @@ export function BrandingPanel({
             style={{ borderColor: 'var(--border)', backgroundColor: 'var(--background)' }}
           >
             <ImageUploader
-              value={branding.faviconUrl}
-              onChange={(url) => updateBrandingField('faviconUrl', url ?? '')}
-              label="Browser Icon"
-              placeholder="Upload browser icon"
-              maxSizeMB={2}
+              value={branding.backgroundImage}
+              onUpload={async (file) => {
+                if (!onAssetUpload) {
+                  return;
+                }
+
+                await onAssetUpload('backgroundImage', file);
+              }}
+              label="Background Image"
+              placeholder="Upload survey background"
+              isUploading={uploadState?.backgroundImage}
             />
           </div>
         </div>

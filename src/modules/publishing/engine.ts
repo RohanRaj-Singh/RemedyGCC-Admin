@@ -1,4 +1,5 @@
 import type { BrandingConfig } from '@/types/branding';
+import type { TenantContentConfig } from '@/types/content';
 import { validateBrandingConfig } from '@/types/branding';
 import type {
   RuntimeAttributeTemplate,
@@ -91,6 +92,7 @@ export interface ResolvedVersionRefAssignment {
 export interface GenerateRuntimeConfigInput {
   tenant: RuntimeTenantSummary;
   branding: BrandingConfig | null | undefined;
+  content: TenantContentConfig | null | undefined;
   runtimeSettings: RuntimeSettings;
   sourceScanner: {
     scannerId: string;
@@ -899,6 +901,7 @@ export function generateRuntimeConfig(
     tenant: clone(input.tenant),
     versionRefs: clone(versionAssignment.versionRefs),
     branding: brandingSnapshot,
+    content: clone(input.content ?? {}),
     attributeTemplate: clone(runtimeAttributeTemplate),
     scannerVersion: clone(runtimeScannerVersion),
     runtimeSettings: clone(input.runtimeSettings),
@@ -907,6 +910,7 @@ export function generateRuntimeConfig(
     tenant: runtimeConfig.tenant,
     versionRefs: runtimeConfig.versionRefs,
     branding: runtimeConfig.branding,
+    content: runtimeConfig.content,
     attributeTemplate: runtimeConfig.attributeTemplate,
     scannerVersion: runtimeConfig.scannerVersion,
     runtimeSettings: runtimeConfig.runtimeSettings,
@@ -979,6 +983,7 @@ export function getRuntimeConfigFingerprint(
     tenant: runtimeConfig.tenant,
     versionRefs: runtimeConfig.versionRefs,
     branding: runtimeConfig.branding,
+    content: runtimeConfig.content,
     attributeTemplate: runtimeConfig.attributeTemplate,
     scannerVersion: runtimeConfig.scannerVersion,
     runtimeSettings: runtimeConfig.runtimeSettings,

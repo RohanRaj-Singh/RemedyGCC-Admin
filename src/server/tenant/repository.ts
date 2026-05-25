@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { BrandingConfig } from '@/types/branding';
+import type { TenantContentConfig } from '@/types/content';
 import type {
   RuntimeAttributeTemplate,
   RuntimeScannerVersion,
@@ -16,6 +17,7 @@ export interface TenantDocument {
   subdomain?: string;
   status: 'draft' | 'active' | 'disabled' | 'archived';
   branding?: BrandingConfig;
+  content?: TenantContentConfig;
   activeRuntimeConfigId?: string | null;
   activeRuntimeConfigPublishedAt?: string | null;
   brandingVersionId?: string | null;

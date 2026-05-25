@@ -16,10 +16,11 @@ import {
   Settings,
   Sparkles,
 } from 'lucide-react';
-import type { BrandingConfig, TenantSetupOption, TenantStatus } from '@/modules/tenant/types';
+import type { BrandingConfig, TenantContentConfig, TenantSetupOption, TenantStatus } from '@/modules/tenant/types';
 import { getAllTemplates } from '@/modules/attribute-template/service';
 import { getPublishedScanners } from '@/modules/scanner/service';
 import { BrandingPanel, BrandingPreviewCard } from '@/components/tenants';
+import { TenantContentPanel } from '@/modules/tenant/components/TenantContentPanel';
 import { getTenantHostname, getTenantHostnameSuffix } from '@/modules/tenant/utils';
 import { tenantService } from '@/services/tenant-service';
 
@@ -40,6 +41,7 @@ interface TenantData {
   draftScannerId: string | null;
   draftAttributeTemplateId: string | null;
   branding: Partial<BrandingConfig> | null;
+  content?: TenantContentConfig | null;
   draftScanner?: TenantSetupOption | null;
   activeRuntimeConfig?: TenantRuntimeConfig | null;
 }
@@ -69,7 +71,12 @@ export default function EditTenantPage() {
   const [draftScannerId, setDraftScannerId] = useState<string | null>(null);
   const [draftAttributeTemplateId, setDraftAttributeTemplateId] = useState<string | null>(null);
   const [branding, setBranding] = useState<Partial<BrandingConfig>>({});
+  const [content, setContent] = useState<TenantContentConfig>({});
   const [hasChanges, setHasChanges] = useState(false);
+  const [uploadingAssets, setUploadingAssets] = useState<{ logo: boolean; backgroundImage: boolean }>({
+    logo: false,
+    backgroundImage: false,
+  });
 
   const [scannerOptions, setScannerOptions] = useState<TenantSetupOption[]>([]);
   const [attributeTemplateOptions, setAttributeTemplateOptions] = useState<TenantSetupOption[]>([]);
@@ -81,6 +88,7 @@ export default function EditTenantPage() {
     draftScannerId: null as string | null,
     draftAttributeTemplateId: null as string | null,
     branding: {} as Partial<BrandingConfig>,
+    content: {} as TenantContentConfig,
   });
 
   useEffect(() => {
@@ -107,6 +115,7 @@ export default function EditTenantPage() {
         setDraftScannerId(t.draftScannerId);
         setDraftAttributeTemplateId(t.draftAttributeTemplateId);
         setBranding(t.branding || {});
+        setContent(t.content || {});
 
         setOriginalValues({
           name: t.name,
@@ -114,6 +123,7 @@ export default function EditTenantPage() {
           draftScannerId: t.draftScannerId,
           draftAttributeTemplateId: t.draftAttributeTemplateId,
           branding: t.branding || {},
+          content: t.content || {},
         });
 
         const publishedScannerOptions: TenantSetupOption[] = scanners.map((scanner) => ({
@@ -146,10 +156,11 @@ export default function EditTenantPage() {
   // Detect changes
   useEffect(() => {
     const brandingChanged = JSON.stringify(branding) !== JSON.stringify(originalValues.branding);
+    const contentChanged = JSON.stringify(content) !== JSON.stringify(originalValues.content);
     const otherChanged = name !== originalValues.name || subdomain !== originalValues.subdomain ||
       draftScannerId !== originalValues.draftScannerId || draftAttributeTemplateId !== originalValues.draftAttributeTemplateId;
-    setHasChanges(brandingChanged || otherChanged);
-  }, [name, subdomain, draftScannerId, draftAttributeTemplateId, branding, originalValues]);
+    setHasChanges(brandingChanged || contentChanged || otherChanged);
+  }, [name, subdomain, draftScannerId, draftAttributeTemplateId, branding, content, originalValues]);
 
   const handleSave = useCallback(async () => {
     if (!tenant) return;
@@ -166,12 +177,13 @@ export default function EditTenantPage() {
         draftScannerId,
         draftAttributeTemplateId,
         branding,
+        content,
       });
 
       if (updateError || !updated) throw new Error(updateError || 'Failed to save.');
 
-      setTenant({ ...tenant, name: name.trim(), subdomain: subdomain.trim().toLowerCase(), draftScannerId, draftAttributeTemplateId, branding });
-      setOriginalValues({ name: name.trim(), subdomain: subdomain.trim().toLowerCase(), draftScannerId, draftAttributeTemplateId, branding });
+      setTenant({ ...tenant, name: name.trim(), subdomain: subdomain.trim().toLowerCase(), draftScannerId, draftAttributeTemplateId, branding, content });
+      setOriginalValues({ name: name.trim(), subdomain: subdomain.trim().toLowerCase(), draftScannerId, draftAttributeTemplateId, branding, content });
       setSuccessMessage('Changes saved successfully.');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
@@ -179,7 +191,7 @@ export default function EditTenantPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [tenant, name, subdomain, draftScannerId, draftAttributeTemplateId, branding]);
+  }, [tenant, name, subdomain, draftScannerId, draftAttributeTemplateId, branding, content]);
 
   const handleStatusChange = useCallback(async (newStatus: TenantStatus) => {
     if (!tenant) return;
@@ -218,6 +230,37 @@ export default function EditTenantPage() {
       setIsSaving(false);
     }
   }, [tenant]);
+
+  const handleAssetUpload = useCallback(async (
+    assetType: 'logo' | 'backgroundImage',
+    file: File,
+  ) => {
+    const slug = subdomain.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (!slug) {
+      throw new Error('Add a valid survey address before uploading assets.');
+    }
+
+    setUploadingAssets((current) => ({ ...current, [assetType]: true }));
+
+    try {
+      const { data, error: uploadError } = await tenantService.uploadAssets(slug, {
+        logo: assetType === 'logo' ? file : null,
+        backgroundImage: assetType === 'backgroundImage' ? file : null,
+      });
+
+      if (uploadError || !data) {
+        throw new Error(uploadError || 'Asset upload failed.');
+      }
+
+      setBranding((current) => ({
+        ...current,
+        ...(data.logo ? { logo: data.logo, logoUrl: data.logo } : {}),
+        ...(data.backgroundImage ? { backgroundImage: data.backgroundImage } : {}),
+      }));
+    } finally {
+      setUploadingAssets((current) => ({ ...current, [assetType]: false }));
+    }
+  }, [subdomain]);
 
   if (isLoading) {
     return (
@@ -429,8 +472,22 @@ export default function EditTenantPage() {
               </div>
             </div>
 
-            <BrandingPanel branding={branding} onChange={setBranding} title="" showPreviewSection={false} />
+            <BrandingPanel
+              branding={branding}
+              onChange={setBranding}
+              title=""
+              showPreviewSection={false}
+              onAssetUpload={handleAssetUpload}
+              uploadState={uploadingAssets}
+            />
           </div>
+
+          <TenantContentPanel
+            content={content}
+            onChange={setContent}
+            title="Subdomain Content"
+            description="Manage tenant-specific page copy. This section is designed to grow as additional editable page content is added."
+          />
 
           {/* Save Button */}
           <div className="flex justify-end">

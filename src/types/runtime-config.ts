@@ -1,4 +1,5 @@
 import type { BrandingConfig } from './branding';
+import type { TenantContentConfig } from './content';
 
 export interface LocalizedText {
   en: string;
@@ -140,6 +141,7 @@ export interface TenantRuntimeConfigSnapshot {
   tenant: RuntimeTenantSummary;
   versionRefs: RuntimeVersionRefs;
   branding: BrandingConfig;
+  content: TenantContentConfig;
   attributeTemplate: RuntimeAttributeTemplate;
   scannerVersion: RuntimeScannerVersion;
   runtimeSettings: RuntimeSettings;
