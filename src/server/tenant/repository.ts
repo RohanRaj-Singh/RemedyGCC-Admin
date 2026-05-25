@@ -13,6 +13,7 @@ import { runMongoScript } from '../mongo-shell';
 export interface TenantDocument {
   tenantId: string;
   name: string;
+  nameAr?: string | null;
   slug: string;
   subdomain?: string;
   status: 'draft' | 'active' | 'disabled' | 'archived';

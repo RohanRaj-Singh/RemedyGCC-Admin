@@ -17,6 +17,7 @@ export function LocationMappingInput({
   onChange,
 }: LocationMappingInputProps) {
   const [newLocation, setNewLocation] = useState('');
+  const [newLocationAr, setNewLocationAr] = useState('');
   const [selectedStreamId, setSelectedStreamId] = useState('');
 
   useEffect(() => {
@@ -35,11 +36,13 @@ export function LocationMappingInput({
       {
         id: createAttributeOptionId(selectedStreamId, newLocation),
         label: newLocation.trim(),
+        labelAr: newLocationAr.trim() || undefined,
         streamId: selectedStreamId,
       },
     ]);
 
     setNewLocation('');
+    setNewLocationAr('');
     setSelectedStreamId('');
   }
 
@@ -87,7 +90,14 @@ export function LocationMappingInput({
                     key={location.id}
                     className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm"
                   >
-                    <span>{location.label}</span>
+                    <div className="flex flex-col">
+                      <span>{location.label}</span>
+                      {location.labelAr ? (
+                        <span className="text-xs font-normal text-gray-500" dir="rtl">
+                          {location.labelAr}
+                        </span>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleRemove(location.id)}
@@ -109,8 +119,9 @@ export function LocationMappingInput({
         </div>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
+      <div className="grid gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="relative flex-1">
           <select
             value={selectedStreamId}
             onChange={(event) => setSelectedStreamId(event.target.value)}
@@ -125,25 +136,37 @@ export function LocationMappingInput({
             ))}
           </select>
           <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          </div>
+
+          <input
+            value={newLocation}
+            onChange={(event) => setNewLocation(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Location name"
+            className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
         </div>
 
-        <input
-          value={newLocation}
-          onChange={(event) => setNewLocation(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Location name"
-          className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-        />
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <input
+            value={newLocationAr}
+            onChange={(event) => setNewLocationAr(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Arabic location name (optional)"
+            dir="rtl"
+            className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
 
-        <button
-          type="button"
-          onClick={handleAdd}
-          disabled={!newLocation.trim() || !selectedStreamId || streams.length === 0}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Plus className="h-4 w-4" />
-          Add
-        </button>
+          <button
+            type="button"
+            onClick={handleAdd}
+            disabled={!newLocation.trim() || !selectedStreamId || streams.length === 0}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="h-4 w-4" />
+            Add
+          </button>
+        </div>
       </div>
     </div>
   );

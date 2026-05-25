@@ -33,6 +33,7 @@ export interface RuntimeAttributeOption {
   id: string;
   label: string;
   value: string;
+  labelTranslations?: LocalizedText;
 }
 
 export interface RuntimeAttributeLocationOption extends RuntimeAttributeOption {
@@ -52,6 +53,8 @@ export interface RuntimeFixedAttributeConfig {
   required?: boolean;
   label?: string;
   placeholder?: string;
+  labelTranslations?: LocalizedText;
+  placeholderTranslations?: LocalizedText;
 }
 
 export interface RuntimeAttributeTemplate {
@@ -59,9 +62,9 @@ export interface RuntimeAttributeTemplate {
   locations: RuntimeAttributeLocationOption[];
   functions: RuntimeAttributeFunctionOption[];
   departments: RuntimeAttributeDepartmentOption[];
-  genders?: string[];
-  ageGroups?: string[];
-  seniorityLevels?: string[];
+  genders?: RuntimeAttributeOption[];
+  ageGroups?: RuntimeAttributeOption[];
+  seniorityLevels?: RuntimeAttributeOption[];
   fixedAttributes?: {
     location?: RuntimeFixedAttributeConfig;
     gender?: RuntimeFixedAttributeConfig;
@@ -130,6 +133,7 @@ export interface RuntimeScannerVersion {
 export interface RuntimeTenantSummary {
   id: string;
   name: string;
+  nameTranslations?: LocalizedText;
   slug: string;
   status: string;
 }

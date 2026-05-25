@@ -351,7 +351,12 @@ export function TemplateForm({ template }: TemplateFormProps) {
               <div className="flex flex-wrap gap-2">
                 {GENDER_OPTIONS.map((option) => (
                   <span key={option.id} className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 shadow-sm">
-                    {option.label}
+                    <span className="block">{option.label}</span>
+                    {option.labelAr ? (
+                      <span className="block text-xs font-normal text-gray-500" dir="rtl">
+                        {option.labelAr}
+                      </span>
+                    ) : null}
                   </span>
                 ))}
               </div>
@@ -365,7 +370,12 @@ export function TemplateForm({ template }: TemplateFormProps) {
               <div className="flex flex-wrap gap-2">
                 {AGE_RANGES.map((option) => (
                   <span key={option.id} className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 shadow-sm">
-                    {option.label}
+                    <span className="block">{option.label}</span>
+                    {option.labelAr ? (
+                      <span className="block text-xs font-normal text-gray-500" dir="rtl">
+                        {option.labelAr}
+                      </span>
+                    ) : null}
                   </span>
                 ))}
               </div>

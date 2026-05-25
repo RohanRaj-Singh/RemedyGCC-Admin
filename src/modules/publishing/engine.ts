@@ -221,6 +221,16 @@ function normalizeLocalizedText(value: LocalizedText | undefined): LocalizedText
   return normalized;
 }
 
+function createLocalizedText(
+  en: string | undefined,
+  ar: string | undefined,
+): LocalizedText | undefined {
+  return normalizeLocalizedText({
+    en: en?.trim() ?? '',
+    ar: ar?.trim() ?? '',
+  });
+}
+
 function pushIssue(
   issues: PublishValidationIssue[],
   issue: PublishValidationIssue,
@@ -334,52 +344,79 @@ function buildRuntimeAttributeTemplate(
       id: streamIdMap.get(stream.id)!,
       label: stream.label,
       value: stream.id,
+      labelTranslations: createLocalizedText(stream.label, stream.labelAr),
     })),
     locations: sourceAttributeTemplate.location.map((location) => ({
       id: locationIdMap.get(location.id)!,
       label: location.label,
       value: location.id,
       streamId: streamIdMap.get(location.streamId)!,
+      labelTranslations: createLocalizedText(location.label, location.labelAr),
     })),
     functions: sourceAttributeTemplate.function.map((func) => ({
       id: functionIdMap.get(func.id)!,
       label: func.label,
       value: func.id,
       locationId: locationIdMap.get(func.locationId)!,
+      labelTranslations: createLocalizedText(func.label, func.labelAr),
     })),
     departments: sourceAttributeTemplate.department.map((department) => ({
       id: createStableUuid(`department:${department.id}`),
       label: department.label,
       value: department.id,
       functionId: functionIdMap.get(department.functionId)!,
+      labelTranslations: createLocalizedText(department.label, department.labelAr),
     })),
-    genders: sourceAttributeTemplate.gender.map((option) => option.id),
-    ageGroups: sourceAttributeTemplate.age.map((option) => option.id),
-    seniorityLevels: sourceAttributeTemplate.seniority.map((option) => option.id),
+    genders: sourceAttributeTemplate.gender.map((option) => ({
+      id: createStableUuid(`gender:${option.id}`),
+      label: option.label,
+      value: option.id,
+      labelTranslations: createLocalizedText(option.label, option.labelAr),
+    })),
+    ageGroups: sourceAttributeTemplate.age.map((option) => ({
+      id: createStableUuid(`age:${option.id}`),
+      label: option.label,
+      value: option.id,
+      labelTranslations: createLocalizedText(option.label, option.labelAr),
+    })),
+    seniorityLevels: sourceAttributeTemplate.seniority.map((option) => ({
+      id: createStableUuid(`seniority:${option.id}`),
+      label: option.label,
+      value: option.id,
+      labelTranslations: createLocalizedText(option.label, option.labelAr),
+    })),
     fixedAttributes: {
       location: {
         enabled: sourceAttributeTemplate.location.length > 0,
         required: sourceAttributeTemplate.location.length > 0,
         label: 'Location',
         placeholder: 'Select a location',
+        labelTranslations: createLocalizedText('Location', 'الموقع'),
+        placeholderTranslations: createLocalizedText('Select a location', 'اختر الموقع'),
       },
       gender: {
         enabled: sourceAttributeTemplate.gender.length > 0,
         required: sourceAttributeTemplate.gender.length > 0,
         label: 'Gender',
         placeholder: 'Select a gender',
+        labelTranslations: createLocalizedText('Gender', 'الجنس'),
+        placeholderTranslations: createLocalizedText('Select a gender', 'اختر الجنس'),
       },
       age: {
         enabled: sourceAttributeTemplate.age.length > 0,
         required: sourceAttributeTemplate.age.length > 0,
         label: 'Age',
         placeholder: 'Select an age group',
+        labelTranslations: createLocalizedText('Age', 'الفئة العمرية'),
+        placeholderTranslations: createLocalizedText('Select an age group', 'اختر الفئة العمرية'),
       },
       seniority: {
         enabled: sourceAttributeTemplate.seniority.length > 0,
         required: sourceAttributeTemplate.seniority.length > 0,
         label: 'Seniority',
         placeholder: 'Select a seniority level',
+        labelTranslations: createLocalizedText('Seniority', 'المستوى الوظيفي'),
+        placeholderTranslations: createLocalizedText('Select a seniority level', 'اختر المستوى الوظيفي'),
       },
     },
   };

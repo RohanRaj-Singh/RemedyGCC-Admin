@@ -15,18 +15,18 @@ export const QUESTION_TYPE_OPTIONS: { id: QuestionType; label: string; descripti
 
 // Fixed options for Gender (not editable)
 export const GENDER_OPTIONS = [
-  { id: 'male', label: 'Male', questionType: 'buttonRadio' as QuestionType },
-  { id: 'female', label: 'Female', questionType: 'buttonRadio' as QuestionType },
+  { id: 'male', label: 'Male', labelAr: 'ذكر', questionType: 'buttonRadio' as QuestionType },
+  { id: 'female', label: 'Female', labelAr: 'أنثى', questionType: 'buttonRadio' as QuestionType },
 ] as const;
 
 // Fixed options for Age (not editable)
 export const AGE_RANGES = [
-  { id: '18-24', label: '18-24', questionType: 'buttonRadio' as QuestionType },
-  { id: '25-34', label: '25-34', questionType: 'buttonRadio' as QuestionType },
-  { id: '35-44', label: '35-44', questionType: 'buttonRadio' as QuestionType },
-  { id: '45-54', label: '45-54', questionType: 'buttonRadio' as QuestionType },
-  { id: '55-64', label: '55-64', questionType: 'buttonRadio' as QuestionType },
-  { id: '65+', label: '65+', questionType: 'buttonRadio' as QuestionType },
+  { id: '18-24', label: '18-24', labelAr: '18-24', questionType: 'buttonRadio' as QuestionType },
+  { id: '25-34', label: '25-34', labelAr: '25-34', questionType: 'buttonRadio' as QuestionType },
+  { id: '35-44', label: '35-44', labelAr: '35-44', questionType: 'buttonRadio' as QuestionType },
+  { id: '45-54', label: '45-54', labelAr: '45-54', questionType: 'buttonRadio' as QuestionType },
+  { id: '55-64', label: '55-64', labelAr: '55-64', questionType: 'buttonRadio' as QuestionType },
+  { id: '65+', label: '65+', labelAr: '65+', questionType: 'buttonRadio' as QuestionType },
 ] as const;
 
 // Field types
@@ -43,6 +43,7 @@ export type FieldType =
 export interface FieldOption {
   id: string;
   label: string;
+  labelAr?: string;
   questionType?: QuestionType; // How this attribute should be rendered
 }
 

@@ -24,6 +24,7 @@ export function DepartmentMappingInput({
   onChange,
 }: DepartmentMappingInputProps) {
   const [newDepartment, setNewDepartment] = useState('');
+  const [newDepartmentAr, setNewDepartmentAr] = useState('');
   const [selectedFunctionId, setSelectedFunctionId] = useState('');
 
   useEffect(() => {
@@ -51,11 +52,13 @@ export function DepartmentMappingInput({
       {
         id: createAttributeOptionId(selectedFunctionId, newDepartment),
         label: newDepartment.trim(),
+        labelAr: newDepartmentAr.trim() || undefined,
         functionId: selectedFunctionId,
       },
     ]);
 
     setNewDepartment('');
+    setNewDepartmentAr('');
     setSelectedFunctionId('');
   }
 
@@ -109,7 +112,14 @@ export function DepartmentMappingInput({
                     key={item.id}
                     className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm"
                   >
-                    <span>{item.label}</span>
+                    <div className="flex flex-col">
+                      <span>{item.label}</span>
+                      {item.labelAr ? (
+                        <span className="text-xs font-normal text-gray-500" dir="rtl">
+                          {item.labelAr}
+                        </span>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleRemove(item.id)}
@@ -131,8 +141,9 @@ export function DepartmentMappingInput({
         </div>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
+      <div className="grid gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="relative flex-1">
           <select
             value={selectedFunctionId}
             onChange={(event) => setSelectedFunctionId(event.target.value)}
@@ -152,25 +163,37 @@ export function DepartmentMappingInput({
             })}
           </select>
           <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          </div>
+
+          <input
+            value={newDepartment}
+            onChange={(event) => setNewDepartment(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Department name"
+            className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
         </div>
 
-        <input
-          value={newDepartment}
-          onChange={(event) => setNewDepartment(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Department name"
-          className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-        />
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <input
+            value={newDepartmentAr}
+            onChange={(event) => setNewDepartmentAr(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Arabic department name (optional)"
+            dir="rtl"
+            className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
 
-        <button
-          type="button"
-          onClick={handleAdd}
-          disabled={!newDepartment.trim() || !selectedFunctionId || functions.length === 0}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Plus className="h-4 w-4" />
-          Add
-        </button>
+          <button
+            type="button"
+            onClick={handleAdd}
+            disabled={!newDepartment.trim() || !selectedFunctionId || functions.length === 0}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="h-4 w-4" />
+            Add
+          </button>
+        </div>
       </div>
     </div>
   );

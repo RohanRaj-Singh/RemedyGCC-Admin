@@ -81,6 +81,7 @@ export interface Tenant {
   slug: string;
   subdomain: string;
   name: string;
+  nameAr?: string | null;
   status: TenantStatus;
   draftScannerId: string | null;
   draftAttributeTemplateId: string | null;
@@ -109,6 +110,7 @@ export interface TenantSetupOption {
 
 export interface CreateTenantDto {
   name: string;
+  nameAr?: string | null;
   slug: string;
   subdomain: string;
   status?: TenantStatus;
@@ -120,6 +122,7 @@ export interface CreateTenantDto {
 
 export interface UpdateTenantDto {
   name?: string;
+  nameAr?: string | null;
   slug?: string;
   subdomain?: string;
   status?: TenantStatus;

@@ -22,6 +22,7 @@ export function OptionsBuilder({
   showQuestionType = true,
 }: OptionsBuilderProps) {
   const [newOption, setNewOption] = useState('');
+  const [newOptionAr, setNewOptionAr] = useState('');
 
   // Get the first option's questionType or default to dropdown
   const currentQuestionType = value[0]?.questionType || 'dropdown';
@@ -34,11 +35,13 @@ export function OptionsBuilder({
     const newFieldOption: FieldOption = { 
       id, 
       label: newOption.trim(),
+      labelAr: newOptionAr.trim() || undefined,
       questionType 
     };
     
     onChange([...value, newFieldOption]);
     setNewOption('');
+    setNewOptionAr('');
   };
 
   const handleRemove = (id: string) => {
@@ -116,7 +119,14 @@ export function OptionsBuilder({
             key={option.id}
             className="flex items-center gap-1.5 bg-primary/5 text-primary border border-primary/20 px-3 py-2 rounded-lg text-sm font-medium group hover:bg-primary/10 transition-colors"
           >
-            <span>{option.label}</span>
+            <div className="flex flex-col">
+              <span>{option.label}</span>
+              {option.labelAr ? (
+                <span className="text-xs font-normal text-gray-500" dir="rtl">
+                  {option.labelAr}
+                </span>
+              ) : null}
+            </div>
             {option.questionType && (
               <span className={`text-xs ml-1 ${
                 option.questionType === 'dropdown' ? 'text-blue-600' :
@@ -145,19 +155,30 @@ export function OptionsBuilder({
       </div>
 
       {!readOnly && (
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newOption}
-            onChange={(e) => setNewOption(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-          />
+        <div className="space-y-2">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input
+              type="text"
+              value={newOption}
+              onChange={(e) => setNewOption(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+            <input
+              type="text"
+              value={newOptionAr}
+              onChange={(e) => setNewOptionAr(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Arabic label (optional)"
+              dir="rtl"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+          </div>
           <button
             onClick={handleAdd}
             disabled={!newOption.trim()}
-            className="px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            className="px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1"
           >
             <Plus className="w-4 h-4" />
             Add

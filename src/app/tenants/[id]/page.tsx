@@ -417,11 +417,23 @@ export default function TenantDetailsPage() {
             <FileText className="h-5 w-5" />Subdomain Content
           </h3>
         </div>
+        <div className="rounded-xl border p-4 mb-4" style={{ backgroundColor: 'hsl(0 0% 98%)', borderColor: 'var(--border)' }}>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Tenant Name</p>
+          <p className="mt-3 text-sm leading-7 text-slate-700">{tenant.name}</p>
+          {tenant.nameAr?.trim() && (
+            <p className="mt-2 text-sm leading-7 text-slate-500" dir="rtl">{tenant.nameAr}</p>
+          )}
+        </div>
         <div className="rounded-xl border p-4" style={{ backgroundColor: 'hsl(0 0% 98%)', borderColor: 'var(--border)' }}>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">About Us Intro</p>
           <p className="mt-3 text-sm leading-7 text-slate-700">
             {tenant.content?.pages?.about?.intro?.en?.trim() || 'Using the default About page intro copy.'}
           </p>
+          {tenant.content?.pages?.about?.intro?.ar?.trim() && (
+            <p className="mt-2 text-sm leading-7 text-slate-500" dir="rtl">
+              {tenant.content.pages.about.intro.ar}
+            </p>
+          )}
         </div>
       </div>
 

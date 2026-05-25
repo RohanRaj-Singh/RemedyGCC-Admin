@@ -36,6 +36,11 @@ function sanitizeLabel(value: string | null | undefined): string {
   return value?.trim() ?? '';
 }
 
+function sanitizeOptionalLabel(value: string | null | undefined): string | undefined {
+  const normalized = value?.trim() ?? '';
+  return normalized ? normalized : undefined;
+}
+
 function normalizeIdentifier(value: string | null | undefined): string {
   return value?.trim() ?? '';
 }
@@ -64,6 +69,7 @@ function normalizeFieldOptions(
     return {
       id: normalizeIdentifier(option.id) || buildFallbackId(prefix, label, index),
       label,
+      labelAr: sanitizeOptionalLabel(option.labelAr),
       questionType: option.questionType ?? DEFAULT_QUESTION_TYPES[prefix],
     };
   });
@@ -77,6 +83,7 @@ function normalizeLocationOptions(options: LocationOption[]): LocationOption[] {
     return {
       id: normalizeIdentifier(option.id) || buildFallbackId('location', label, index, streamId || undefined),
       label,
+      labelAr: sanitizeOptionalLabel(option.labelAr),
       streamId,
       questionType: option.questionType ?? DEFAULT_QUESTION_TYPES.location,
     };
@@ -91,6 +98,7 @@ function normalizeFunctionOptions(options: FunctionOption[]): FunctionOption[] {
     return {
       id: normalizeIdentifier(option.id) || buildFallbackId('function', label, index, locationId || undefined),
       label,
+      labelAr: sanitizeOptionalLabel(option.labelAr),
       locationId,
       questionType: option.questionType ?? DEFAULT_QUESTION_TYPES.function,
     };
@@ -105,6 +113,7 @@ function normalizeDepartmentOptions(options: DepartmentOption[]): DepartmentOpti
     return {
       id: normalizeIdentifier(option.id) || buildFallbackId('department', label, index, functionId || undefined),
       label,
+      labelAr: sanitizeOptionalLabel(option.labelAr),
       functionId,
       questionType: option.questionType ?? DEFAULT_QUESTION_TYPES.department,
     };

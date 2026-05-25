@@ -22,6 +22,7 @@ export function FunctionMappingInput({
   onChange,
 }: FunctionMappingInputProps) {
   const [newFunction, setNewFunction] = useState('');
+  const [newFunctionAr, setNewFunctionAr] = useState('');
   const [selectedLocationId, setSelectedLocationId] = useState('');
 
   useEffect(() => {
@@ -45,11 +46,13 @@ export function FunctionMappingInput({
       {
         id: createAttributeOptionId(selectedLocationId, newFunction),
         label: newFunction.trim(),
+        labelAr: newFunctionAr.trim() || undefined,
         locationId: selectedLocationId,
       },
     ]);
 
     setNewFunction('');
+    setNewFunctionAr('');
     setSelectedLocationId('');
   }
 
@@ -102,7 +105,14 @@ export function FunctionMappingInput({
                     key={item.id}
                     className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm"
                   >
-                    <span>{item.label}</span>
+                    <div className="flex flex-col">
+                      <span>{item.label}</span>
+                      {item.labelAr ? (
+                        <span className="text-xs font-normal text-gray-500" dir="rtl">
+                          {item.labelAr}
+                        </span>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleRemove(item.id)}
@@ -124,8 +134,9 @@ export function FunctionMappingInput({
         </div>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
+      <div className="grid gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="relative flex-1">
           <select
             value={selectedLocationId}
             onChange={(event) => setSelectedLocationId(event.target.value)}
@@ -143,25 +154,37 @@ export function FunctionMappingInput({
             })}
           </select>
           <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          </div>
+
+          <input
+            value={newFunction}
+            onChange={(event) => setNewFunction(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Function name"
+            className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
         </div>
 
-        <input
-          value={newFunction}
-          onChange={(event) => setNewFunction(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Function name"
-          className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-        />
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <input
+            value={newFunctionAr}
+            onChange={(event) => setNewFunctionAr(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Arabic function name (optional)"
+            dir="rtl"
+            className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
 
-        <button
-          type="button"
-          onClick={handleAdd}
-          disabled={!newFunction.trim() || !selectedLocationId || locations.length === 0}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Plus className="h-4 w-4" />
-          Add
-        </button>
+          <button
+            type="button"
+            onClick={handleAdd}
+            disabled={!newFunction.trim() || !selectedLocationId || locations.length === 0}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="h-4 w-4" />
+            Add
+          </button>
+        </div>
       </div>
     </div>
   );

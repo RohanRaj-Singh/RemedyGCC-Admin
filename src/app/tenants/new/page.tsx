@@ -73,6 +73,7 @@ export default function NewTenantPage() {
 
   // Form state
   const [name, setName] = useState('');
+  const [nameAr, setNameAr] = useState('');
   const [subdomain, setSubdomain] = useState('');
   const [subdomainManualEdit, setSubdomainManualEdit] = useState(false);
   const [subdomainStatus, setSubdomainStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'reserved'>('idle');
@@ -197,6 +198,7 @@ export default function NewTenantPage() {
       const slug = normalizeSubdomain(subdomain);
       const { data: tenant, error: createError } = await tenantService.create({
         name: name.trim(),
+        nameAr: nameAr.trim() || null,
         slug,
         subdomain: slug,
         status: 'draft',
@@ -347,6 +349,20 @@ export default function NewTenantPage() {
                 style={{ borderColor: 'var(--border)' }}
               />
               <p className="text-xs text-muted-foreground mt-2">This is for your reference and respondents will not see it.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Survey Name (Arabic)</label>
+              <input
+                type="text"
+                dir="rtl"
+                value={nameAr}
+                onChange={(e) => setNameAr(e.target.value)}
+                placeholder="اكمي للحلول الصحية"
+                className="w-full px-4 py-3 rounded-xl border text-lg"
+                style={{ borderColor: 'var(--border)' }}
+              />
+              <p className="text-xs text-muted-foreground mt-2">Optional. This name is used when the tenant app language is switched to Arabic.</p>
             </div>
 
             <div>
@@ -502,6 +518,13 @@ export default function NewTenantPage() {
 
             <div className="grid gap-4">
               <div className="p-4 rounded-xl border" style={{ backgroundColor: 'var(--muted)', borderColor: 'var(--border)' }}>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1"><Building2 className="h-4 w-4" />Survey Name</div>
+                <div className="text-lg font-semibold">{name || 'Not provided'}</div>
+                {nameAr.trim() && (
+                  <div className="mt-2 text-sm text-muted-foreground" dir="rtl">{nameAr}</div>
+                )}
+              </div>
+              <div className="p-4 rounded-xl border" style={{ backgroundColor: 'var(--muted)', borderColor: 'var(--border)' }}>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1"><Globe className="h-4 w-4" />Survey Address</div>
                 <div className="text-lg font-semibold">{getTenantHostname(subdomain)}</div>
               </div>
@@ -525,10 +548,15 @@ export default function NewTenantPage() {
                   )}
                 </div>
               )}
-              {content.pages?.about?.intro?.en && (
+              {(content.pages?.about?.intro?.en || content.pages?.about?.intro?.ar) && (
                 <div className="p-4 rounded-xl border" style={{ backgroundColor: 'var(--muted)', borderColor: 'var(--border)' }}>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1"><Sparkles className="h-4 w-4" />About Page Intro</div>
-                  <div className="text-sm font-medium">{content.pages.about.intro.en}</div>
+                  {content.pages?.about?.intro?.en && (
+                    <div className="text-sm font-medium">{content.pages.about.intro.en}</div>
+                  )}
+                  {content.pages?.about?.intro?.ar && (
+                    <div className="mt-2 text-sm text-muted-foreground" dir="rtl">{content.pages.about.intro.ar}</div>
+                  )}
                 </div>
               )}
             </div>

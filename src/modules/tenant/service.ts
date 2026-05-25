@@ -87,6 +87,10 @@ function createTenantSummary(document: TenantDocument): RuntimeTenantSummary {
   return {
     id: document.tenantId,
     name: document.name,
+    nameTranslations: {
+      en: document.name,
+      ar: document.nameAr?.trim() ?? '',
+    },
     slug: document.slug,
     status: document.status,
   };
@@ -95,6 +99,7 @@ function createTenantSummary(document: TenantDocument): RuntimeTenantSummary {
 function normalizeTenantDocument(document: TenantDocument): TenantDocument {
   return {
     ...document,
+    nameAr: document.nameAr?.trim() || null,
     subdomain: document.subdomain || document.slug,
     branding: document.branding ?? {},
     content: normalizeTenantContentConfig(document.content),
@@ -355,6 +360,11 @@ function assertTenantName(name: string | undefined): string {
   }
 
   return trimmed;
+}
+
+function normalizeOptionalTenantName(name: string | null | undefined): string | null {
+  const trimmed = name?.trim();
+  return trimmed ? trimmed : null;
 }
 
 async function assertPublishedTenantScanner(
@@ -660,6 +670,7 @@ async function hydrateTenant(
     slug: normalized.slug,
     subdomain: normalized.subdomain || normalized.slug,
     name: normalized.name,
+    nameAr: normalized.nameAr ?? null,
     status: normalized.status,
     draftScannerId: normalized.draftScannerId ?? null,
     draftAttributeTemplateId: normalized.draftAttributeTemplateId ?? null,
@@ -823,6 +834,7 @@ export async function createTenant(data: CreateTenantDto): Promise<Tenant> {
   const listData = await getTenantListData();
 
   const name = assertTenantName(data.name);
+  const nameAr = normalizeOptionalTenantName(data.nameAr);
   const slugValidation = validateTenantSlug(data.slug);
   if (slugValidation.errors.length > 0) {
     throw new Error(slugValidation.errors[0]);
@@ -858,6 +870,7 @@ export async function createTenant(data: CreateTenantDto): Promise<Tenant> {
   const document: TenantDocument = {
     tenantId: createTenantId(slugValidation.normalized),
     name,
+    nameAr,
     slug: slugValidation.normalized,
     subdomain: subdomainValidation.normalized,
     status,
@@ -901,6 +914,9 @@ export async function updateTenant(
   assertEditableTenant(current);
 
   const nextName = data.name !== undefined ? assertTenantName(data.name) : current.name;
+  const nextNameAr = data.nameAr !== undefined
+    ? normalizeOptionalTenantName(data.nameAr)
+    : current.nameAr ?? null;
   const nextSlug = data.slug !== undefined
     ? validateTenantSlug(data.slug).normalized
     : current.slug;
@@ -995,6 +1011,7 @@ export async function updateTenant(
   const now = new Date().toISOString();
   const updatedTenant = await updateTenantDocument(id, {
     name: nextName,
+    nameAr: nextNameAr,
     slug: nextSlug,
     subdomain: nextSubdomain,
     status: nextStatus,

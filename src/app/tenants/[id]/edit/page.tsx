@@ -36,6 +36,7 @@ interface TenantRuntimeConfig {
 interface TenantData {
   id: string;
   name: string;
+  nameAr?: string | null;
   subdomain: string;
   status: TenantStatus;
   draftScannerId: string | null;
@@ -67,6 +68,7 @@ export default function EditTenantPage() {
 
   // Form state
   const [name, setName] = useState('');
+  const [nameAr, setNameAr] = useState('');
   const [subdomain, setSubdomain] = useState('');
   const [draftScannerId, setDraftScannerId] = useState<string | null>(null);
   const [draftAttributeTemplateId, setDraftAttributeTemplateId] = useState<string | null>(null);
@@ -84,6 +86,7 @@ export default function EditTenantPage() {
   // Track original values for change detection
   const [originalValues, setOriginalValues] = useState({
     name: '',
+    nameAr: '',
     subdomain: '',
     draftScannerId: null as string | null,
     draftAttributeTemplateId: null as string | null,
@@ -111,6 +114,7 @@ export default function EditTenantPage() {
         const t = tenantResult.data;
         setTenant(t as TenantData);
         setName(t.name);
+        setNameAr(t.nameAr ?? '');
         setSubdomain(t.subdomain);
         setDraftScannerId(t.draftScannerId);
         setDraftAttributeTemplateId(t.draftAttributeTemplateId);
@@ -119,6 +123,7 @@ export default function EditTenantPage() {
 
         setOriginalValues({
           name: t.name,
+          nameAr: t.nameAr ?? '',
           subdomain: t.subdomain,
           draftScannerId: t.draftScannerId,
           draftAttributeTemplateId: t.draftAttributeTemplateId,
@@ -158,9 +163,10 @@ export default function EditTenantPage() {
     const brandingChanged = JSON.stringify(branding) !== JSON.stringify(originalValues.branding);
     const contentChanged = JSON.stringify(content) !== JSON.stringify(originalValues.content);
     const otherChanged = name !== originalValues.name || subdomain !== originalValues.subdomain ||
+      nameAr !== originalValues.nameAr ||
       draftScannerId !== originalValues.draftScannerId || draftAttributeTemplateId !== originalValues.draftAttributeTemplateId;
     setHasChanges(brandingChanged || contentChanged || otherChanged);
-  }, [name, subdomain, draftScannerId, draftAttributeTemplateId, branding, content, originalValues]);
+  }, [name, nameAr, subdomain, draftScannerId, draftAttributeTemplateId, branding, content, originalValues]);
 
   const handleSave = useCallback(async () => {
     if (!tenant) return;
@@ -172,6 +178,7 @@ export default function EditTenantPage() {
       const slug = subdomain.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       const { data: updated, error: updateError } = await tenantService.update(tenant.id, {
         name: name.trim(),
+        nameAr: nameAr.trim() || null,
         slug,
         subdomain: subdomain.trim().toLowerCase(),
         draftScannerId,
@@ -182,8 +189,8 @@ export default function EditTenantPage() {
 
       if (updateError || !updated) throw new Error(updateError || 'Failed to save.');
 
-      setTenant({ ...tenant, name: name.trim(), subdomain: subdomain.trim().toLowerCase(), draftScannerId, draftAttributeTemplateId, branding, content });
-      setOriginalValues({ name: name.trim(), subdomain: subdomain.trim().toLowerCase(), draftScannerId, draftAttributeTemplateId, branding, content });
+      setTenant({ ...tenant, name: name.trim(), nameAr: nameAr.trim() || null, subdomain: subdomain.trim().toLowerCase(), draftScannerId, draftAttributeTemplateId, branding, content });
+      setOriginalValues({ name: name.trim(), nameAr: nameAr.trim(), subdomain: subdomain.trim().toLowerCase(), draftScannerId, draftAttributeTemplateId, branding, content });
       setSuccessMessage('Changes saved successfully.');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
@@ -191,7 +198,7 @@ export default function EditTenantPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [tenant, name, subdomain, draftScannerId, draftAttributeTemplateId, branding, content]);
+  }, [tenant, name, nameAr, subdomain, draftScannerId, draftAttributeTemplateId, branding, content]);
 
   const handleStatusChange = useCallback(async (newStatus: TenantStatus) => {
     if (!tenant) return;
@@ -387,6 +394,19 @@ export default function EditTenantPage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  disabled={isArchived}
+                  className="w-full px-4 py-3 rounded-xl border text-lg disabled:opacity-50"
+                  style={{ borderColor: 'var(--border)' }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Survey Name (Arabic)</label>
+                <input
+                  type="text"
+                  dir="rtl"
+                  value={nameAr}
+                  onChange={(e) => setNameAr(e.target.value)}
                   disabled={isArchived}
                   className="w-full px-4 py-3 rounded-xl border text-lg disabled:opacity-50"
                   style={{ borderColor: 'var(--border)' }}
