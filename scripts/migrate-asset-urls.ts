@@ -101,7 +101,7 @@ function buildMigrationScript(): string {
   // roundtrip keeps the migration atomic-ish and avoids round-tripping
   // each document to Node.
   //
-  // We also rewrite the matching `runtimeConfigs` documents. The
+  // We also rewrite the matching runtimeConfigs documents. The
   // tenantapp serves the runtime config to end users, so any branding
   // URLs that point at the legacy static path need to be migrated
   // there too — otherwise the tenantapp browser still requests the
@@ -146,19 +146,26 @@ const runtimeSummary = [];
 // is targeted at a single document. Using the branding object itself as
 // part of the filter would skip rows when two configs share the same
 // branding object, which is common after repeated publishes.
+print('--- about to scan runtimeConfigs; assetKeys=' + JSON.stringify(assetKeys));
 const runtimeConfigs = db.runtimeConfigs.find({}, { projection: { runtimeConfigId: 1, tenantSlug: 1, branding: 1, updatedAt: 1 } }).toArray();
+print('--- found ' + runtimeConfigs.length + ' runtime config(s) ---');
+print('--- runtime config trace ---');
 for (const runtimeConfig of runtimeConfigs) {
+  print('inspecting ' + runtimeConfig.runtimeConfigId + ' slug=' + runtimeConfig.tenantSlug + ' branding=' + JSON.stringify(runtimeConfig.branding));
   const { next, changed } = rewriteBranding(runtimeConfig.branding, runtimeConfig.tenantSlug);
   if (!changed) {
+    print('  no change for ' + runtimeConfig.runtimeConfigId);
     continue;
   }
   if (!runtimeConfig.runtimeConfigId) {
+    print('  missing runtimeConfigId, skipping');
     continue;
   }
-  db.runtimeConfigs.updateOne(
+  const updateResult = db.runtimeConfigs.updateOne(
     { runtimeConfigId: runtimeConfig.runtimeConfigId },
     { $set: { branding: next, updatedAt: new Date().toISOString() } }
   );
+  print('  updateOne result for ' + runtimeConfig.runtimeConfigId + ': ' + JSON.stringify(updateResult));
   runtimeSummary.push({
     tenantSlug: runtimeConfig.tenantSlug,
     runtimeConfigId: runtimeConfig.runtimeConfigId,
