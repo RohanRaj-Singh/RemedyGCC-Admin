@@ -73,14 +73,17 @@ export interface TenantFilters {
 
 class TenantService {
   async uploadAssets(
-    tenantSlug: string,
+    tenantIdentifier: { tenantId: string; tenantSlug: string },
     assets: {
       logo?: File | null;
       backgroundImage?: File | null;
     },
-  ): Promise<ApiResponse<{ logo: string | null; backgroundImage: string | null }>> {
+  ): Promise<ApiResponse<{ tenantSlug: string; logo: string | null; backgroundImage: string | null }>> {
     const formData = new FormData();
-    formData.set('tenantSlug', tenantSlug);
+    formData.set('tenantId', tenantIdentifier.tenantId);
+    // Slug is sent as a fallback for older callers; the server still
+    // re-resolves the tenant and writes the asset to the real slug directory.
+    formData.set('tenantSlug', tenantIdentifier.tenantSlug);
 
     if (assets.logo) {
       formData.set('logo', assets.logo);
@@ -90,7 +93,7 @@ class TenantService {
       formData.set('backgroundImage', assets.backgroundImage);
     }
 
-    return request<{ logo: string | null; backgroundImage: string | null }>(
+    return request<{ tenantSlug: string; logo: string | null; backgroundImage: string | null }>(
       `${TENANT_API_BASE}/upload-assets`,
       {
         method: 'POST',

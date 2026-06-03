@@ -228,19 +228,34 @@ export default function NewTenantPage() {
     setUploadingAssets((current) => ({ ...current, [assetType]: true }));
 
     try {
-      const { data, error: uploadError } = await tenantService.uploadAssets(slug, {
-        logo: assetType === 'logo' ? file : null,
-        backgroundImage: assetType === 'backgroundImage' ? file : null,
+      // Pre-creation: the tenant doesn't exist yet, so pass `pending=1`
+      // and let the server sanitize the slug for the upload directory.
+      const formData = new FormData();
+      formData.set('tenantSlug', slug);
+      formData.set('pending', '1');
+      if (assetType === 'logo') {
+        formData.set('logo', file);
+      } else {
+        formData.set('backgroundImage', file);
+      }
+
+      const response = await fetch('/api/super-admin/tenants/upload-assets', {
+        method: 'POST',
+        body: formData,
       });
 
-      if (uploadError || !data) {
-        throw new Error(uploadError || 'Asset upload failed.');
+      const payload = (await response.json().catch(() => null)) as
+        | { tenantSlug?: string; logo?: string | null; backgroundImage?: string | null; error?: string }
+        | null;
+
+      if (!response.ok || !payload || payload.error) {
+        throw new Error(payload?.error || 'Asset upload failed.');
       }
 
       setBranding((current) => ({
         ...current,
-        ...(data.logo ? { logo: data.logo, logoUrl: data.logo } : {}),
-        ...(data.backgroundImage ? { backgroundImage: data.backgroundImage } : {}),
+        ...(payload.logo ? { logo: payload.logo, logoUrl: payload.logo } : {}),
+        ...(payload.backgroundImage ? { backgroundImage: payload.backgroundImage } : {}),
       }));
     } finally {
       setUploadingAssets((current) => ({ ...current, [assetType]: false }));

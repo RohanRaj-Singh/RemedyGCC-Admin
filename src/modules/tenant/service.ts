@@ -62,6 +62,7 @@ import { deleteTenantAccessForTenant } from '@/modules/tenant-auth/services/auth
 import {
   ensureTenantAssetDirectory,
   rebaseTenantBrandingAssetPaths,
+  resolveTenantAssetPath,
   syncTenantAssetDirectory,
 } from '@/lib/uploads/tenant-assets';
 
@@ -81,6 +82,45 @@ interface DraftSetupCatalog {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/**
+ * Self-heal stale logo/background URLs before publishing.
+ *
+ * If the runtime config references an asset file that no longer exists on
+ * disk (e.g. the logo was re-uploaded under a different extension, or wiped
+ * before a new one was saved), fall back to whatever file is actually
+ * present, or to the bundled default asset. Without this, the published
+ * runtime config can carry a 404-bound URL that the tenantapp rewrite
+ * then surfaces to end users.
+ */
+async function resolveBrandingAssetPaths(
+  tenantSlug: string,
+  branding: Tenant['branding'],
+): Promise<Tenant['branding']> {
+  const base = clone(branding ?? {});
+  const [resolvedLogo, resolvedBackground] = await Promise.all([
+    resolveTenantAssetPath(
+      tenantSlug,
+      'logo',
+      base.logo ?? base.logoUrl,
+      base.logo ?? base.logoUrl ?? '/default/logo.png',
+    ),
+    resolveTenantAssetPath(
+      tenantSlug,
+      'background',
+      base.backgroundImage,
+      base.backgroundImage ?? '/default/background.png',
+    ),
+  ]);
+  if (resolvedLogo) {
+    base.logo = resolvedLogo;
+    base.logoUrl = resolvedLogo;
+  }
+  if (resolvedBackground) {
+    base.backgroundImage = resolvedBackground;
+  }
+  return base;
 }
 
 function createTenantSummary(document: TenantDocument): RuntimeTenantSummary {
@@ -532,7 +572,10 @@ async function buildPublishingPreview(
 
   const generated = generateRuntimeConfig({
     tenant: createTenantSummary(tenant),
-    branding: tenant.branding ?? {},
+    branding: await resolveBrandingAssetPaths(
+      tenant.slug,
+      tenant.branding ?? {},
+    ),
     content: tenant.content ?? {},
     runtimeSettings: clone(DEFAULT_RUNTIME_SETTINGS),
     sourceScanner:
@@ -1140,7 +1183,10 @@ export async function publishTenantRuntime(
   const runtimeConfigId = createRuntimeConfigId(current.subdomain || current.slug, detailData.runtimeConfigs);
   const generated = generateRuntimeConfig({
     tenant: createTenantSummary(current),
-    branding: current.branding ?? {},
+    branding: await resolveBrandingAssetPaths(
+      current.slug,
+      current.branding ?? {},
+    ),
     content: current.content ?? {},
     runtimeSettings: clone(DEFAULT_RUNTIME_SETTINGS),
     sourceScanner: {

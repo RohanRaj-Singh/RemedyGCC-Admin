@@ -12,7 +12,8 @@
     "seed:admin": "cross-env NEXT_RUNTIME=nodejs tsx scripts/seed-admin.ts",
     "migrate:branding": "ts-node scripts/migrate-branding.ts",
     "migrate:branding:up": "ts-node scripts/migrate-branding.ts up",
-    "migrate:branding:down": "ts-node scripts/migrate-branding.ts down"
+    "migrate:branding:down": "ts-node scripts/migrate-branding.ts down",
+    "migrate:asset-urls": "ts-node scripts/migrate-asset-urls.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

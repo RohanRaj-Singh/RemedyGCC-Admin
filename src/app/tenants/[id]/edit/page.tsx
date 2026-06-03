@@ -35,6 +35,7 @@ interface TenantRuntimeConfig {
 
 interface TenantData {
   id: string;
+  slug: string;
   name: string;
   nameAr?: string | null;
   subdomain: string;
@@ -242,18 +243,20 @@ export default function EditTenantPage() {
     assetType: 'logo' | 'backgroundImage',
     file: File,
   ) => {
-    const slug = subdomain.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    if (!slug) {
-      throw new Error('Add a valid survey address before uploading assets.');
+    if (!tenant) {
+      throw new Error('Tenant not loaded yet.');
     }
 
     setUploadingAssets((current) => ({ ...current, [assetType]: true }));
 
     try {
-      const { data, error: uploadError } = await tenantService.uploadAssets(slug, {
-        logo: assetType === 'logo' ? file : null,
-        backgroundImage: assetType === 'backgroundImage' ? file : null,
-      });
+      const { data, error: uploadError } = await tenantService.uploadAssets(
+        { tenantId: tenant.id, tenantSlug: tenant.slug },
+        {
+          logo: assetType === 'logo' ? file : null,
+          backgroundImage: assetType === 'backgroundImage' ? file : null,
+        },
+      );
 
       if (uploadError || !data) {
         throw new Error(uploadError || 'Asset upload failed.');
@@ -264,10 +267,25 @@ export default function EditTenantPage() {
         ...(data.logo ? { logo: data.logo, logoUrl: data.logo } : {}),
         ...(data.backgroundImage ? { backgroundImage: data.backgroundImage } : {}),
       }));
+
+      // If the tenant is already live (or has ever published), re-publish
+      // so the new URL flows into the runtime config the tenantapp reads.
+      // The publish endpoint is a no-op for tenants with no draft scanner/
+      // template, so this is safe for tenants still in setup.
+      if (tenant.activeRuntimeConfig || tenant.status === 'active') {
+        try {
+          const { error: publishError } = await tenantService.publishRuntime(tenant.id, true);
+          if (publishError) {
+            console.warn('Asset re-publish skipped:', publishError);
+          }
+        } catch (publishErr) {
+          console.warn('Asset re-publish skipped:', publishErr);
+        }
+      }
     } finally {
       setUploadingAssets((current) => ({ ...current, [assetType]: false }));
     }
-  }, [subdomain]);
+  }, [tenant]);
 
   if (isLoading) {
     return (

@@ -28,6 +28,7 @@ const RUNTIME_PUBLIC_PREFIXES = [
   '/api/survey',
   '/api/public',
   '/api/health',
+  '/api/tenant-assets',
 ] as const;
 
 const ADMIN_PROTECTED_PREFIXES = [
@@ -147,6 +148,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/tenant-assets).*)',
   ],
 };
