@@ -439,10 +439,14 @@ export function resolveBrandingConfig(
         : DEFAULT_LOGO,
     primaryColor,
     secondaryColor,
+    // Default the favicon to the logo so the browser tab icon tracks
+    // the tenant's logo automatically. Tenants can still upload a
+    // dedicated favicon via the branding panel — that value is used
+    // as-is when present and safe.
     faviconUrl:
       branding?.faviconUrl && isSafeAssetReference(branding.faviconUrl)
         ? branding.faviconUrl.trim()
-        : DEFAULT_FAVICON,
+        : getLogoReference(branding)?.trim() || DEFAULT_FAVICON,
     gradient: mergeGradients(primaryColor, secondaryColor, branding?.gradient),
     chartColors: branding?.chartColors && Array.isArray(branding.chartColors) ? branding.chartColors.map(c => normalizeHexColor(c, '#000000')) : DEFAULT_BRANDING.chartColors,
     themeMode: branding?.themeMode === "light" || branding?.themeMode === "dark" ? branding.themeMode : DEFAULT_BRANDING.themeMode,

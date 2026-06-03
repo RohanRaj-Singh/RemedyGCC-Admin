@@ -47,6 +47,7 @@ const MONGOSH_PATH =
   (process.platform === 'win32' ? 'C:\\mongosh\\bin\\mongosh.exe' : 'mongosh');
 
 const ASSET_KEYS = ['logo', 'logoUrl', 'backgroundImage', 'faviconUrl'] as const;
+const DEFAULT_FAVICON_VALUES = new Set(['/favicon.ico', '/default/favicon.ico']);
 
 async function runMongoScript<T>(scriptBody: string): Promise<T> {
   try {
@@ -133,6 +134,13 @@ function rewriteBranding(branding, slug) {
       next[key] = value.replace(legacyBase, newBase);
       changed = true;
     }
+  }
+  // If the stored faviconUrl is the bundled default, drop it so the
+  // runtime falls back to the tenant logo. Tenants who uploaded a
+  // dedicated favicon keep their override.
+  if (typeof next.faviconUrl === 'string' && DEFAULT_FAVICON_VALUES.has(next.faviconUrl.trim())) {
+    delete next.faviconUrl;
+    changed = true;
   }
   return { next, changed };
 }
