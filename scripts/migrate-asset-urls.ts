@@ -49,24 +49,34 @@ const MONGOSH_PATH =
 const ASSET_KEYS = ['logo', 'logoUrl', 'backgroundImage', 'faviconUrl'] as const;
 
 async function runMongoScript<T>(scriptBody: string): Promise<T> {
-  const { stdout } = await execFileAsync(
-    MONGOSH_PATH,
-    [MONGODB_URI, '--quiet', '--eval', scriptBody],
-    { windowsHide: true, maxBuffer: 32 * 1024 * 1024 },
-  );
+  try {
+    const { stdout } = await execFileAsync(
+      MONGOSH_PATH,
+      [MONGODB_URI, '--quiet', '--eval', scriptBody],
+      { windowsHide: true, maxBuffer: 32 * 1024 * 1024 },
+    );
 
-  const lastLine = stdout
-    .trim()
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .pop();
+    const lastLine = stdout
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .pop();
 
-  if (!lastLine) {
-    throw new Error('Empty response from MongoDB.');
+    if (!lastLine) {
+      throw new Error('Empty response from MongoDB.');
+    }
+
+    return JSON.parse(lastLine) as T;
+  } catch (error) {
+    // Re-throw without the embedded MongoDB URI (which would expose the
+    // password in the error message and any logs that capture it).
+    const message = error instanceof Error ? error.message : String(error);
+    const sanitized = message
+      .replace(MONGODB_URI, '<mongodb-uri>')
+      .replaceAll(MONGODB_URI.replace(/^mongodb:\/\/.*?@/, 'mongodb://'), '<mongodb-uri>');
+    throw new Error(sanitized);
   }
-
-  return JSON.parse(lastLine) as T;
 }
 
 interface TenantSummary {
@@ -81,7 +91,7 @@ function buildMigrationScript(): string {
   // roundtrip keeps the migration atomic-ish and avoids round-tripping
   // each document to Node.
   return `
-const tenants = db.tenants.find({}, { projection: { _id: 0, tenantId: 1, slug: 1, branding: 1 } }).toArray();
+const tenants = db.tenants.find({}, { projection: { tenantId: 1, slug: 1, branding: 1 } }).toArray();
 const assetKeys = ${JSON.stringify(ASSET_KEYS)};
 const summary = [];
 for (const tenant of tenants) {
