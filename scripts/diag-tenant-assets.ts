@@ -66,15 +66,19 @@ print('runtimeConfigs with legacy URL: ' + runtimeLegacy);
 `;
 }
 
-try {
-  const { stdout } = await execFileAsync(
-    MONGOSH_PATH,
-    [MONGODB_URI, '--quiet', '--eval', buildScript()],
-    { windowsHide: true, maxBuffer: 32 * 1024 * 1024 },
-  );
-  console.log(stdout);
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message.replace(MONGODB_URI, '<mongodb-uri>'));
-  process.exit(1);
+async function main(): Promise<void> {
+  try {
+    const { stdout } = await execFileAsync(
+      MONGOSH_PATH,
+      [MONGODB_URI, '--quiet', '--eval', buildScript()],
+      { windowsHide: true, maxBuffer: 32 * 1024 * 1024 },
+    );
+    console.log(stdout);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message.replace(MONGODB_URI, '<mongodb-uri>'));
+    process.exit(1);
+  }
 }
+
+void main();
