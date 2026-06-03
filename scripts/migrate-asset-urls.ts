@@ -88,11 +88,21 @@ interface RuntimeSummary {
   tenantSlug: string;
 }
 
+interface MigrationTrace {
+  runtimeConfigId: string;
+  tenantSlug: string;
+  brandingSnapshot: Record<string, unknown> | null;
+  changed: boolean;
+  updateResult: { matchedCount: number; modifiedCount: number } | null;
+  skippedReason?: string;
+}
+
 interface MigrationResult {
   tenantsUpdated: number;
   tenants: TenantSummary[];
   runtimeConfigsUpdated: number;
   runtimeConfigs: RuntimeSummary[];
+  trace: MigrationTrace[];
 }
 
 function buildMigrationScript(): string {
@@ -142,30 +152,49 @@ for (const tenant of tenants) {
 }
 
 const runtimeSummary = [];
+const trace = [];
 // Pull every runtime config along with its runtimeConfigId so each update
 // is targeted at a single document. Using the branding object itself as
 // part of the filter would skip rows when two configs share the same
 // branding object, which is common after repeated publishes.
-print('--- about to scan runtimeConfigs; assetKeys=' + JSON.stringify(assetKeys));
 const runtimeConfigs = db.runtimeConfigs.find({}, { projection: { runtimeConfigId: 1, tenantSlug: 1, branding: 1, updatedAt: 1 } }).toArray();
-print('--- found ' + runtimeConfigs.length + ' runtime config(s) ---');
-print('--- runtime config trace ---');
 for (const runtimeConfig of runtimeConfigs) {
-  print('inspecting ' + runtimeConfig.runtimeConfigId + ' slug=' + runtimeConfig.tenantSlug + ' branding=' + JSON.stringify(runtimeConfig.branding));
   const { next, changed } = rewriteBranding(runtimeConfig.branding, runtimeConfig.tenantSlug);
   if (!changed) {
-    print('  no change for ' + runtimeConfig.runtimeConfigId);
+    trace.push({
+      runtimeConfigId: runtimeConfig.runtimeConfigId || '<missing>',
+      tenantSlug: runtimeConfig.tenantSlug || '<missing>',
+      brandingSnapshot: runtimeConfig.branding,
+      changed: false,
+      updateResult: null,
+    });
     continue;
   }
   if (!runtimeConfig.runtimeConfigId) {
-    print('  missing runtimeConfigId, skipping');
+    trace.push({
+      runtimeConfigId: '<missing>',
+      tenantSlug: runtimeConfig.tenantSlug || '<missing>',
+      brandingSnapshot: runtimeConfig.branding,
+      changed: true,
+      updateResult: null,
+      skippedReason: 'missing runtimeConfigId',
+    });
     continue;
   }
   const updateResult = db.runtimeConfigs.updateOne(
     { runtimeConfigId: runtimeConfig.runtimeConfigId },
     { $set: { branding: next, updatedAt: new Date().toISOString() } }
   );
-  print('  updateOne result for ' + runtimeConfig.runtimeConfigId + ': ' + JSON.stringify(updateResult));
+  trace.push({
+    runtimeConfigId: runtimeConfig.runtimeConfigId,
+    tenantSlug: runtimeConfig.tenantSlug || '<missing>',
+    brandingSnapshot: runtimeConfig.branding,
+    changed: true,
+    updateResult: {
+      matchedCount: updateResult.matchedCount,
+      modifiedCount: updateResult.modifiedCount,
+    },
+  });
   runtimeSummary.push({
     tenantSlug: runtimeConfig.tenantSlug,
     runtimeConfigId: runtimeConfig.runtimeConfigId,
@@ -177,6 +206,7 @@ print(JSON.stringify({
   tenants: tenantSummary,
   runtimeConfigsUpdated: runtimeSummary.length,
   runtimeConfigs: runtimeSummary,
+  trace,
 }));
 `;
 }
@@ -200,7 +230,29 @@ async function main(): Promise<void> {
     if (result.runtimeConfigsUpdated > 0) {
       console.log(`\nUpdated ${result.runtimeConfigsUpdated} runtime config document(s):`);
       for (const runtime of result.runtimeConfigs) {
-        console.log(`  - ${runtime.tenantSlug}`);
+        console.log(`  - ${runtime.tenantSlug} (${runtime.runtimeConfigId})`);
+      }
+    }
+  }
+
+  // Always print the per-runtime-config trace so we can see why a
+  // document was skipped or updated, even when nothing changed. This is
+  // the single source of truth for "why did the migration not touch
+  // the runtime configs I'm looking at?".
+  if (result.trace && result.trace.length > 0) {
+    console.log('\n--- runtime config trace ---');
+    for (const entry of result.trace) {
+      const status = entry.updateResult
+        ? `updated (matched=${entry.updateResult.matchedCount}, modified=${entry.updateResult.modifiedCount})`
+        : entry.changed
+          ? `skipped: ${entry.skippedReason ?? 'unknown reason'}`
+          : 'no change (branding already correct)';
+      console.log(`  - ${entry.runtimeConfigId} [slug=${entry.tenantSlug}] -> ${status}`);
+      if (entry.brandingSnapshot) {
+        const brandingJson = JSON.stringify(entry.brandingSnapshot);
+        console.log(`      branding: ${brandingJson.length > 200 ? brandingJson.slice(0, 200) + '...' : brandingJson}`);
+      } else {
+        console.log('      branding: <null>');
       }
     }
   }
