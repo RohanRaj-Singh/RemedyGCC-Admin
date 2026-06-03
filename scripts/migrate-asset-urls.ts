@@ -143,9 +143,9 @@ for (const tenant of tenants) {
 
 const runtimeSummary = [];
 // Pull every runtime config along with its runtimeConfigId so each update
-// is targeted at a single document. Using `branding` as part of the
-// filter would skip rows when two configs share the same branding
-// object, which is common after repeated publishes.
+// is targeted at a single document. Using the branding object itself as
+// part of the filter would skip rows when two configs share the same
+// branding object, which is common after repeated publishes.
 const runtimeConfigs = db.runtimeConfigs.find({}, { projection: { runtimeConfigId: 1, tenantSlug: 1, branding: 1, updatedAt: 1 } }).toArray();
 for (const runtimeConfig of runtimeConfigs) {
   const { next, changed } = rewriteBranding(runtimeConfig.branding, runtimeConfig.tenantSlug);
