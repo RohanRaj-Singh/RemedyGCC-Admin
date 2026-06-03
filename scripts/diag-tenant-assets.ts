@@ -59,8 +59,23 @@ db.runtimeConfigs.find(runtimeFilter, { _id: 0, runtimeConfigId: 1, tenantSlug: 
 });
 
 print('\\n--- legacy /assets/tenants/ counts ---');
-const tenantLegacy = db.tenants.countDocuments(Object.assign({}, filter, { branding: { $regex: '/assets/tenants/' } }));
-const runtimeLegacy = db.runtimeConfigs.countDocuments(Object.assign({}, runtimeFilter, { branding: { $regex: '/assets/tenants/' } }));
+const legacyPattern = '/assets/tenants/';
+const tenantLegacy = db.tenants.countDocuments(Object.assign({}, filter, {
+  $or: [
+    { 'branding.logo': { $regex: legacyPattern } },
+    { 'branding.logoUrl': { $regex: legacyPattern } },
+    { 'branding.backgroundImage': { $regex: legacyPattern } },
+    { 'branding.faviconUrl': { $regex: legacyPattern } },
+  ],
+}));
+const runtimeLegacy = db.runtimeConfigs.countDocuments(Object.assign({}, runtimeFilter, {
+  $or: [
+    { 'branding.logo': { $regex: legacyPattern } },
+    { 'branding.logoUrl': { $regex: legacyPattern } },
+    { 'branding.backgroundImage': { $regex: legacyPattern } },
+    { 'branding.faviconUrl': { $regex: legacyPattern } },
+  ],
+}));
 print('tenants with legacy URL: ' + tenantLegacy);
 print('runtimeConfigs with legacy URL: ' + runtimeLegacy);
 `;
