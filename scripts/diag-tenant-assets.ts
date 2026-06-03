@@ -48,15 +48,42 @@ const filter = slugs.length > 0 ? { slug: { $in: slugs } } : {};
 const tenantFilter = slugs.length > 0 ? { slug: { $in: slugs } } : {};
 const runtimeFilter = slugs.length > 0 ? { tenantSlug: { $in: slugs } } : {};
 
-print('--- tenant records ---');
+print('--- database name ---');
+print(db.getName());
+print('--- collection names ---');
+db.getCollectionNames().forEach(n => print('  ' + n));
+
+print('\\n--- tenant records ---');
 db.tenants.find(tenantFilter, { _id: 0, tenantId: 1, slug: 1, branding: 1 }).forEach(t => {
   print(JSON.stringify(t, null, 2));
 });
 
-print('\\n--- runtimeConfigs ---');
+print('\\n--- runtimeConfigs (targeted) ---');
 db.runtimeConfigs.find(runtimeFilter, { _id: 0, runtimeConfigId: 1, tenantSlug: 1, isActive: 1, branding: 1, updatedAt: 1 }).forEach(rc => {
   print(JSON.stringify(rc, null, 2));
 });
+
+print('\\n--- ALL runtimeConfigs (no projection) ---');
+const all = db.runtimeConfigs.find({}).toArray();
+print('total: ' + all.length);
+for (let i = 0; i < all.length; i++) {
+  const d = all[i];
+  print('  doc ' + i + ' field names: ' + JSON.stringify(Object.keys(d)));
+  for (const key of Object.keys(d)) {
+    const v = d[key];
+    if (v === null || v === undefined) {
+      print('    ' + key + ': <null>');
+    } else if (typeof v === 'string') {
+      const s = v.length > 120 ? v.slice(0, 120) + '...' : v;
+      print('    ' + key + ': ' + JSON.stringify(s));
+    } else if (typeof v === 'object') {
+      const json = JSON.stringify(v);
+      print('    ' + key + ': ' + (json.length > 200 ? json.slice(0, 200) + '...' : json));
+    } else {
+      print('    ' + key + ': ' + v);
+    }
+  }
+}
 
 print('\\n--- legacy /assets/tenants/ counts ---');
 const legacyPattern = '/assets/tenants/';
