@@ -82,7 +82,17 @@ async function runMongoScript<T>(scriptBody: string): Promise<T> {
 interface TenantSummary {
   tenantId: string;
   slug: string;
-  branding: Record<string, unknown> | null;
+}
+
+interface RuntimeSummary {
+  tenantSlug: string;
+}
+
+interface MigrationResult {
+  tenantsUpdated: number;
+  tenants: TenantSummary[];
+  runtimeConfigsUpdated: number;
+  runtimeConfigs: RuntimeSummary[];
 }
 
 function buildMigrationScript(): string {
@@ -90,18 +100,23 @@ function buildMigrationScript(): string {
   // object, and writes the changes back. Doing this in a single mongosh
   // roundtrip keeps the migration atomic-ish and avoids round-tripping
   // each document to Node.
+  //
+  // We also rewrite the matching `runtimeConfigs` documents. The
+  // tenantapp serves the runtime config to end users, so any branding
+  // URLs that point at the legacy static path need to be migrated
+  // there too — otherwise the tenantapp browser still requests the
+  // 404-bound path.
   return `
-const tenants = db.tenants.find({}, { projection: { tenantId: 1, slug: 1, branding: 1 } }).toArray();
 const assetKeys = ${JSON.stringify(ASSET_KEYS)};
-const summary = [];
-for (const tenant of tenants) {
-  if (!tenant.slug || !tenant.branding) {
-    continue;
+
+function rewriteBranding(branding, slug) {
+  if (!branding || !slug) {
+    return { next: branding, changed: false };
   }
-  const next = Object.assign({}, tenant.branding);
+  const next = Object.assign({}, branding);
   let changed = false;
-  const legacyBase = '/assets/tenants/' + tenant.slug + '/';
-  const newBase = '/api/tenant-assets/' + tenant.slug + '/';
+  const legacyBase = '/assets/tenants/' + slug + '/';
+  const newBase = '/api/tenant-assets/' + slug + '/';
   for (const key of assetKeys) {
     const value = next[key];
     if (typeof value === 'string' && value.startsWith(legacyBase)) {
@@ -109,15 +124,43 @@ for (const tenant of tenants) {
       changed = true;
     }
   }
-  if (changed) {
-    db.tenants.updateOne(
-      { tenantId: tenant.tenantId },
-      { $set: { branding: next, updatedAt: new Date().toISOString() } }
-    );
-    summary.push({ tenantId: tenant.tenantId, slug: tenant.slug });
-  }
+  return { next, changed };
 }
-print(JSON.stringify({ updated: summary.length, tenants: summary }));
+
+const tenantSummary = [];
+const tenants = db.tenants.find({}, { projection: { tenantId: 1, slug: 1, branding: 1 } }).toArray();
+for (const tenant of tenants) {
+  const { next, changed } = rewriteBranding(tenant.branding, tenant.slug);
+  if (!changed) {
+    continue;
+  }
+  db.tenants.updateOne(
+    { tenantId: tenant.tenantId },
+    { $set: { branding: next, updatedAt: new Date().toISOString() } }
+  );
+  tenantSummary.push({ tenantId: tenant.tenantId, slug: tenant.slug });
+}
+
+const runtimeSummary = [];
+const runtimeConfigs = db.runtimeConfigs.find({}, { projection: { tenantSlug: 1, branding: 1, updatedAt: 1 } }).toArray();
+for (const runtimeConfig of runtimeConfigs) {
+  const { next, changed } = rewriteBranding(runtimeConfig.branding, runtimeConfig.tenantSlug);
+  if (!changed) {
+    continue;
+  }
+  db.runtimeConfigs.updateOne(
+    { tenantSlug: runtimeConfig.tenantSlug, branding: runtimeConfig.branding },
+    { $set: { branding: next, updatedAt: new Date().toISOString() } }
+  );
+  runtimeSummary.push({ tenantSlug: runtimeConfig.tenantSlug });
+}
+
+print(JSON.stringify({
+  tenantsUpdated: tenantSummary.length,
+  tenants: tenantSummary,
+  runtimeConfigsUpdated: runtimeSummary.length,
+  runtimeConfigs: runtimeSummary,
+}));
 `;
 }
 
@@ -126,17 +169,22 @@ async function main(): Promise<void> {
   console.log(`MONGODB_URI: ${MONGODB_URI.replace(/\/\/.*@/, '//***@')}`);
   console.log(`MONGOSH_PATH: ${MONGOSH_PATH}\n`);
 
-  const result = await runMongoScript<{
-    updated: number;
-    tenants: Array<{ tenantId: string; slug: string }>;
-  }>(buildMigrationScript());
+  const result = await runMongoScript<MigrationResult>(buildMigrationScript());
 
-  if (result.updated === 0) {
-    console.log('No tenants needed updating. (Either no legacy URLs were found, or no tenants exist.)');
+  if (result.tenantsUpdated === 0 && result.runtimeConfigsUpdated === 0) {
+    console.log('No documents needed updating. (Either no legacy URLs were found, or no tenants exist.)');
   } else {
-    console.log(`Updated ${result.updated} tenant(s):`);
-    for (const tenant of result.tenants) {
-      console.log(`  - ${tenant.slug} (${tenant.tenantId})`);
+    if (result.tenantsUpdated > 0) {
+      console.log(`Updated ${result.tenantsUpdated} tenant document(s):`);
+      for (const tenant of result.tenants) {
+        console.log(`  - ${tenant.slug} (${tenant.tenantId})`);
+      }
+    }
+    if (result.runtimeConfigsUpdated > 0) {
+      console.log(`\nUpdated ${result.runtimeConfigsUpdated} runtime config document(s):`);
+      for (const runtime of result.runtimeConfigs) {
+        console.log(`  - ${runtime.tenantSlug}`);
+      }
     }
   }
 
