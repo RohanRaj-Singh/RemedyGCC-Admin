@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import type { Tenant, TenantStatus } from '@/modules/tenant/types';
-import { TenantList } from '@/modules/tenant/components';
+import type { DeleteTenantConsequences, Tenant, TenantStatus } from '@/modules/tenant/types';
+import { DeleteTenantDialog, TenantList } from '@/modules/tenant/components';
 import { tenantService } from '@/services/tenant-service';
 import { Plus, Search, Filter, Loader2, Building2, Palette } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -28,6 +28,11 @@ export default function TenantsPage() {
   const [stats, setStats] = useState<TenantStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    tenantId: string;
+    tenantName: string;
+    consequences: DeleteTenantConsequences;
+  } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TenantStatus | 'all'>('all');
@@ -66,31 +71,45 @@ export default function TenantsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    const tenant = tenants.find((entry) => entry.id === id);
-    if (!tenant) {
-      return;
-    }
-
-    const confirmationText = window.prompt(
-      `Type "${tenant.slug}" to delete this draft tenant permanently.`,
-      '',
-    );
-
-    if (!confirmationText) {
-      return;
-    }
-
+  const handleDeleteClick = async (id: string) => {
+    // Phase 1 — preview: fetch consequences and show dialog
     try {
       setDeletingId(id);
-      const { error: deleteError } = await tenantService.delete(id, confirmationText);
+      const { data, error: loadError } = await tenantService.previewDelete(id);
+      if (loadError || !data) {
+        throw new Error(loadError || 'Failed to load tenant deletion preview.');
+      }
+
+      const tenant = tenants.find((entry) => entry.id === id);
+      setDeleteDialog({
+        tenantId: id,
+        tenantName: tenant?.name ?? data.slug,
+        consequences: data,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to prepare tenant deletion.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteConfirm = async (slug: string, acknowledgeDataLoss: boolean) => {
+    if (!deleteDialog) return;
+
+    try {
+      setDeletingId(deleteDialog.tenantId);
+      const { error: deleteError } = await tenantService.delete(deleteDialog.tenantId, {
+        slug,
+        acknowledgeDataLoss,
+      });
       if (deleteError) {
         throw new Error(deleteError);
       }
 
+      setDeleteDialog(null);
       await Promise.all([loadTenants(), loadStats()]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete tenant');
+      throw err; // Let the dialog surface the error
     } finally {
       setDeletingId(null);
     }
@@ -332,7 +351,7 @@ export default function TenantsPage() {
       >
         <TenantList
           tenants={filteredTenants}
-          onDelete={handleDelete}
+          onDelete={handleDeleteClick}
           isDeleting={deletingId}
         />
       </div>
@@ -367,6 +386,16 @@ export default function TenantsPage() {
             </Link>
           )}
         </div>
+      )}
+
+      {deleteDialog && (
+        <DeleteTenantDialog
+          isOpen
+          tenantName={deleteDialog.tenantName}
+          consequences={deleteDialog.consequences}
+          onClose={() => setDeleteDialog(null)}
+          onConfirm={handleDeleteConfirm}
+        />
       )}
     </div>
   );

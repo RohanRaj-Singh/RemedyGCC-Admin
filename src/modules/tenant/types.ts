@@ -153,3 +153,14 @@ export interface TenantPublishResult {
   runtimeConfig: RuntimeConfigOption;
   preview: TenantPublishingPreview;
 }
+
+export interface DeleteTenantConsequences {
+  tenantId: string;
+  slug: string;
+  name: string;
+  status: TenantStatus;
+  submissionCount: number;
+  runtimeConfigCount: number;
+  hasActiveSurvey: boolean;
+  hasBrandingAssets: boolean;
+}

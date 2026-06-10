@@ -67,12 +67,7 @@ export function TenantList({ tenants, onDelete, isDeleting }: TenantListProps) {
             const resolvedBranding = resolveBrandingConfig(tenant.branding);
             const status = STATUS_STYLES[tenant.status];
             const statusMeta = getTenantStatusMeta(tenant.status);
-            const canDelete =
-              tenant.status === 'draft'
-              && !tenant.activeRuntimeConfigId
-              && tenant.runtimeConfigCount === 0
-              && tenant.submissionCount === 0
-              && Boolean(onDelete);
+            const canDelete = Boolean(onDelete);
 
             return (
               <tr
@@ -200,11 +195,7 @@ export function TenantList({ tenants, onDelete, isDeleting }: TenantListProps) {
                         onClick={() => onDelete(tenant.id)}
                         disabled={!canDelete || isDeleting === tenant.id}
                         className="rounded-lg p-2.5 transition-all duration-150 hover:scale-105 disabled:cursor-not-allowed"
-                        title={
-                          canDelete
-                            ? 'Delete draft tenant'
-                            : 'Only draft tenants without submissions or runtime history can be deleted'
-                        }
+                        title="Delete this tenant permanently"
                         style={{
                           color:
                             !canDelete || isDeleting === tenant.id

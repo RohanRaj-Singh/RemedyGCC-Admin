@@ -210,11 +210,46 @@ export default function TenantDetailsPage() {
 
   const handleDelete = useCallback(async () => {
     if (!tenant) return;
-    const confirmationText = window.prompt(`Type "${tenant.slug}" to delete this draft tenant.`);
-    if (!confirmationText) return;
+
+    // Phase 1 — preview consequences
+    const { data: consequences, error: previewError } = await tenantService.previewDelete(tenant.id);
+    if (previewError || !consequences) {
+      setError(previewError || 'Failed to prepare tenant deletion.');
+      return;
+    }
+
+    // Build the consequence summary for the user
+    const warnings: string[] = [];
+    if (consequences.hasActiveSurvey) {
+      warnings.push('Active live survey will be taken down');
+    }
+    if (consequences.submissionCount > 0) {
+      warnings.push(`${consequences.submissionCount} submission(s) will be permanently deleted`);
+    }
+    if (consequences.runtimeConfigCount > 0) {
+      warnings.push(`${consequences.runtimeConfigCount} published survey(s) will be deleted`);
+    }
+    if (consequences.hasBrandingAssets) {
+      warnings.push('Branding assets (logo, background) will be removed');
+    }
+
+    const warningMessage = warnings.length > 0
+      ? `\n\nWARNING — This will permanently delete:\n${warnings.map((w) => `  • ${w}`).join('\n')}\n\nTenant dashboard access users will also be removed.`
+      : '';
+
+    const slugInput = window.prompt(
+      `Type "${consequences.slug}" to delete this tenant permanently.${warningMessage}`,
+      '',
+    );
+    if (!slugInput || slugInput.trim() !== consequences.slug) return;
+
+    // Phase 2 — execute deletion with explicit acknowledgement
     try {
       setIsActing(true);
-      const { error: deleteError } = await tenantService.delete(tenant.id, confirmationText);
+      const { error: deleteError } = await tenantService.delete(tenant.id, {
+        slug: consequences.slug,
+        acknowledgeDataLoss: warnings.length > 0,
+      });
       if (deleteError) throw new Error(deleteError);
       router.push('/tenants');
     } catch (actionError) {

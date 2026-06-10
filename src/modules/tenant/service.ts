@@ -19,6 +19,10 @@ import type {
 } from '@/types/runtime-config';
 import {
   activateRuntimeConfigForTenant,
+  deleteAttributeTemplateVersionsForTenant,
+  deleteRawResponsesForTenant,
+  deleteRuntimeConfigsForTenant,
+  deleteScannerVersionsForTenant,
   deleteTenantDocument,
   ensureTenantModuleIndexes,
   getTenantDetailData,
@@ -61,10 +65,12 @@ import {
 import { deleteTenantAccessForTenant } from '@/modules/tenant-auth/services/auth-service';
 import {
   ensureTenantAssetDirectory,
+  getTenantAssetPaths,
   rebaseTenantBrandingAssetPaths,
   resolveTenantAssetPath,
   syncTenantAssetDirectory,
 } from '@/lib/uploads/tenant-assets';
+import { rm } from 'node:fs/promises';
 
 const CALCULATION_VERSION_ID = 'calc_demo_placeholder_v1';
 
@@ -1388,9 +1394,56 @@ export async function restoreTenant(
   });
 }
 
+export interface DeleteTenantConsequences {
+  tenantId: string;
+  slug: string;
+  name: string;
+  status: TenantStatus;
+  submissionCount: number;
+  runtimeConfigCount: number;
+  hasActiveSurvey: boolean;
+  hasBrandingAssets: boolean;
+}
+
+export async function previewDeleteTenant(
+  tenantId: string,
+): Promise<DeleteTenantConsequences> {
+  await ensureTenantModuleIndexes();
+  const detailData = await getTenantDetailData(tenantId);
+  if (!detailData.tenant) {
+    throw new Error('Tenant not found.');
+  }
+
+  const current = normalizeTenantDocument(detailData.tenant);
+  const submissionCount = detailData.tenantSubmissionCounts[current.tenantId] ?? 0;
+  const runtimeConfigCount = detailData.runtimeConfigs.length;
+
+  let hasBrandingAssets = false;
+  try {
+    const { tenantDirectoryPath } = getTenantAssetPaths(current.slug);
+    const stat = await import('node:fs/promises').then((fs) =>
+      fs.stat(tenantDirectoryPath).catch(() => null),
+    );
+    hasBrandingAssets = stat !== null;
+  } catch {
+    hasBrandingAssets = false;
+  }
+
+  return {
+    tenantId: current.tenantId,
+    slug: current.slug,
+    name: current.name,
+    status: current.status,
+    submissionCount,
+    runtimeConfigCount,
+    hasActiveSurvey: Boolean(current.activeRuntimeConfigId),
+    hasBrandingAssets,
+  };
+}
+
 export async function deleteTenant(
   tenantId: string,
-  confirmationText?: string | null,
+  confirmation?: { slug: string; acknowledgeDataLoss: boolean },
 ): Promise<void> {
   await ensureTenantModuleIndexes();
   const detailData = await getTenantDetailData(tenantId);
@@ -1402,17 +1455,37 @@ export async function deleteTenant(
   const submissionCount = detailData.tenantSubmissionCounts[current.tenantId] ?? 0;
   const runtimeConfigCount = detailData.runtimeConfigs.length;
 
-  if (current.status !== 'draft' || current.activeRuntimeConfigId || runtimeConfigCount > 0 || submissionCount > 0) {
-    throw new Error(
-      'Only draft tenants without submissions or published configuration history can be deleted.',
-    );
-  }
-
-  if ((confirmationText ?? '').trim() !== current.slug) {
+  // Require slug confirmation regardless
+  if (!confirmation || confirmation.slug.trim() !== current.slug) {
     throw new Error(`Type the tenant slug "${current.slug}" to confirm deletion.`);
   }
 
-  await deleteTenantAccessForTenant(tenantId);
+  // If there's data to lose, require explicit acknowledgement
+  const hasConsequences = submissionCount > 0 || runtimeConfigCount > 0 || Boolean(current.activeRuntimeConfigId);
+  if (hasConsequences && !confirmation.acknowledgeDataLoss) {
+    throw new Error(
+      'This tenant has submissions or published surveys. Acknowledge the data loss to proceed.',
+    );
+  }
+
+  // Clean up all associated collections in parallel
+  await Promise.all([
+    deleteRuntimeConfigsForTenant(tenantId),
+    deleteScannerVersionsForTenant(tenantId),
+    deleteAttributeTemplateVersionsForTenant(tenantId),
+    deleteRawResponsesForTenant(tenantId),
+    deleteTenantAccessForTenant(tenantId),
+  ]);
+
+  // Clean up asset files on disk
+  try {
+    const { tenantDirectoryPath } = getTenantAssetPaths(current.slug);
+    await rm(tenantDirectoryPath, { recursive: true, force: true });
+  } catch {
+    // Asset directory may not exist — that's fine
+  }
+
+  // Finally, delete the tenant document itself
   await deleteTenantDocument(tenantId);
 }
 

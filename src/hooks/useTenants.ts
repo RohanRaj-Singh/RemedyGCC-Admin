@@ -15,7 +15,7 @@ interface UseTenantsResult {
   refresh: () => Promise<void>;
   createTenant: (data: CreateTenantDto) => Promise<{ success: boolean; error?: string }>;
   updateTenant: (id: string, data: UpdateTenantDto) => Promise<{ success: boolean; error?: string }>;
-  deleteTenant: (id: string) => Promise<{ success: boolean; error?: string }>;
+  deleteTenant: (id: string, confirmation: { slug: string; acknowledgeDataLoss: boolean }) => Promise<{ success: boolean; error?: string }>;
 }
 
 export function useTenants(): UseTenantsResult {
@@ -61,8 +61,11 @@ export function useTenants(): UseTenantsResult {
     return { success: true };
   };
 
-  const deleteTenant = async (id: string): Promise<{ success: boolean; error?: string }> => {
-    const { error } = await tenantService.delete(id);
+  const deleteTenant = async (
+    id: string,
+    confirmation: { slug: string; acknowledgeDataLoss: boolean },
+  ): Promise<{ success: boolean; error?: string }> => {
+    const { error } = await tenantService.delete(id, confirmation);
     if (error) {
       return { success: false, error };
     }

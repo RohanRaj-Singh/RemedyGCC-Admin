@@ -54,6 +54,7 @@ export type {
 
 export type {
   CreateTenantDto,
+  DeleteTenantConsequences,
   RuntimeConfigOption,
   Tenant,
   TenantPublishingReadiness,

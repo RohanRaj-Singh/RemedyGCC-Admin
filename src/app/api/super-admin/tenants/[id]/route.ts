@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteTenant, getTenantById, updateTenant } from '@/modules/tenant/service';
+import { deleteTenant, getTenantById, previewDeleteTenant, updateTenant } from '@/modules/tenant/service';
 import { apiErrorResponse } from '../_utils';
 import { requireApiAuth } from '@/app/api/_utils/auth-guard';
 
@@ -48,8 +48,19 @@ export async function DELETE(
   if (!auth.success) return auth.response!;
 
   try {
-    const body = await request.json().catch(() => ({}));
-    await deleteTenant(context.params.id, body?.confirmationText);
+    const body = await request.json().catch(() => null);
+
+    // Phase 1 — preview: no confirmation body → return consequences directly
+    if (!body) {
+      const consequences = await previewDeleteTenant(context.params.id);
+      return NextResponse.json(consequences);
+    }
+
+    // Phase 2 — execute: requires slug + acknowledgeDataLoss
+    await deleteTenant(context.params.id, {
+      slug: body.slug,
+      acknowledgeDataLoss: Boolean(body.acknowledgeDataLoss),
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return apiErrorResponse(error, 400);

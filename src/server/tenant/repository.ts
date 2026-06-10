@@ -607,3 +607,47 @@ __emit(null);
     tenantId,
   });
 }
+
+export async function deleteRuntimeConfigsForTenant(
+  tenantId: string,
+): Promise<void> {
+  await runMongoScript<void>(`
+db.runtimeConfigs.deleteMany({ tenantId: __payload.tenantId });
+__emit(null);
+`, {
+    tenantId,
+  });
+}
+
+export async function deleteScannerVersionsForTenant(
+  tenantId: string,
+): Promise<void> {
+  await runMongoScript<void>(`
+db.scannerVersions.deleteMany({ tenantId: __payload.tenantId });
+__emit(null);
+`, {
+    tenantId,
+  });
+}
+
+export async function deleteAttributeTemplateVersionsForTenant(
+  tenantId: string,
+): Promise<void> {
+  await runMongoScript<void>(`
+db.attributeTemplateVersions.deleteMany({ tenantId: __payload.tenantId });
+__emit(null);
+`, {
+    tenantId,
+  });
+}
+
+export async function deleteRawResponsesForTenant(
+  tenantId: string,
+): Promise<void> {
+  await runMongoScript<void>(`
+db.rawResponses.deleteMany({ tenantId: __payload.tenantId });
+__emit(null);
+`, {
+    tenantId,
+  });
+}

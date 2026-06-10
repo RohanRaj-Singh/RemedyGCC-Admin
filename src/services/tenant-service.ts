@@ -5,6 +5,7 @@
 import type {
   BrandingConfig,
   DashboardStats,
+  DeleteTenantConsequences,
   RuntimeConfigOption,
   Tenant,
   TenantDashboardAccessCreateInput,
@@ -147,15 +148,31 @@ class TenantService {
     return this.update(id, { branding });
   }
 
+  /**
+   * Preview what will be lost when deleting this tenant.
+   * Does not perform the deletion.
+   */
+  async previewDelete(
+    id: string,
+  ): Promise<ApiResponse<DeleteTenantConsequences>> {
+    return request<DeleteTenantConsequences>(`${TENANT_API_BASE}/${id}`, {
+      method: 'DELETE',
+      body: null,
+    });
+  }
+
+  /**
+   * Permanently delete a tenant and all its associated data.
+   * Requires the tenant slug and an explicit data-loss acknowledgement.
+   * Call previewDelete() first to show the user what will be lost.
+   */
   async delete(
     id: string,
-    confirmationText?: string,
+    confirmation: { slug: string; acknowledgeDataLoss: boolean },
   ): Promise<ApiResponse<void>> {
     return request<void>(`${TENANT_API_BASE}/${id}`, {
       method: 'DELETE',
-      body: JSON.stringify({
-        confirmationText,
-      }),
+      body: JSON.stringify(confirmation),
     });
   }
 

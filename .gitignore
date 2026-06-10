@@ -43,5 +43,5 @@ coverage/
 *.log
 
 
-#graphify
-.graphify/
+# Graphify output
+graphify-out/
