@@ -22,7 +22,7 @@ function TenantLoginPageContent() {
   const [error, setError] = useState<string | null>(null);
 
   const nextPath = useMemo(
-    () => getSafeNextPath(searchParams.get('next')),
+    () => getSafeNextPath(searchParams?.get('next') ?? null),
     [searchParams],
   );
 

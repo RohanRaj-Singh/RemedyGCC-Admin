@@ -123,7 +123,7 @@ function getNextAction(tenant: Tenant | null): { message: string; action?: strin
 export default function TenantDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const tenantId = params.id as string;
+  const tenantId = params?.id as string;
 
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [isLoading, setIsLoading] = useState(true);

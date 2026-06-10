@@ -58,7 +58,7 @@ const STATUS_CONFIG = {
 export default function EditTenantPage() {
   const router = useRouter();
   const params = useParams();
-  const tenantId = params.id as string;
+  const tenantId = params?.id as string;
 
   const [tenant, setTenant] = useState<TenantData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -438,13 +438,13 @@ export default function EditTenantPage() {
                     type="text"
                     value={subdomain}
                     onChange={(e) => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                    disabled={isLive || isArchived}
+                    disabled={isArchived}
                     className="flex-1 px-4 py-3 rounded-xl border text-lg disabled:opacity-50"
                     style={{ borderColor: 'var(--border)' }}
                   />
                   <span className="text-muted-foreground text-sm">{getTenantHostnameSuffix()}</span>
                 </div>
-                {isLive && <p className="text-xs text-muted-foreground mt-2">Subdomain is locked while survey is live.</p>}
+                {isLive && <p className="text-xs text-amber-600 mt-2">Disable the survey first to change the address.</p>}
               </div>
             </div>
           </div>

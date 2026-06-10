@@ -104,18 +104,24 @@ export function getTenantHostname(subdomain: string): string {
   return `${subdomain}.${getTenantRootDomain()}`;
 }
 
+/**
+ * Check whether a tenant's slug and subdomain are locked.
+ *
+ * - `active` tenants have live survey URLs — changing the address would
+ *   break access for respondents currently taking the survey.
+ * - `archived` tenants are immutable record-keeping snapshots.
+ *
+ * `draft` and `disabled` tenants can always update their slug/subdomain
+ * regardless of past publishes or submissions.
+ */
 export function isTenantIdentityLocked(
-  tenant: Pick<Tenant, 'status' | 'activeRuntimeConfigId' | 'submissionCount'> | null | undefined,
+  tenant: Pick<Tenant, 'status'> | null | undefined,
 ): boolean {
   if (!tenant) {
     return false;
   }
 
-  return (
-    tenant.status !== 'draft'
-    || Boolean(tenant.activeRuntimeConfigId)
-    || tenant.submissionCount > 0
-  );
+  return tenant.status === 'active' || tenant.status === 'archived';
 }
 
 export function getTenantStatusMeta(status: TenantStatus): {

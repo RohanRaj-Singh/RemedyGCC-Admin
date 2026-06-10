@@ -17,7 +17,7 @@ export default function AttributeTemplatesLayout({
 
   // Determine active tab based on current path
   const getActiveTab = () => {
-    if (pathname.startsWith('/attribute-templates')) return 'attribute-templates';
+    if (pathname?.startsWith('/attribute-templates')) return 'attribute-templates';
     return 'attribute-templates';
   };
 

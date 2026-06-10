@@ -24,7 +24,7 @@ function isTenantSurface(pathname: string): boolean {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
 
-  if (isTenantSurface(pathname)) {
+  if (isTenantSurface(pathname ?? '')) {
     return <div className="min-h-screen">{children}</div>;
   }
 

@@ -230,7 +230,7 @@ export const TenantForm = memo(function TenantForm({
               value={slug}
               onChange={(event) => handleSlugChange(event.target.value)}
               required
-              disabled={identityLocked || tenantLocked}
+              disabled={tenantLocked}
               className={cn(
                 inputStyle,
                 slugValidation.errors.length > 0 && 'border-[var(--destructive)]',
@@ -242,6 +242,11 @@ export const TenantForm = memo(function TenantForm({
                 {warning}
               </p>
             ))}
+            {currentStatus === 'active' && (
+              <p className="text-xs" style={{ color: '#b45309' }}>
+                Disable the survey first to change the address.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -254,7 +259,7 @@ export const TenantForm = memo(function TenantForm({
               value={subdomain}
               onChange={(event) => handleSubdomainChange(event.target.value)}
               required
-              disabled={identityLocked || tenantLocked}
+              disabled={tenantLocked}
               className={cn(
                 inputStyle,
                 subdomainValidation.errors.length > 0 && 'border-[var(--destructive)]',
@@ -264,9 +269,9 @@ export const TenantForm = memo(function TenantForm({
             <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
               Survey hostname: <code>{getTenantHostname(subdomainValidation.normalized || 'tenant')}</code>
             </p>
-            {identityLocked && (
-              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                Slug and survey address lock after this tenant goes live or collects submissions.
+            {currentStatus === 'active' && (
+              <p className="text-xs" style={{ color: '#b45309' }}>
+                Disable the survey first to change the address.
               </p>
             )}
             {subdomainValidation.warnings.map((warning) => (

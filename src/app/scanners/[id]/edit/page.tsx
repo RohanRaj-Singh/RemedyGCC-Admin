@@ -19,7 +19,7 @@ export default function EditScannerPage() {
 
   useEffect(() => {
     const loadScanner = async () => {
-      const id = params.id as string;
+      const id = (params?.id ?? '') as string;
       const data = await getScannerById(id);
       if (!data) {
         notFound();
@@ -29,7 +29,7 @@ export default function EditScannerPage() {
     };
 
     void loadScanner();
-  }, [params.id]);
+  }, [params?.id]);
 
   if (loading) {
     return (

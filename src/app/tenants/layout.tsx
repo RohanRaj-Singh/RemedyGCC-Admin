@@ -17,7 +17,7 @@ export default function TenantsLayout({
 
   // Determine active tab based on current path
   const getActiveTab = () => {
-    if (pathname.startsWith('/tenants')) return 'tenants';
+    if (pathname?.startsWith('/tenants')) return 'tenants';
     return 'tenants';
   };
 

@@ -17,7 +17,7 @@ export function TenantPortalNav() {
   return (
     <nav className="flex flex-wrap gap-2">
       {NAV_ITEMS.map((item) => {
-        const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const isActive = (pathname ?? '') === item.href || (pathname ?? '').startsWith(`${item.href}/`);
 
         return (
           <Link

@@ -473,8 +473,6 @@ function assertSafeIdentityChange(
   current: TenantDocument,
   nextSlug: string,
   nextSubdomain: string,
-  submissionCount: number,
-  runtimeConfigCount: number,
 ): void {
   const slugChanged = current.slug !== nextSlug;
   const subdomainChanged = (current.subdomain || current.slug) !== nextSubdomain;
@@ -483,16 +481,11 @@ function assertSafeIdentityChange(
     return;
   }
 
-  if (
-    isTenantIdentityLocked({
-      status: current.status,
-      activeRuntimeConfigId: current.activeRuntimeConfigId ?? null,
-      submissionCount,
-    })
-    || runtimeConfigCount > 0
-  ) {
+  if (isTenantIdentityLocked({ status: current.status })) {
     throw new Error(
-      'Slug and subdomain are locked after a tenant leaves draft, publishes a live survey, or receives submissions.',
+      current.status === 'archived'
+        ? 'Archived tenants are protected and cannot be modified.'
+        : 'Survey address (slug & subdomain) cannot be changed while the survey is live. Disable the survey first, then change the address.',
     );
   }
 }
@@ -1000,8 +993,6 @@ export async function updateTenant(
     current,
     nextSlug,
     nextSubdomain,
-    detailData.tenantSubmissionCounts[current.tenantId] ?? 0,
-    detailData.runtimeConfigs.length,
   );
 
   const mergedBranding = {
