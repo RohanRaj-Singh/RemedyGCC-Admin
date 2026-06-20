@@ -1,71 +1,38 @@
 'use client';
 
-import { LayoutDashboard, Building2, Scan, FileText, Settings, FileStack, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Building2, Heart, Scan, FileText, Settings, FileStack, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthProvider';
 
 interface SidebarProps {
   activeTab?: string;
   onTabChange?: (tab: string) => void;
 }
 
-interface AdminInfo {
-  id: string;
-  email: string;
-  role: string;
-}
-
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/' },
   { id: 'tenants', label: 'Tenants', icon: Building2, href: '/tenants' },
+  { id: 'clinics', label: 'Clinics', icon: Heart, href: '/clinics' },
   { id: 'scanners', label: 'Scanners', icon: Scan, href: '/scanners' },
   { id: 'logs', label: 'System Logs', icon: FileText, href: '/logs' },
   { id: 'attribute-templates', label: 'Attribute Templates', icon: FileStack, href: '/attribute-templates' },
   { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
 ];
 
-export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+export function Sidebar({ activeTab: forcedActiveTab, onTabChange }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const [admin, setAdmin] = useState<AdminInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
+  const pathname = usePathname();
+  const { admin, isLoading, logout } = useAuth();
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    try {
-      const response = await fetch('/api/auth/me', {
-        method: 'GET',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAdmin(data.admin);
-      } else {
-        router.push('/login');
-      }
-    } catch {
-      router.push('/login');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
-    } finally {
-      router.push('/login');
-    }
-  };
+  // Derive active tab from pathname if not forced
+  const activeTab = forcedActiveTab ?? menuItems.find((item) =>
+    item.href === '/'
+      ? pathname === '/'
+      : pathname?.startsWith(item.href),
+  )?.id;
 
   if (isLoading) {
     return (
@@ -77,10 +44,14 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           backgroundColor: 'var(--primary)',
         }}
       >
-        <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        <Loader2 className="h-8 w-8 animate-spin text-white/60" />
       </aside>
     );
   }
+
+  const handleLogout = async () => {
+    await logout();
+  };
 
   return (
     <aside

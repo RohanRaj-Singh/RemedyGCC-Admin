@@ -36,6 +36,7 @@ const ADMIN_PROTECTED_PREFIXES = [
   '/scanners',
   '/attribute-templates',
   '/tenants',
+  '/clinics',
   '/settings',
   '/logs',
   '/api/super-admin',

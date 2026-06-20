@@ -1,16 +1,12 @@
-/**
- * Scanners Layout
- * Wraps scanner pages with sidebar navigation
- */
-
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Building2,
+  Heart,
   Scan,
   FileText,
   Settings,
@@ -20,21 +16,17 @@ import {
   Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthProvider';
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/' },
   { id: 'tenants', label: 'Tenants', icon: Building2, href: '/tenants' },
+  { id: 'clinics', label: 'Clinics', icon: Heart, href: '/clinics' },
   { id: 'scanners', label: 'Scanners', icon: Scan, href: '/scanners' },
   { id: 'logs', label: 'System Logs', icon: FileText, href: '/logs' },
   { id: 'attribute-templates', label: 'Attribute Templates', icon: FileStack, href: '/attribute-templates' },
   { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
 ];
-
-interface AdminInfo {
-  id: string;
-  email: string;
-  role: string;
-}
 
 export default function ScannersLayout({
   children,
@@ -43,45 +35,7 @@ export default function ScannersLayout({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
-  const router = useRouter();
-  const [admin, setAdmin] = useState<AdminInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    try {
-      const response = await fetch('/api/auth/me', {
-        method: 'GET',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAdmin(data.admin);
-      } else {
-        // Not authenticated - redirect to login
-        router.push('/login');
-      }
-    } catch {
-      router.push('/login');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
-    } finally {
-      router.push('/login');
-    }
-  };
+  const { admin, isLoading, logout } = useAuth();
 
   if (isLoading) {
     return (
@@ -90,6 +44,10 @@ export default function ScannersLayout({
       </div>
     );
   }
+
+  const handleLogout = async () => {
+    await logout();
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">

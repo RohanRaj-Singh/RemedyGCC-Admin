@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"src/modules/tenant-auth/tests/**/*.test.ts\"",
     "seed:admin": "cross-env NEXT_RUNTIME=nodejs tsx scripts/seed-admin.ts",
+    "seed:clinics": "cross-env NEXT_RUNTIME=nodejs tsx scripts/seed-clinics.ts",
     "migrate:branding": "tsx scripts/migrate-branding.ts",
     "migrate:branding:up": "tsx scripts/migrate-branding.ts up",
     "migrate:branding:down": "tsx scripts/migrate-branding.ts down",
