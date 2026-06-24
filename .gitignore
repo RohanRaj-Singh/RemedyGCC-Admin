@@ -45,3 +45,9 @@ coverage/
 
 # Graphify output
 graphify-out/
+
+# Uploads
+public/uploads/
+
+# Claude Code
+.claude/
