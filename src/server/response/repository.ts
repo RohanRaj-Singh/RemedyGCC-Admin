@@ -38,6 +38,7 @@ export interface RawResponseDocument {
     totalQuestions: number;
     answeredQuestions: number;
   };
+  /** May be a structured object or flat combined string depending on data age */
   attributes: Record<string, string>;
   responses: RawResponseRow[];
 }
@@ -96,30 +97,88 @@ __emit(__strip(ids));
 }
 
 /**
- * Fetch a published scanner version from the runtime scannerVersions collection.
+ * Fetch a runtime config snapshot from the runtimeConfigs collection.
  *
- * rawResponses.scannerVersionId references this collection — NOT the admin-side
- * adminScannerVersions. The runtime version stores the frozen category →
- * subdomain → question → answer tree that was shown to respondents.
+ * rawResponses.runtimeConfigId references this collection.
+ * The document embeds the full scannerVersion tree, including question
+ * text and answer option labels.
  */
-export async function getRuntimeScannerVersionById(
-  versionId: string,
+export async function getRuntimeConfigById(
+  runtimeConfigId: string,
 ): Promise<Record<string, unknown> | null> {
   return runMongoScript<Record<string, unknown> | null>(
     `
-const version = db.scannerVersions.findOne(
-  { id: __payload.versionId },
+const config = db.runtimeConfigs.findOne(
+  { runtimeConfigId: __payload.runtimeConfigId },
   { projection: { _id: 0 } }
 );
 
-if (!version) {
+if (!config) {
   __emit(null);
   return;
 }
 
-__emit(__strip(version));
+__emit(__strip(config));
 `,
-    { versionId },
-    { label: 'get-runtime-scanner-version' },
+    { runtimeConfigId },
+    { label: 'get-runtime-config' },
+  );
+}
+
+/**
+ * Fetch the first completed response's full document (unstructured)
+ * to inspect the attribute shape. Useful for debugging attribute format.
+ */
+export async function peekFirstResponseAttributes(
+  tenantId: string,
+): Promise<Record<string, unknown> | null> {
+  return runMongoScript<Record<string, unknown> | null>(
+    `
+const doc = db.rawResponses.findOne(
+  { tenantId: __payload.tenantId, "completionState.status": "completed" },
+  { projection: { _id: 0 } }
+);
+
+if (!doc) {
+  __emit(null);
+  return;
+}
+
+// Emit only the attributes and submissionId to keep it small
+__emit(__strip({
+  submissionId: doc.submissionId,
+  attributes: typeof doc.attributes === 'object' && doc.attributes !== null
+    ? doc.attributes
+    : { _raw: String(doc.attributes) },
+  attributeKeys: typeof doc.attributes === 'object' && doc.attributes !== null
+    ? Object.keys(doc.attributes)
+    : [],
+  attributeValues: typeof doc.attributes === 'object' && doc.attributes !== null
+    ? Object.values(doc.attributes)
+    : [String(doc.attributes)],
+}));
+`,
+    { tenantId },
+    { label: 'peek-response-attributes' },
+  );
+}
+
+/**
+ * Fetch distinct runtimeConfigId values with completed responses for a tenant.
+ */
+export async function getDistinctRuntimeConfigIdsForTenant(
+  tenantId: string,
+): Promise<string[]> {
+  return runMongoScript<string[]>(
+    `
+const ids = db.rawResponses.distinct("runtimeConfigId", {
+  tenantId: __payload.tenantId,
+  "completionState.status": "completed"
+});
+
+__emit(__strip(ids));
+`,
+    { tenantId },
+    { label: 'get-distinct-runtime-configs' },
   );
 }

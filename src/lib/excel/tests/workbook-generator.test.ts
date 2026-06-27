@@ -22,7 +22,7 @@ describe('Workbook Generator', () => {
       const columns: ColumnDefinition[] = [{ key: 'id', header: 'ID' }];
       const rows: ExportRow[] = [{ id: '001' }];
 
-      const result = createWorkbook('Test', columns, rows);
+      const result = createWorkbook({ name: 'Test', columns, rows });
 
       assert.ok(result instanceof Buffer);
       assert.ok(result.byteLength > 0);
@@ -32,7 +32,7 @@ describe('Workbook Generator', () => {
       const columns: ColumnDefinition[] = [{ key: 'a', header: 'A' }];
       const rows: ExportRow[] = [{ a: '1' }];
 
-      const result = createWorkbook('Responses', columns, rows);
+      const result = createWorkbook({ name: 'Responses', columns, rows });
       const wb = readWorkbook(result);
 
       assert.strictEqual(wb.SheetNames.length, 1);
@@ -47,7 +47,7 @@ describe('Workbook Generator', () => {
       ];
       const rows: ExportRow[] = [];
 
-      const result = createWorkbook('Test', columns, rows);
+      const result = createWorkbook({ name: 'Test', columns, rows });
       const wb = readWorkbook(result);
       const ws = wb.Sheets['Test'];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
@@ -70,12 +70,11 @@ describe('Workbook Generator', () => {
         { name: 'Charlie', score: 92 },
       ];
 
-      const result = createWorkbook('Test', columns, rows);
+      const result = createWorkbook({ name: 'Test', columns, rows });
       const wb = readWorkbook(result);
       const ws = wb.Sheets['Test'];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-      // Skip header row
       assert.strictEqual(data[1][0], 'Alice');
       assert.strictEqual(data[1][1], 95);
       assert.strictEqual(data[2][0], 'Bob');
@@ -91,7 +90,7 @@ describe('Workbook Generator', () => {
       ];
       const rows: ExportRow[] = [{ a: 'x', b: null }];
 
-      const result = createWorkbook('Test', columns, rows);
+      const result = createWorkbook({ name: 'Test', columns, rows });
       const wb = readWorkbook(result);
       const ws = wb.Sheets['Test'];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '__EMPTY__' });
@@ -101,35 +100,27 @@ describe('Workbook Generator', () => {
     });
 
     it('handles empty rows array', () => {
-      const columns: ColumnDefinition[] = [
-        { key: 'h', header: 'Header Only' },
-      ];
+      const columns: ColumnDefinition[] = [{ key: 'h', header: 'Header Only' }];
       const rows: ExportRow[] = [];
 
-      const result = createWorkbook('Test', columns, rows);
+      const result = createWorkbook({ name: 'Test', columns, rows });
       const wb = readWorkbook(result);
       const ws = wb.Sheets['Test'];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-      assert.strictEqual(data.length, 1); // Only header row
+      assert.strictEqual(data.length, 1);
       assert.strictEqual(data[0][0], 'Header Only');
     });
 
     it('applies bold formatting to header row', () => {
-      const columns: ColumnDefinition[] = [
-        { key: 'x', header: 'Bold Header' },
-      ];
+      const columns: ColumnDefinition[] = [{ key: 'x', header: 'Bold Header' }];
       const rows: ExportRow[] = [{ x: 'data' }];
 
-      const result = createWorkbook('Test', columns, rows);
+      const result = createWorkbook({ name: 'Test', columns, rows });
 
-      // SheetJS CE consumes cell styles on write and doesn't reconstruct
-      // them on read. Verify the cell exists and the xlsx is valid; the
-      // bold styling IS in the output XML, verified by the xlsx spec.
       assert.ok(result instanceof Buffer);
       assert.ok(result.byteLength > 0);
 
-      // Verify the cell value is correct
       const wb = readWorkbook(result);
       const ws = wb.Sheets['Test'];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
@@ -138,9 +129,6 @@ describe('Workbook Generator', () => {
     });
 
     it('produces a valid xlsx that opens in standard readers', () => {
-      // Rather than testing internal SheetJS properties that don't survive
-      // a write+read cycle (like !freeze, !cols), we verify the output
-      // is a valid xlsx that can be opened by any xlsx reader.
       const columns: ColumnDefinition[] = [
         { key: 'id', header: 'ID' },
         { key: 'name', header: 'Name' },
@@ -151,16 +139,14 @@ describe('Workbook Generator', () => {
         { id: '2', name: 'Bob', score: 87 },
       ];
 
-      const result = createWorkbook('Data', columns, rows);
+      const result = createWorkbook({ name: 'Data', columns, rows });
 
-      // The buffer should contain the xlsx ZIP magic bytes
       assert.ok(result.byteLength > 0);
-      assert.strictEqual(result.readUInt32LE(0), 0x04034B50); // ZIP local file header
+      assert.strictEqual(result.readUInt32LE(0), 0x04034B50);
 
-      // Read back and verify data integrity
       const wb = readWorkbook(result);
       const ws = wb.Sheets['Data'];
-      assert.ok(ws, 'Worksheet should be readable');
+      assert.ok(ws);
       const data = XLSX.utils.sheet_to_json(ws);
       assert.strictEqual(data.length, 2);
       assert.strictEqual(data[0].ID, '1');
@@ -174,27 +160,68 @@ describe('Workbook Generator', () => {
         { key: 'number', header: 'Number' },
         { key: 'empty', header: 'Empty' },
       ];
-      const rows: ExportRow[] = [
-        { text: 'hello', number: 42, empty: undefined },
-      ];
+      const rows: ExportRow[] = [{ text: 'hello', number: 42, empty: undefined }];
 
-      const result = createWorkbook('Test', columns, rows);
+      const result = createWorkbook({ name: 'Test', columns, rows });
       const wb = readWorkbook(result);
       const ws = wb.Sheets['Test'];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '__MISS__' });
 
       assert.strictEqual(data[1][0], 'hello');
       assert.strictEqual(data[1][1], 42);
-      assert.strictEqual(data[1][2], '__MISS__'); // null/undefined → empty
+      assert.strictEqual(data[1][2], '__MISS__');
+    });
+
+    it('supports multiple worksheets', () => {
+      const result = createWorkbook(
+        {
+          name: 'Sheet1',
+          columns: [{ key: 'a', header: 'A' }],
+          rows: [{ a: 'data1' }],
+        },
+        {
+          name: 'Sheet2',
+          columns: [{ key: 'b', header: 'B' }],
+          rows: [{ b: 'data2' }],
+        },
+      );
+
+      const wb = readWorkbook(result);
+      assert.strictEqual(wb.SheetNames.length, 2);
+      assert.strictEqual(wb.SheetNames[0], 'Sheet1');
+      assert.strictEqual(wb.SheetNames[1], 'Sheet2');
+
+      const s1 = XLSX.utils.sheet_to_json(wb.Sheets['Sheet1'], { header: 1 });
+      const s2 = XLSX.utils.sheet_to_json(wb.Sheets['Sheet2'], { header: 1 });
+      assert.strictEqual(s1[1][0], 'data1');
+      assert.strictEqual(s2[1][0], 'data2');
+    });
+
+    it('applies header background colour when option is set', () => {
+      const result = createWorkbook({
+        name: 'Test',
+        columns: [{ key: 'x', header: 'Header' }],
+        rows: [{ x: 'val' }],
+        options: { themed: true },
+      });
+
+      assert.ok(result instanceof Buffer);
+      assert.ok(result.byteLength > 0);
+
+      const wb = readWorkbook(result);
+      const ws = wb.Sheets['Test'];
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      assert.strictEqual(data[0][0], 'Header');
+      assert.strictEqual(data[1][0], 'val');
     });
 
     it('handles a realistic survey-like structure', () => {
       const columns: ColumnDefinition[] = [
         { key: 'submissionId', header: 'Submission ID' },
         { key: 'submittedAt', header: 'Submitted At' },
-        { key: 'q_001', header: 'Overall satisfaction' },
-        { key: 'q_002', header: 'Would recommend' },
-        { key: 'q_003', header: 'Communication quality' },
+        { key: 'q_001', header: 'Clinical Risk Index / Overall satisfaction' },
+        { key: 'q_002', header: 'Psychological Safety / Would recommend' },
+        { key: 'q_003', header: 'Leadership / Communication quality' },
       ];
       const rows: ExportRow[] = [
         {
@@ -209,21 +236,21 @@ describe('Workbook Generator', () => {
           submittedAt: 'Jun 15, 2026, 2:15 PM',
           q_001: 'Very Satisfied',
           q_002: 'Strongly Agree',
-          q_003: null, // unanswered
+          q_003: null,
         },
       ];
 
-      const result = createWorkbook('Test', columns, rows);
+      const result = createWorkbook({ name: 'Responses', columns, rows, options: { themed: true } });
       const wb = readWorkbook(result);
-      const ws = wb.Sheets['Test'];
+      const ws = wb.Sheets['Responses'];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '__EMPTY__' });
 
-      assert.strictEqual(data.length, 3); // header + 2 rows
+      assert.strictEqual(data.length, 3);
       assert.strictEqual(data[1][0], 'sub_001');
       assert.strictEqual(data[1][2], 'Satisfied');
       assert.strictEqual(data[2][0], 'sub_002');
       assert.strictEqual(data[2][3], 'Strongly Agree');
-      assert.strictEqual(data[2][4], '__EMPTY__'); // unanswered = blank
+      assert.strictEqual(data[2][4], '__EMPTY__');
     });
   });
 });
