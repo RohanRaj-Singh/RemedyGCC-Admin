@@ -11,11 +11,13 @@
 
 import 'server-only';
 
-import type { ScannerVersion } from '@/modules/scanner/types';
 import { getTenantById } from '@/modules/tenant/service';
-import { getCompletedResponsesForTenant } from '@/server/response/repository';
+import {
+  getCompletedResponsesForTenant,
+  getRuntimeScannerVersionById,
+} from '@/server/response/repository';
 import type { RawResponseDocument } from '@/server/response/repository';
-import { getScannerVersionById } from '@/server/scanner/repository';
+import type { RuntimeScannerVersion } from '@/types/runtime-config';
 import { createWorkbook } from '@/lib/excel/workbook-generator';
 import type { ColumnDefinition, ExportRow } from '@/lib/excel/workbook-generator';
 
@@ -24,16 +26,6 @@ import type { ColumnDefinition, ExportRow } from '@/lib/excel/workbook-generator
 // ---------------------------------------------------------------------------
 
 const ATTRIBUTE_KEYS = ['stream', 'location', 'function', 'department', 'gender', 'age', 'seniority'] as const;
-
-const ATTRIBUTE_LABELS: Record<string, string> = {
-  stream: 'Stream',
-  location: 'Location',
-  function: 'Function',
-  department: 'Department',
-  gender: 'Gender',
-  age: 'Age',
-  seniority: 'Seniority',
-};
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -75,13 +67,14 @@ export async function generateResponseExport(tenantId: string): Promise<ExportRe
 
   // ---- Step 3: Resolve scanner version ----------------------------------
   const scannerVersionId = resolveScannerVersionId(responses);
-  const scannerVersion = await getScannerVersionById(scannerVersionId);
-  if (!scannerVersion) {
+  const rawVersion = await getRuntimeScannerVersionById(scannerVersionId);
+  if (!rawVersion) {
     throw new Error(
       'The scanner version associated with these responses could not be found. ' +
       'The published scanner may have been removed.',
     );
   }
+  const scannerVersion = rawVersion as unknown as RuntimeScannerVersion;
 
   // ---- Step 4: Build structures -----------------------------------------
   const answerLabels = buildAnswerLabelMap(scannerVersion);
@@ -135,18 +128,20 @@ function resolveScannerVersionId(responses: RawResponseDocument[]): string {
 }
 
 /**
- * Build a flattened map of optionId → English answer label.
+ * Build a flattened map of answerId → human-readable answer label.
  *
  * Example: { "opt_01": "Strongly Agree", "opt_02": "Agree", ... }
+ *
+ * The runtime scanner version stores labels as plain strings (not LocalizedText).
  */
-function buildAnswerLabelMap(version: ScannerVersion): Record<string, string> {
+function buildAnswerLabelMap(version: RuntimeScannerVersion): Record<string, string> {
   const map: Record<string, string> = {};
 
   for (const category of version.categories) {
     for (const subdomain of category.subdomains) {
       for (const question of subdomain.questions) {
-        for (const option of question.options) {
-          map[option.id] = option.label?.en ?? option.id;
+        for (const answer of question.answers) {
+          map[answer.id] = answer.label;
         }
       }
     }
@@ -162,7 +157,7 @@ function buildAnswerLabelMap(version: ScannerVersion): Record<string, string> {
  * Order: category.order → subdomain.order → question.order
  * Header: English question text (follow-up questions annotated).
  */
-function buildColumns(version: ScannerVersion): ColumnDefinition[] {
+function buildColumns(version: RuntimeScannerVersion): ColumnDefinition[] {
   const columns: ColumnDefinition[] = [];
 
   // Sort using explicit numeric order fields
@@ -175,7 +170,7 @@ function buildColumns(version: ScannerVersion): ColumnDefinition[] {
       const sortedQuestions = [...subdomain.questions].sort((a, b) => a.order - b.order);
 
       for (const question of sortedQuestions) {
-        const text = question.text?.en ?? `Question ${question.id}`;
+        const text = question.questionText || `Question ${question.id}`;
         const header = question.kind === 'follow-up' ? `${text} [Follow-up]` : text;
 
         columns.push({ key: question.id, header });
@@ -215,7 +210,7 @@ function buildRows(
     // Demographic attributes
     for (const key of ATTRIBUTE_KEYS) {
       const value = doc.attributes?.[key];
-      row[`attr_${key}`] = value && value.trim() ? value : null;
+      row[key] = value && value.trim() ? value : null;
     }
 
     // Answer labels for each question column

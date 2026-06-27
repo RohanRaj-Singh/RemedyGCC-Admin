@@ -94,3 +94,32 @@ __emit(__strip(ids));
     { label: 'get-distinct-scanner-versions' },
   );
 }
+
+/**
+ * Fetch a published scanner version from the runtime scannerVersions collection.
+ *
+ * rawResponses.scannerVersionId references this collection — NOT the admin-side
+ * adminScannerVersions. The runtime version stores the frozen category →
+ * subdomain → question → answer tree that was shown to respondents.
+ */
+export async function getRuntimeScannerVersionById(
+  versionId: string,
+): Promise<Record<string, unknown> | null> {
+  return runMongoScript<Record<string, unknown> | null>(
+    `
+const version = db.scannerVersions.findOne(
+  { id: __payload.versionId },
+  { projection: { _id: 0 } }
+);
+
+if (!version) {
+  __emit(null);
+  return;
+}
+
+__emit(__strip(version));
+`,
+    { versionId },
+    { label: 'get-runtime-scanner-version' },
+  );
+}
