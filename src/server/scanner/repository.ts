@@ -226,3 +226,19 @@ const versions = db.adminScannerVersions.find({ scannerId: scanner.id }, { proje
 __emit(__strip({ ...scanner, versions }));
 `, { scannerId, newDraftVersion });
 }
+
+export async function getScannerVersionById(
+  versionId: string,
+): Promise<ScannerVersionDocument | null> {
+  await ensureScannerModuleIndexes();
+  return runMongoScript<ScannerVersionDocument | null>(`
+const version = db.adminScannerVersions.findOne({ id: __payload.versionId }, { projection: { _id: 0 } });
+
+if (!version) {
+  __emit(null);
+  return;
+}
+
+__emit(__strip(version));
+`, { versionId });
+}

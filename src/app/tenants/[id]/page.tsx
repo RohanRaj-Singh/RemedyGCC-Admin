@@ -9,6 +9,7 @@ import {
   ArrowRight,
   CheckCircle2,
   ChevronRight,
+  Download,
   Edit,
   Eye,
   FileText,
@@ -128,6 +129,7 @@ export default function TenantDetailsPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
@@ -293,6 +295,52 @@ export default function TenantDetailsPage() {
     }
   }, [tenant, restoreSubdomain, loadTenant]);
 
+  const handleExport = useCallback(async () => {
+    if (!tenant) return;
+    try {
+      setIsExporting(true);
+      setError(null);
+      setSuccessMessage(null);
+
+      const response = await fetch(
+        `/api/super-admin/tenants/${tenant.id}/export-responses`,
+      );
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to generate export.');
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const filenameMatch = disposition.match(/filename="?(.+?)"?$/);
+      const filename =
+        filenameMatch?.[1] ??
+        `${tenant.name.replace(/\s+/g, '_')}_Responses_${
+          new Date().toISOString().slice(0, 10)
+        }.xlsx`;
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+
+      setSuccessMessage('Export downloaded successfully.');
+    } catch (exportError) {
+      setError(
+        exportError instanceof Error
+          ? exportError.message
+          : 'Failed to generate export.',
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }, [tenant]);
+
   if (isLoading) {
     return (
       <div className="flex h-96 items-center justify-center">
@@ -433,6 +481,36 @@ export default function TenantDetailsPage() {
               <p className="text-sm text-muted-foreground">Template</p>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Reporting */}
+      <div className="rounded-2xl border p-6" style={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <FileText className="h-5 w-5" />Reporting
+          </h3>
+        </div>
+        <p className="text-sm text-muted-foreground mb-5">
+          Export completed survey responses as a clean spreadsheet for your reporting team.
+        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">
+            <span className="font-semibold text-slate-800">{tenant.submissionCount}</span> total responses
+          </p>
+          <button
+            onClick={() => void handleExport()}
+            disabled={isExporting || tenant.submissionCount === 0}
+            className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ backgroundColor: 'var(--primary)', color: 'white' }}
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            {isExporting ? 'Exporting...' : 'Export Responses'}
+          </button>
         </div>
       </div>
 
