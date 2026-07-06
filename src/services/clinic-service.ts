@@ -87,11 +87,15 @@ class ClinicService {
   }
 
   async uploadAssets(
-    clinicIdentifier: { clinicId: string; clinicSlug: string },
+    clinicIdentifier: { clinicId?: string; clinicSlug: string },
     assets: { logo?: File | null; coverImage?: File | null; gallery?: File | null },
   ): Promise<ApiResponse<{ clinicSlug: string; logo: string | null; coverImage: string | null; galleryImage: string | null; assetType: string }>> {
     const formData = new FormData();
-    formData.set('clinicId', clinicIdentifier.clinicId);
+    if (clinicIdentifier.clinicId) {
+      formData.set('clinicId', clinicIdentifier.clinicId);
+    } else {
+      formData.set('pending', '1');
+    }
     formData.set('clinicSlug', clinicIdentifier.clinicSlug);
     formData.set('assetType', assets.gallery ? 'gallery' : assets.logo ? 'logo' : 'coverImage');
     if (assets.logo) formData.set('logo', assets.logo);

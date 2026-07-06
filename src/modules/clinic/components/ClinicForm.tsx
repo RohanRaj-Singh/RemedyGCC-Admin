@@ -126,49 +126,73 @@ export function ClinicForm({ clinic, onSubmit, onCancel, isLoading, error }: Cli
 
   // Media uploads
   const handleLogoUpload = useCallback(async (file: File) => {
-    if (!clinic) throw new Error('Save the clinic first before uploading images.');
     setUploadingLogo(true);
     try {
-      const { data } = await clinicService.uploadAssets(
-        { clinicId: clinic.id, clinicSlug: clinic.slug }, { logo: file },
-      );
-      if (data?.logo) setLogo(data.logo);
+      if (clinic) {
+        const { data } = await clinicService.uploadAssets(
+          { clinicId: clinic.id, clinicSlug: clinic.slug }, { logo: file },
+        );
+        if (data?.logo) setLogo(data.logo);
+      } else {
+        // For new clinics, use the current slug value with pending flag
+        const { data } = await clinicService.uploadAssets(
+          { clinicSlug: slug || name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') }, { logo: file },
+        );
+        if (data?.logo) setLogo(data.logo);
+      }
     } finally { setUploadingLogo(false); }
-  }, [clinic]);
+  }, [clinic, slug, name]);
 
   const handleCardUpload = useCallback(async (file: File) => {
-    if (!clinic) throw new Error('Save the clinic first before uploading images.');
     setUploadingCard(true);
     try {
-      // Upload to the logo field on the server (the backend reuses the same storage)
-      const { data } = await clinicService.uploadAssets(
-        { clinicId: clinic.id, clinicSlug: clinic.slug }, { logo: file },
-      );
-      if (data?.logo) setCardImage(data.logo);
+      if (clinic) {
+        const { data } = await clinicService.uploadAssets(
+          { clinicId: clinic.id, clinicSlug: clinic.slug }, { logo: file },
+        );
+        if (data?.logo) setCardImage(data.logo);
+      } else {
+        const { data } = await clinicService.uploadAssets(
+          { clinicSlug: slug || name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') }, { logo: file },
+        );
+        if (data?.logo) setCardImage(data.logo);
+      }
     } finally { setUploadingCard(false); }
-  }, [clinic]);
+  }, [clinic, slug, name]);
 
   const handleCoverUpload = useCallback(async (file: File) => {
-    if (!clinic) throw new Error('Save the clinic first before uploading images.');
     setUploadingCover(true);
     try {
-      const { data } = await clinicService.uploadAssets(
-        { clinicId: clinic.id, clinicSlug: clinic.slug }, { coverImage: file },
-      );
-      if (data?.coverImage) setCoverImage(data.coverImage);
+      if (clinic) {
+        const { data } = await clinicService.uploadAssets(
+          { clinicId: clinic.id, clinicSlug: clinic.slug }, { coverImage: file },
+        );
+        if (data?.coverImage) setCoverImage(data.coverImage);
+      } else {
+        const { data } = await clinicService.uploadAssets(
+          { clinicSlug: slug || name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') }, { coverImage: file },
+        );
+        if (data?.coverImage) setCoverImage(data.coverImage);
+      }
     } finally { setUploadingCover(false); }
-  }, [clinic]);
+  }, [clinic, slug, name]);
 
   const handleGalleryUpload = useCallback(async (file: File) => {
-    if (!clinic) throw new Error('Save the clinic first before uploading images.');
     setUploadingGallery(true);
     try {
-      const { data } = await clinicService.uploadAssets(
-        { clinicId: clinic.id, clinicSlug: clinic.slug }, { gallery: file },
-      );
-      if (data?.galleryImage) setGallery((prev) => [...prev, data.galleryImage!]);
+      if (clinic) {
+        const { data } = await clinicService.uploadAssets(
+          { clinicId: clinic.id, clinicSlug: clinic.slug }, { gallery: file },
+        );
+        if (data?.galleryImage) setGallery((prev) => [...prev, data.galleryImage!]);
+      } else {
+        const { data } = await clinicService.uploadAssets(
+          { clinicSlug: slug || name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') }, { gallery: file },
+        );
+        if (data?.galleryImage) setGallery((prev) => [...prev, data.galleryImage!]);
+      }
     } finally { setUploadingGallery(false); }
-  }, [clinic]);
+  }, [clinic, slug, name]);
 
   const removeGalleryImage = (url: string) => {
     setGallery((prev) => prev.filter((u) => u !== url));
@@ -414,13 +438,13 @@ export function ClinicForm({ clinic, onSubmit, onCancel, isLoading, error }: Cli
         <div className="mt-5 grid gap-5 md:grid-cols-3">
           <ClinicMediaUploader label="Logo" currentUrl={logo} uploading={uploadingLogo}
             onUpload={handleLogoUpload}
-            onRemove={isEditing && !isArchived ? () => setLogo(null) : undefined} />
+            onRemove={!isArchived ? () => setLogo(null) : undefined} />
           <ClinicMediaUploader label="Card Image" currentUrl={cardImage} uploading={uploadingCard}
             onUpload={handleCardUpload}
-            onRemove={isEditing && !isArchived ? () => setCardImage(null) : undefined} />
+            onRemove={!isArchived ? () => setCardImage(null) : undefined} />
           <ClinicMediaUploader label="Cover Image" currentUrl={coverImage} uploading={uploadingCover}
             onUpload={handleCoverUpload}
-            onRemove={isEditing && !isArchived ? () => setCoverImage(null) : undefined} />
+            onRemove={!isArchived ? () => setCoverImage(null) : undefined} />
         </div>
 
         {/* Gallery */}
@@ -431,7 +455,7 @@ export function ClinicForm({ clinic, onSubmit, onCancel, isLoading, error }: Cli
               <div key={url} className="relative group rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={url} alt={`Gallery ${i + 1}`} className="h-24 w-full object-contain p-2" />
-                {isEditing && !isArchived && (
+                {!isArchived && (
                   <button type="button" onClick={() => removeGalleryImage(url)}
                     className="absolute right-1 top-1 rounded bg-white/80 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <X className="h-3 w-3 text-red-500" />
@@ -439,7 +463,7 @@ export function ClinicForm({ clinic, onSubmit, onCancel, isLoading, error }: Cli
                 )}
               </div>
             ))}
-            {isEditing && !isArchived && (
+            {!isArchived && (
               <label className="flex h-24 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 transition-colors">
                 {uploadingGallery ? (
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
@@ -453,9 +477,6 @@ export function ClinicForm({ clinic, onSubmit, onCancel, isLoading, error }: Cli
               </label>
             )}
           </div>
-          {!isEditing && (
-            <p className="mt-2 text-xs text-gray-500">Save the clinic first, then upload images.</p>
-          )}
         </div>
       </section>
 

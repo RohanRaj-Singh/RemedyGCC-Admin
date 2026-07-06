@@ -35,12 +35,12 @@ export function ClinicMediaUploader({
   // Keep a ref to the blob URL so we can revoke it on cleanup
   const blobUrlRef = useRef<string | null>(null);
 
-  // When currentUrl from parent becomes a real value after upload, clear the blob preview
-  const prevCurrentUrlRef = useRef<string | null | undefined>(currentUrl);
+  // Track upload transitions: when uploading goes from true -> false,
+  // the upload operation finished. Clear the blob preview and pending state.
+  const prevUploadingRef = useRef(uploading);
   useEffect(() => {
-    // If currentUrl just changed to a truthy value, the upload completed —
-    // safe to clear the blob preview now
-    if (currentUrl && currentUrl !== prevCurrentUrlRef.current) {
+    if (prevUploadingRef.current && !uploading) {
+      // Upload just completed - clear blob preview
       if (blobUrlRef.current) {
         URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = null;
@@ -48,8 +48,8 @@ export function ClinicMediaUploader({
       setBlobPreview(null);
       setPending(false);
     }
-    prevCurrentUrlRef.current = currentUrl;
-  }, [currentUrl]);
+    prevUploadingRef.current = uploading;
+  }, [uploading]);
 
   // Clean up blob URL on unmount
   useEffect(() => {
