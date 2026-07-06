@@ -7,7 +7,7 @@ import {
   saveClinicGalleryImage,
   saveClinicLogo,
 } from '@/lib/uploads/clinic-assets';
-import { getClinicDocumentById, getClinicDocumentBySlug } from '@/server/clinic/repository';
+import { getClinicDocumentById, getClinicDocumentBySlug, updateClinicDocument } from '@/server/clinic/repository';
 import { normalizeClinicSlugInput, validateClinicSlug } from '@/modules/clinic/utils';
 
 export const runtime = 'nodejs';
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const formData = await request.formData();
-    const { clinicSlug } = await resolveClinicForUpload(formData);
+    const { clinicId, clinicSlug } = await resolveClinicForUpload(formData);
 
     const logoFile = getOptionalFile(formData.get('logo'));
     const coverFile = getOptionalFile(formData.get('coverImage'));
@@ -68,6 +68,21 @@ export async function POST(request: NextRequest) {
       coverFile ? saveClinicCoverImage(clinicSlug, coverFile) : Promise.resolve(null),
       galleryFile ? saveClinicGalleryImage(clinicSlug, galleryFile) : Promise.resolve(null),
     ]);
+
+    // Atomic persistence: immediately update the clinic document so the
+    // uploaded asset is referenced even if the admin never clicks Save Changes.
+    if (clinicId) {
+      const now = new Date().toISOString();
+      const dbUpdates: Record<string, unknown> = { updatedAt: now };
+      if (logo) dbUpdates.logo = logo;
+      if (coverImage) dbUpdates.coverImage = coverImage;
+      if (galleryImage) {
+        const current = await getClinicDocumentById(clinicId);
+        const existing = current?.gallery ?? [];
+        dbUpdates.gallery = [...existing, galleryImage];
+      }
+      await updateClinicDocument(clinicId, dbUpdates);
+    }
 
     return NextResponse.json({
       clinicSlug,

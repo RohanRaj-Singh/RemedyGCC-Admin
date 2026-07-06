@@ -57,7 +57,14 @@ async function saveAssetFile(
   const buffer = Buffer.from(await file.arrayBuffer());
   await fs.writeFile(fullPath, buffer);
 
-  return `/assets/clinics/${clinicSlug}/${filename}.${ext}`;
+  // Cache busting: append file's mtime as a version query parameter.
+  // The URL changes whenever the file is re-uploaded, so the browser
+  // never serves a stale cached version. The timestamp is deterministic
+  // because it comes from the filesystem mtime of the freshly written file.
+  const stat = await fs.stat(fullPath);
+  const version = stat.mtimeMs;
+
+  return `/assets/clinics/${clinicSlug}/${filename}.${ext}?v=${version}`;
 }
 
 export async function ensureClinicAssetDirectory(clinicSlug: string): Promise<void> {

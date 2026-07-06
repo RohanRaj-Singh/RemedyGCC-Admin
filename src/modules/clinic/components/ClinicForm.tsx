@@ -124,75 +124,61 @@ export function ClinicForm({ clinic, onSubmit, onCancel, isLoading, error }: Cli
     } catch { setSlugStatus('idle'); }
   };
 
-  // Media uploads
+  // ── Media upload helper ──────────────────────────────────────────────
+  // Returns the response data on success or throws on error (so the
+  // MediaUploader can show a retry button).
+  const uploadOne = useCallback(async (
+    slugOrId: { clinicId?: string; clinicSlug: string },
+    asset: { logo?: File } | { coverImage?: File } | { gallery?: File },
+  ) => {
+    const { data, error: uploadError } = await clinicService.uploadAssets(slugOrId, asset);
+    if (uploadError || !data) throw new Error(uploadError || 'Upload failed.');
+    return data;
+  }, []);
+
   const handleLogoUpload = useCallback(async (file: File) => {
     setUploadingLogo(true);
     try {
-      if (clinic) {
-        const { data } = await clinicService.uploadAssets(
-          { clinicId: clinic.id, clinicSlug: clinic.slug }, { logo: file },
-        );
-        if (data?.logo) setLogo(data.logo);
-      } else {
-        // For new clinics, use the current slug value with pending flag
-        const { data } = await clinicService.uploadAssets(
-          { clinicSlug: slug || name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') }, { logo: file },
-        );
-        if (data?.logo) setLogo(data.logo);
-      }
+      const id = clinic
+        ? { clinicId: clinic.id, clinicSlug: clinic.slug }
+        : { clinicSlug: slug || name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') };
+      const data = await uploadOne(id, { logo: file });
+      setLogo(data.logo);
     } finally { setUploadingLogo(false); }
-  }, [clinic, slug, name]);
+  }, [clinic, slug, name, uploadOne]);
 
   const handleCardUpload = useCallback(async (file: File) => {
     setUploadingCard(true);
     try {
-      if (clinic) {
-        const { data } = await clinicService.uploadAssets(
-          { clinicId: clinic.id, clinicSlug: clinic.slug }, { logo: file },
-        );
-        if (data?.logo) setCardImage(data.logo);
-      } else {
-        const { data } = await clinicService.uploadAssets(
-          { clinicSlug: slug || name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') }, { logo: file },
-        );
-        if (data?.logo) setCardImage(data.logo);
-      }
+      const id = clinic
+        ? { clinicId: clinic.id, clinicSlug: clinic.slug }
+        : { clinicSlug: slug || name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') };
+      const data = await uploadOne(id, { logo: file });
+      if (data?.logo) setCardImage(data.logo);
     } finally { setUploadingCard(false); }
-  }, [clinic, slug, name]);
+  }, [clinic, slug, name, uploadOne]);
 
   const handleCoverUpload = useCallback(async (file: File) => {
     setUploadingCover(true);
     try {
-      if (clinic) {
-        const { data } = await clinicService.uploadAssets(
-          { clinicId: clinic.id, clinicSlug: clinic.slug }, { coverImage: file },
-        );
-        if (data?.coverImage) setCoverImage(data.coverImage);
-      } else {
-        const { data } = await clinicService.uploadAssets(
-          { clinicSlug: slug || name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') }, { coverImage: file },
-        );
-        if (data?.coverImage) setCoverImage(data.coverImage);
-      }
+      const id = clinic
+        ? { clinicId: clinic.id, clinicSlug: clinic.slug }
+        : { clinicSlug: slug || name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') };
+      const data = await uploadOne(id, { coverImage: file });
+      if (data?.coverImage) setCoverImage(data.coverImage);
     } finally { setUploadingCover(false); }
-  }, [clinic, slug, name]);
+  }, [clinic, slug, name, uploadOne]);
 
   const handleGalleryUpload = useCallback(async (file: File) => {
     setUploadingGallery(true);
     try {
-      if (clinic) {
-        const { data } = await clinicService.uploadAssets(
-          { clinicId: clinic.id, clinicSlug: clinic.slug }, { gallery: file },
-        );
-        if (data?.galleryImage) setGallery((prev) => [...prev, data.galleryImage!]);
-      } else {
-        const { data } = await clinicService.uploadAssets(
-          { clinicSlug: slug || name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') }, { gallery: file },
-        );
-        if (data?.galleryImage) setGallery((prev) => [...prev, data.galleryImage!]);
-      }
+      const id = clinic
+        ? { clinicId: clinic.id, clinicSlug: clinic.slug }
+        : { clinicSlug: slug || name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') };
+      const data = await uploadOne(id, { gallery: file });
+      if (data?.galleryImage) setGallery((prev) => [...prev, data.galleryImage!]);
     } finally { setUploadingGallery(false); }
-  }, [clinic, slug, name]);
+  }, [clinic, slug, name, uploadOne]);
 
   const removeGalleryImage = (url: string) => {
     setGallery((prev) => prev.filter((u) => u !== url));

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ImageUp, Loader2, Trash2 } from 'lucide-react';
+import { AlertCircle, ImageUp, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 
 interface ClinicMediaUploaderProps {
   label: string;
@@ -17,8 +17,7 @@ interface ClinicMediaUploaderProps {
  *
  * Shows a blob preview immediately when a file is selected. The blob preview
  * persists until the user picks another file or the component unmounts.
- * This prevents a flash of missing image when the server file overwrites
- * the same URL path (the currentUrl prop does not change on re-upload).
+ * On failure, shows an error message with a retry button.
  */
 export function ClinicMediaUploader({
   label,
@@ -33,10 +32,15 @@ export function ClinicMediaUploader({
   const [blobPreview, setBlobPreview] = useState<string | null>(null);
   // Keep a ref so we can revoke on unmount
   const blobUrlRef = useRef<string | null>(null);
+  // Error state for upload failures
+  const [error, setError] = useState<string | null>(null);
+  // Store the failed file so we can retry
+  const failedFileRef = useRef<File | null>(null);
 
-  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFileChange = useCallback(async (file: File) => {
+    // Clear any previous error
+    setError(null);
+    failedFileRef.current = null;
 
     // Revoke previous blob URL if any
     if (blobUrlRef.current) {
@@ -47,19 +51,34 @@ export function ClinicMediaUploader({
     const objectUrl = URL.createObjectURL(file);
     blobUrlRef.current = objectUrl;
     setBlobPreview(objectUrl);
+    failedFileRef.current = file;
 
     try {
       await onUpload(file);
-    } catch {
-      // Upload failed — revert to server URL
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = null;
-      }
-      setBlobPreview(null);
-      if (inputRef.current) inputRef.current.value = '';
+      // Upload succeeded — clear the fail reference
+      failedFileRef.current = null;
+    } catch (err) {
+      // Upload failed — show error + keep preview so user can retry
+      setError(err instanceof Error ? err.message : 'Upload failed. Please retry.');
     }
-    // Keep blob preview until user picks another file
+    // Keep blob preview until user picks another file or retries
+  }, [onUpload]);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    handleFileChange(file);
+  }, [handleFileChange]);
+
+  const handleRetry = useCallback(async () => {
+    if (!failedFileRef.current) return;
+    setError(null);
+    try {
+      await onUpload(failedFileRef.current);
+      failedFileRef.current = null;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed. Please retry.');
+    }
   }, [onUpload]);
 
   // Clean up blob URL on unmount
@@ -76,6 +95,21 @@ export function ClinicMediaUploader({
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
+
+      {error && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="inline-flex items-center gap-1 rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-800 hover:bg-red-200 transition-colors"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Retry
+          </button>
+        </div>
+      )}
 
       {hasImage ? (
         <div className="relative overflow-hidden rounded-xl border border-gray-200 bg-white group">
@@ -105,7 +139,7 @@ export function ClinicMediaUploader({
                   type="file"
                   accept={accept}
                   className="hidden"
-                  onChange={handleFileChange}
+                  onChange={handleInputChange}
                   disabled={uploading}
                 />
               </label>
@@ -142,7 +176,7 @@ export function ClinicMediaUploader({
             type="file"
             accept={accept}
             className="hidden"
-            onChange={handleFileChange}
+            onChange={handleInputChange}
             disabled={uploading}
           />
         </label>
