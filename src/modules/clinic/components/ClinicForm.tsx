@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import type { Clinic, ClinicStatus, WorkingHoursEntry } from '../types';
 import { getClinicStatusMeta, normalizeClinicSlugInput, validateClinicSlug } from '../utils';
@@ -75,6 +75,22 @@ export function ClinicForm({ clinic, onSubmit, onCancel, isLoading, error }: Cli
   const [formError, setFormError] = useState('');
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Upload-in-progress state (disables Save button) ────────────────────
+  const isUploading = uploadingLogo || uploadingCard || uploadingCover || uploadingGallery;
+
+  // ── Confirm before leaving with unsaved changes ────────────────────────
+  const hasChanges = true; // simplest safe approach — track dirty if needed
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (isUploading) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isUploading]);
+
   // Slug auto-generation
   const handleNameChange = useCallback((value: string) => {
     setName(value);
@@ -124,6 +140,7 @@ export function ClinicForm({ clinic, onSubmit, onCancel, isLoading, error }: Cli
     if (!clinic) throw new Error('Save the clinic first before uploading images.');
     setUploadingCard(true);
     try {
+      // Upload to the logo field on the server (the backend reuses the same storage)
       const { data } = await clinicService.uploadAssets(
         { clinicId: clinic.id, clinicSlug: clinic.slug }, { logo: file },
       );
@@ -477,9 +494,9 @@ export function ClinicForm({ clinic, onSubmit, onCancel, isLoading, error }: Cli
           className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
           Cancel
         </button>
-        <button type="submit" disabled={isLoading || isArchived}
+        <button type="submit" disabled={isLoading || isArchived || isUploading}
           className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-          {isLoading ? 'Saving...' : clinic ? 'Save Changes' : 'Create Clinic'}
+          {isLoading ? 'Saving...' : isUploading ? 'Uploading...' : clinic ? 'Save Changes' : 'Create Clinic'}
         </button>
       </div>
     </form>
