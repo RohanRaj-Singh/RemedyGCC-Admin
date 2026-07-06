@@ -37,6 +37,17 @@ function trimOrNull(value: string | null | undefined): string | null {
   return value?.trim() || null;
 }
 
+/**
+ * Normalize a URL by prepending https:// if no protocol is present.
+ * This lets administrators type "clinic.com" without manually adding "https://".
+ */
+function normalizeUrl(value: string | null | undefined): string | null {
+  const trimmed = trimOrNull(value);
+  if (!trimmed) return null;
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+  return `https://${trimmed}`;
+}
+
 function toClinic(doc: ClinicDocument): Clinic {
   return {
     id: doc.id,
@@ -132,7 +143,7 @@ function buildPartialUpdates(
   if (data.coverImage !== undefined) next.coverImage = data.coverImage;
   if (data.phone !== undefined) next.phone = trimOrNull(data.phone);
   if (data.email !== undefined) next.email = trimOrNull(data.email);
-  if (data.website !== undefined) next.website = trimOrNull(data.website);
+  if (data.website !== undefined) next.website = normalizeUrl(data.website);
   if (data.address !== undefined) next.address = trimOrNull(data.address);
   if (data.addressAr !== undefined) next.addressAr = trimOrNull(data.addressAr);
   if (data.coordinates !== undefined) next.coordinates = data.coordinates;
@@ -142,7 +153,7 @@ function buildPartialUpdates(
   if (data.workingHours !== undefined) next.workingHours = buildWorkingHours(data.workingHours);
   if (data.workingHoursAr !== undefined) next.workingHoursAr = buildWorkingHours(data.workingHoursAr);
   if (data.acceptsInPerson !== undefined) next.acceptsInPerson = data.acceptsInPerson;
-  if (data.redirectUrl !== undefined) next.redirectUrl = trimOrNull(data.redirectUrl);
+  if (data.redirectUrl !== undefined) next.redirectUrl = normalizeUrl(data.redirectUrl);
 
   next.updatedAt = now;
   next.archivedAt = nextStatus === 'archived' ? now : (normalized.archivedAt ?? null);
@@ -197,7 +208,7 @@ export async function createClinic(data: CreateClinicDto): Promise<Clinic> {
     gallery: null,
     phone: trimOrNull(data.phone),
     email: trimOrNull(data.email),
-    website: trimOrNull(data.website),
+    website: normalizeUrl(data.website),
     address: trimOrNull(data.address),
     addressAr: trimOrNull(data.addressAr),
     coordinates: data.coordinates ?? null,
@@ -207,7 +218,7 @@ export async function createClinic(data: CreateClinicDto): Promise<Clinic> {
     workingHours: buildWorkingHours(data.workingHours),
     workingHoursAr: buildWorkingHours(data.workingHoursAr),
     acceptsInPerson: data.acceptsInPerson ?? true,
-    redirectUrl: trimOrNull(data.redirectUrl),
+    redirectUrl: normalizeUrl(data.redirectUrl),
     status,
     createdAt: now,
     updatedAt: now,
