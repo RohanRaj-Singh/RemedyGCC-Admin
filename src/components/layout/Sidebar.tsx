@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutDashboard, Building2, Heart, Scan, FileText, Settings, FileStack, Receipt, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { LayoutDashboard, Building2, Heart, Scan, FileText, Settings, FileStack, Receipt, Users, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
@@ -17,6 +17,7 @@ const menuItems = [
   { id: 'tenants', label: 'Tenants', icon: Building2, href: '/tenants' },
   { id: 'clinics', label: 'Clinics', icon: Heart, href: '/clinics' },
   { id: 'reimbursements', label: 'Claims', icon: Receipt, href: '/reimbursements' },
+  { id: 'employees', label: 'Employees', icon: Users, href: '/employees' },
   { id: 'scanners', label: 'Scanners', icon: Scan, href: '/scanners' },
   { id: 'logs', label: 'System Logs', icon: FileText, href: '/logs' },
   { id: 'attribute-templates', label: 'Attribute Templates', icon: FileStack, href: '/attribute-templates' },

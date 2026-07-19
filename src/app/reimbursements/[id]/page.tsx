@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ArrowLeft, Loader2, FileText, ExternalLink, Clock, CheckCircle, XCircle, Snowflake, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText, ExternalLink, Clock, CheckCircle, XCircle, Snowflake, Eye, EyeOff, Banknote } from 'lucide-react';
 
 interface ClaimHistoryEntry {
   status: string;
@@ -26,7 +26,15 @@ interface Claim {
   receiptUrl?: string;
   receiptHash?: string;
   serviceDate?: string;
-  status: 'pending' | 'approved' | 'rejected' | 'frozen' | 'paid';
+  sessionCount?: number;
+  sessionTypes?: string[];
+  sessionFor?: string;
+  sessionForOther?: string;
+  contactCountryCode?: string;
+  contactNumber?: string;
+  bankAccountNumber?: string;
+  bankName?: string;
+  status: 'pending' | 'in_progress' | 'approved' | 'rejected' | 'frozen' | 'paid';
   reviewedBy?: string;
   reviewedAt?: string;
   notes?: string;
@@ -41,6 +49,12 @@ const STATUS_CONFIG: Record<string, { label: string; description: string; icon: 
     description: 'Waiting for tenant review.',
     icon: <Clock className="h-5 w-5" />,
     color: 'bg-amber-50 text-amber-700 border-amber-200',
+  },
+  in_progress: {
+    label: 'In Progress',
+    description: 'Being reviewed by the tenant.',
+    icon: <Clock className="h-5 w-5" />,
+    color: 'bg-blue-50 text-blue-700 border-blue-200',
   },
   approved: {
     label: 'Approved',
@@ -58,7 +72,7 @@ const STATUS_CONFIG: Record<string, { label: string; description: string; icon: 
     label: 'Frozen',
     description: 'Temporarily on hold by the tenant.',
     icon: <Snowflake className="h-5 w-5" />,
-    color: 'bg-blue-50 text-blue-700 border-blue-200',
+    color: 'bg-sky-50 text-sky-700 border-sky-200',
   },
   paid: {
     label: 'Paid',
@@ -258,6 +272,59 @@ export default function ReimbursementDetailPage() {
           </div>
         </div>
 
+        {/* Session & Contact Details */}
+        {(claim.sessionCount !== undefined || claim.sessionTypes !== undefined ||
+          claim.sessionFor !== undefined || claim.contactNumber !== undefined ||
+          claim.bankAccountNumber !== undefined) && (
+          <div className="rounded-xl border border-gray-200 bg-white p-5">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Session &amp; Contact Details</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {claim.sessionCount !== undefined && (
+                <div>
+                  <p className="text-xs font-medium text-gray-400">Number of Sessions</p>
+                  <p className="mt-0.5 text-sm font-medium text-gray-900">{claim.sessionCount}</p>
+                </div>
+              )}
+              {claim.sessionTypes && claim.sessionTypes.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-gray-400">Session Types</p>
+                  <div className="mt-0.5 flex flex-wrap gap-1.5">
+                    {claim.sessionTypes.map((t) => (
+                      <span key={t} className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">{t}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {claim.sessionFor && (
+                <div>
+                  <p className="text-xs font-medium text-gray-400">Session For</p>
+                  <p className="mt-0.5 text-sm font-medium text-gray-900 capitalize">
+                    {claim.sessionFor === 'myself' ? 'Myself' : claim.sessionFor === 'family_member' ? 'Family member' : claim.sessionForOther || claim.sessionFor}
+                  </p>
+                </div>
+              )}
+              {claim.contactNumber && (
+                <div>
+                  <p className="text-xs font-medium text-gray-400">Contact Number</p>
+                  <p className="mt-0.5 text-sm font-medium text-gray-900">{claim.contactCountryCode ?? ''} {claim.contactNumber}</p>
+                </div>
+              )}
+              {claim.bankAccountNumber && (
+                <div>
+                  <p className="text-xs font-medium text-gray-400">Bank Account</p>
+                  <p className="mt-0.5 text-sm font-medium text-gray-900">{claim.bankAccountNumber}</p>
+                </div>
+              )}
+              {claim.bankName && (
+                <div>
+                  <p className="text-xs font-medium text-gray-400">Bank Name</p>
+                  <p className="mt-0.5 text-sm font-medium text-gray-900">{claim.bankName}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Claim History — single source of truth for review activity */}
         {claim.history && claim.history.length > 0 && (
           <div className="rounded-xl border border-gray-200 bg-white p-5">
@@ -268,7 +335,8 @@ export default function ReimbursementDetailPage() {
                   <span className={`absolute -left-1.5 top-1 h-3 w-3 rounded-full border-2 border-white ${
                     entry.status === 'approved' ? 'bg-emerald-500' :
                     entry.status === 'rejected' ? 'bg-red-500' :
-                    entry.status === 'frozen'   ? 'bg-blue-500' :
+                    entry.status === 'in_progress' ? 'bg-blue-500' :
+                    entry.status === 'frozen'   ? 'bg-sky-500' :
                     entry.status === 'paid'     ? 'bg-purple-500' :
                     'bg-amber-500'
                   }`} />
@@ -276,7 +344,8 @@ export default function ReimbursementDetailPage() {
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
                       entry.status === 'approved' ? 'bg-emerald-50 text-emerald-700' :
                       entry.status === 'rejected' ? 'bg-red-50 text-red-700' :
-                      entry.status === 'frozen'   ? 'bg-blue-50 text-blue-700' :
+                      entry.status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
+                      entry.status === 'frozen'   ? 'bg-sky-50 text-sky-700' :
                       entry.status === 'paid'     ? 'bg-purple-50 text-purple-700' :
                       'bg-amber-50 text-amber-700'
                     }`}>
@@ -294,11 +363,34 @@ export default function ReimbursementDetailPage() {
           </div>
         )}
 
-        <div className="text-center border-t border-gray-100 pt-6">
-          <p className="text-xs text-gray-400">
-            Read-only oversight. Claims can only be reviewed at the tenant level.
-          </p>
-        </div>
+        {/* Super Admin Actions */}
+        {claim.status === 'approved' && (
+          <div className="rounded-xl border border-purple-200 bg-purple-50 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-purple-800">Approve Payout</h3>
+                <p className="mt-0.5 text-xs text-purple-600">
+                  This claim is approved by the tenant and ready for payment. Mark as paid to complete the lifecycle.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/super-admin/reimbursements/${claim.reimbursementId}/pay`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    });
+                    if (res.ok) window.location.reload();
+                  } catch { /* ignore */ }
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-purple-700 transition"
+              >
+                <Banknote className="h-4 w-4" />
+                Mark as Paid
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
