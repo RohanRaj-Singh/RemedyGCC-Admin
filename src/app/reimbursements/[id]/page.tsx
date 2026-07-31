@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Loader2, FileText, ExternalLink, Clock, CheckCircle, XCircle, Snowflake, Eye, EyeOff, Banknote } from 'lucide-react';
+import ClaimTimeline from '@/components/claims/ClaimTimeline';
+import { ClaimChat } from '@/components/claims/ClaimChat';
+import { ClaimRequests } from '@/components/claims/ClaimRequests';
 
 interface ClaimHistoryEntry {
   status: string;
@@ -107,12 +110,9 @@ export default function ReimbursementDetailPage() {
     const fetchClaim = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/super-admin/reimbursements?id=${claimId}`);
+        const res = await fetch(`/api/super-admin/reimbursements/${claimId}`);
         if (!res.ok) throw new Error('Claim not found.');
-        const data = await res.json();
-        // The detail endpoint returns array — find the matching claim
-        const found = (data.claims ?? []).find((c: Claim) => c.reimbursementId === claimId);
-        if (!found) throw new Error('Claim not found.');
+        const found = await res.json();
         setClaim(found);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load claim.');
@@ -329,39 +329,30 @@ export default function ReimbursementDetailPage() {
         {claim.history && claim.history.length > 0 && (
           <div className="rounded-xl border border-gray-200 bg-white p-5">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Claim History</h3>
-            <ol className="relative border-l border-gray-200 ml-2 space-y-4">
-              {claim.history.map((entry, i) => (
-                <li key={i} className="pl-5 relative">
-                  <span className={`absolute -left-1.5 top-1 h-3 w-3 rounded-full border-2 border-white ${
-                    entry.status === 'approved' ? 'bg-emerald-500' :
-                    entry.status === 'rejected' ? 'bg-red-500' :
-                    entry.status === 'in_progress' ? 'bg-blue-500' :
-                    entry.status === 'frozen'   ? 'bg-sky-500' :
-                    entry.status === 'paid'     ? 'bg-purple-500' :
-                    'bg-amber-500'
-                  }`} />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
-                      entry.status === 'approved' ? 'bg-emerald-50 text-emerald-700' :
-                      entry.status === 'rejected' ? 'bg-red-50 text-red-700' :
-                      entry.status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
-                      entry.status === 'frozen'   ? 'bg-sky-50 text-sky-700' :
-                      entry.status === 'paid'     ? 'bg-purple-50 text-purple-700' :
-                      'bg-amber-50 text-amber-700'
-                    }`}>
-                      {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      {entry.actorRole === 'employee' ? 'Employee' : `Reviewer (${entry.actorId})`}
-                    </span>
-                    <span className="text-xs text-gray-400">&middot; {formatDate(entry.timestamp)}</span>
-                  </div>
-                  {entry.note && <p className="mt-1 text-xs text-gray-600">{entry.note}</p>}
-                </li>
-              ))}
-            </ol>
+            <ClaimTimeline history={claim.history} showActorId />
           </div>
         )}
+
+        {/* Notes */}
+        {claim.notes && (
+          <div className="rounded-xl border border-gray-200 bg-white p-5">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Notes</h3>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{claim.notes}</p>
+          </div>
+        )}
+
+        {/* Chat — read-only oversight */}
+        <ClaimChat
+          claimId={claim.reimbursementId}
+          apiBase={`/api/super-admin/reimbursements/${claim.reimbursementId}/messages`}
+          readOnly
+        />
+
+        {/* Requests — read-only oversight */}
+        <ClaimRequests
+          claimId={claim.reimbursementId}
+          apiBase={`/api/super-admin/reimbursements/${claim.reimbursementId}/requests`}
+        />
 
         {/* Super Admin Actions */}
         {claim.status === 'approved' && (

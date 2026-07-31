@@ -162,7 +162,6 @@ function buildPartialUpdates(
 }
 
 export async function getAllClinics(): Promise<Clinic[]> {
-  await ensureClinicModuleIndexes();
   const data = await getClinicListData();
   return data.clinics.map(normalizeClinicDocument).map(toClinic);
 }

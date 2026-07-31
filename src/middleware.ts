@@ -1,17 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import {
-  TENANT_LOGIN_PATH,
-  TENANT_PASSWORD_CHANGE_COOKIE,
-  TENANT_PASSWORD_CHANGE_PATH,
-  TENANT_SESSION_COOKIE,
-  getTenantSessionCookieFromRequest,
-  isTenantProtectedPath,
   isTenantPublicPath,
-  isValidTenantSessionTokenFormat,
-  shouldForceTenantPasswordChange,
 } from '@/modules/tenant-auth/middleware/route-protection';
-import { clearTenantAuthCookiesOnResponse } from '@/modules/tenant-auth/utils/cookies';
 import {
   SESSION_COOKIE_NAME as ADMIN_SESSION_COOKIE,
   clearSessionCookieOnResponse,
@@ -76,14 +67,6 @@ function isValidAdminSessionFormat(token: string | undefined): boolean {
   return Boolean(token && token.length > 36 && token.includes('-'));
 }
 
-function redirectToTenantLogin(request: NextRequest, pathname: string): NextResponse {
-  const loginUrl = new URL(TENANT_LOGIN_PATH, request.url);
-  if (pathname !== TENANT_LOGIN_PATH) {
-    loginUrl.searchParams.set('next', pathname);
-  }
-  return NextResponse.redirect(loginUrl);
-}
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -93,27 +76,6 @@ export async function middleware(request: NextRequest) {
     || isTenantPublicPath(pathname)
     || isAdminPublicPath(pathname)
   ) {
-    return NextResponse.next();
-  }
-
-  if (isTenantProtectedPath(pathname)) {
-    const sessionToken = getTenantSessionCookieFromRequest(request);
-
-    if (!sessionToken) {
-      return redirectToTenantLogin(request, pathname);
-    }
-
-    if (!isValidTenantSessionTokenFormat(sessionToken)) {
-      return clearTenantAuthCookiesOnResponse(redirectToTenantLogin(request, pathname));
-    }
-
-    if (
-      shouldForceTenantPasswordChange(request)
-      && pathname !== TENANT_PASSWORD_CHANGE_PATH
-    ) {
-      return NextResponse.redirect(new URL(TENANT_PASSWORD_CHANGE_PATH, request.url));
-    }
-
     return NextResponse.next();
   }
 

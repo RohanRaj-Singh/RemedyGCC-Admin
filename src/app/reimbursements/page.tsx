@@ -3,9 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Loader2, Search, Eye, ChevronLeft, ChevronRight, AlertCircle, AlertTriangle,
-  CheckCircle, XCircle, Snowflake, Banknote, DollarSign, Building2,
-  RefreshCw, Filter, Download, X,
+  Loader2, Search, ChevronLeft, ChevronRight, AlertCircle, AlertTriangle, Banknote,
 } from 'lucide-react';
 
 interface Claim {
@@ -63,9 +61,6 @@ export default function SuperAdminClaimsPage() {
   const [skip, setSkip] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState(false);
-  const [reasonModal, setReasonModal] = useState<{ action: string; title: string } | null>(null);
-  const [reasonText, setReasonText] = useState('');
-  const [reasonError, setReasonError] = useState('');
 
   useEffect(() => { setSelectedIds(new Set()); }, [statusFilter, tenantFilter, searchFilter, skip]);
 
@@ -132,12 +127,6 @@ export default function SuperAdminClaimsPage() {
     setSelectedIds(new Set());
     setActionLoading(false);
     fetchClaims();
-  }
-
-  function openReasonModal(action: string, title: string) {
-    setReasonModal({ action, title });
-    setReasonText('');
-    setReasonError('');
   }
 
   return (
@@ -253,14 +242,8 @@ export default function SuperAdminClaimsPage() {
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-white">{selectedIds.size} selected</p>
               <div className="flex gap-2">
-                <button onClick={() => bulkAction('approve')} disabled={actionLoading}
-                  className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50">Approve</button>
                 <button onClick={() => bulkAction('pay')} disabled={actionLoading}
                   className="rounded-lg bg-purple-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-600 disabled:opacity-50">Mark Paid</button>
-                <button onClick={() => openReasonModal('reject', 'Reject Claims')} disabled={actionLoading}
-                  className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50">Reject</button>
-                <button onClick={() => openReasonModal('freeze', 'Freeze Claims')} disabled={actionLoading}
-                  className="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-600 disabled:opacity-50">Freeze</button>
                 <button onClick={() => setSelectedIds(new Set())}
                   className="rounded-lg border border-white/30 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10">Clear</button>
               </div>
@@ -365,51 +348,6 @@ export default function SuperAdminClaimsPage() {
         )}
       </div>
 
-      {/* Reason Modal */}
-      {reasonModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setReasonModal(null)}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">{reasonModal.title}</h3>
-              <button onClick={() => setReasonModal(null)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <p className="mb-1 text-sm text-gray-500">
-              {reasonModal.action === 'reject'
-                ? 'Provide a reason for rejecting these claims.'
-                : 'Provide a reason for freezing these claims.'}
-            </p>
-            <p className="mb-4 text-xs font-medium text-gray-400">{selectedIds.size} claim{selectedIds.size !== 1 ? 's' : ''} selected</p>
-            <textarea
-              value={reasonText}
-              onChange={(e) => { setReasonText(e.target.value); if (e.target.value.trim()) setReasonError(''); }}
-              placeholder={`Enter reason for ${reasonModal.action === 'reject' ? 'rejection' : 'freezing'}...`}
-              rows={4}
-              className={`w-full rounded-xl border bg-white px-4 py-3 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 ${reasonError ? 'border-red-300' : 'border-gray-200'}`}
-              autoFocus
-            />
-            {reasonError && <p className="mt-1 text-xs text-red-600">{reasonError}</p>}
-            <div className="mt-5 flex items-center justify-end gap-3">
-              <button onClick={() => setReasonModal(null)} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
-              <button
-                onClick={() => {
-                  if (!reasonText.trim()) { setReasonError('Please provide a reason.'); return; }
-                  const action = reasonModal.action;
-                  const notes = reasonText.trim();
-                  setReasonModal(null);
-                  bulkAction(action, notes);
-                }}
-                className={`rounded-xl px-5 py-2.5 text-sm font-medium text-white ${
-                  reasonModal.action === 'reject' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
-                }`}
-              >
-                {reasonModal.action === 'reject' ? 'Reject Claims' : 'Freeze Claims'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import { Bell, Search, User } from 'lucide-react';
+import { Search, User } from 'lucide-react';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useTheme } from '@/context/ThemeProvider';
 
 export function Header() {
@@ -43,10 +44,7 @@ export function Header() {
         </div>
 
         {/* Notifications */}
-        <button className="relative p-2 hover:bg-slate-100 rounded-lg transition-colors" style={{ color: 'var(--muted-foreground)' }}>
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-        </button>
+        <NotificationBell />
 
         {/* User */}
         <div className="flex items-center gap-3 pl-4 border-l" style={{ borderColor: 'var(--border)' }}>
