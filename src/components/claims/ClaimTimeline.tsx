@@ -25,6 +25,13 @@ function formatDate(iso: string) {
   });
 }
 
+function statusLabel(status: string) {
+  return status
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 export default function ClaimTimeline({
   history,
   employeeLabel = 'Employee',
@@ -42,6 +49,7 @@ export default function ClaimTimeline({
             entry.status === 'rejected' ? 'bg-red-500' :
             entry.status === 'in_progress' ? 'bg-blue-500' :
             entry.status === 'frozen'   ? 'bg-sky-500' :
+            entry.status === 'to_be_paid' ? 'bg-orange-500' :
             entry.status === 'paid'     ? 'bg-purple-500' :
             'bg-amber-500'
           }`} />
@@ -51,10 +59,11 @@ export default function ClaimTimeline({
               entry.status === 'rejected' ? 'bg-red-50 text-red-700' :
               entry.status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
               entry.status === 'frozen'   ? 'bg-sky-50 text-sky-700' :
+              entry.status === 'to_be_paid' ? 'bg-orange-50 text-orange-700' :
               entry.status === 'paid'     ? 'bg-purple-50 text-purple-700' :
               'bg-amber-50 text-amber-700'
             }`}>
-              {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+              {statusLabel(entry.status)}
             </span>
             <span className="text-xs text-gray-400">
               {entry.actorRole === 'employee'

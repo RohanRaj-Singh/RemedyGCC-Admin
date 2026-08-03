@@ -71,6 +71,8 @@ function toClinic(doc: ClinicDocument): Clinic {
     workingHoursAr: doc.workingHoursAr ?? null,
     acceptsInPerson: doc.acceptsInPerson ?? true,
     redirectUrl: doc.redirectUrl ?? null,
+    bankName: doc.bankName ?? null,
+    bankAccountNumber: doc.bankAccountNumber ?? null,
     status: doc.status,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
@@ -99,6 +101,8 @@ function normalizeClinicDocument(doc: ClinicDocument): ClinicDocument {
     workingHoursAr: doc.workingHoursAr ?? null,
     acceptsInPerson: doc.acceptsInPerson ?? true,
     redirectUrl: trimOrNull(doc.redirectUrl),
+    bankName: trimOrNull(doc.bankName),
+    bankAccountNumber: trimOrNull(doc.bankAccountNumber),
     archivedAt: doc.archivedAt ?? null,
   };
 }
@@ -154,6 +158,8 @@ function buildPartialUpdates(
   if (data.workingHoursAr !== undefined) next.workingHoursAr = buildWorkingHours(data.workingHoursAr);
   if (data.acceptsInPerson !== undefined) next.acceptsInPerson = data.acceptsInPerson;
   if (data.redirectUrl !== undefined) next.redirectUrl = normalizeUrl(data.redirectUrl);
+  if (data.bankName !== undefined) next.bankName = trimOrNull(data.bankName);
+  if (data.bankAccountNumber !== undefined) next.bankAccountNumber = trimOrNull(data.bankAccountNumber);
 
   next.updatedAt = now;
   next.archivedAt = nextStatus === 'archived' ? now : (normalized.archivedAt ?? null);
@@ -218,6 +224,8 @@ export async function createClinic(data: CreateClinicDto): Promise<Clinic> {
     workingHoursAr: buildWorkingHours(data.workingHoursAr),
     acceptsInPerson: data.acceptsInPerson ?? true,
     redirectUrl: normalizeUrl(data.redirectUrl),
+    bankName: trimOrNull(data.bankName),
+    bankAccountNumber: trimOrNull(data.bankAccountNumber),
     status,
     createdAt: now,
     updatedAt: now,

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   ArrowLeft, Loader2, AlertCircle, CheckCircle, ShieldAlert,
-  KeyRound, Lock, ShieldX, ShieldCheck, Copy, Check,
+  KeyRound, Lock, ShieldX, ShieldCheck, Copy, Check, Archive, Info,
 } from 'lucide-react';
 
 interface EmployeeDetail {
@@ -15,7 +15,7 @@ interface EmployeeDetail {
   phoneNumber?: string | null;
   bankAccountNumber?: string | null;
   bankName?: string | null;
-  status: 'not_registered' | 'active' | 'inactive' | 'suspended';
+  status: 'not_registered' | 'active' | 'inactive' | 'suspended' | 'archived';
   tenantId: string;
   tenantName: string;
   failedLoginAttempts: number;
@@ -31,6 +31,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   active: { label: 'Active', color: 'bg-emerald-100 text-emerald-700' },
   inactive: { label: 'Inactive', color: 'bg-amber-100 text-amber-700' },
   suspended: { label: 'Suspended', color: 'bg-red-100 text-red-700' },
+  archived: { label: 'Archived', color: 'bg-slate-200 text-slate-700' },
 };
 
 function formatDate(iso: string | null) {
@@ -57,7 +58,7 @@ export default function EmployeeDetailPage() {
 
   // ── Modals ────────────────────────────────────────────────────────────────
   const [confirmModal, setConfirmModal] = useState<{
-    type: 'reset-password' | 'suspend' | 'unsuspend';
+    type: 'reset-password' | 'suspend' | 'unsuspend' | 'archive';
     title: string;
     message: string;
   } | null>(null);
@@ -151,6 +152,14 @@ export default function EmployeeDetailPage() {
       type: 'suspend',
       title: 'Suspend Employee',
       message: 'This will prevent the employee from logging in.',
+    });
+  };
+
+  const openArchiveConfirm = () => {
+    setConfirmModal({
+      type: 'archive',
+      title: 'Archive Employee',
+      message: 'The employee will be prevented from logging in. Their claims and history remain intact. This is not a hard delete.',
     });
   };
 
@@ -313,8 +322,21 @@ export default function EmployeeDetailPage() {
               <p className="text-xs font-medium text-gray-400">Locked Until</p>
               <p className="mt-0.5 text-sm text-gray-700">
                 {isLocked ? formatDate(employee.lockedUntil) : 'Not locked'}
-                {isLocked && <Lock className="inline-block ml-1 h-3.5 w-3.5 text-amber-500" />}
+                {isLocked && (
+                  <span
+                    title="Account temporarily locked after failed login attempts. Unlock to restore access."
+                    className="inline-block"
+                  >
+                    <Lock className="inline-block ml-1 h-3.5 w-3.5 text-amber-500" />
+                  </span>
+                )}
               </p>
+              {isLocked && (
+                <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>Account temporarily locked after failed login attempts. Unlock to restore access.</span>
+                </p>
+              )}
             </div>
             <div>
               <p className="text-xs font-medium text-gray-400">Must Change Password</p>
@@ -386,6 +408,19 @@ export default function EmployeeDetailPage() {
               </button>
             )}
 
+            {/* Archive — only if not already archived */}
+            {employee.status !== 'archived' && (
+              <button
+                type="button"
+                onClick={openArchiveConfirm}
+                disabled={actionLoading !== null}
+                className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                <Archive className="h-4 w-4" />
+                Archive
+              </button>
+            )}
+
             {actionLoading && (
               <span className="inline-flex items-center gap-1.5 text-sm text-gray-500">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -424,7 +459,11 @@ export default function EmployeeDetailPage() {
                 type="button"
                 onClick={handleConfirm}
                 disabled={actionLoading !== null}
-                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50 inline-flex items-center gap-2"
+                className={`rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50 inline-flex items-center gap-2 ${
+                  confirmModal.type === 'archive'
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-amber-500 hover:bg-amber-600'
+                }`}
               >
                 {actionLoading === confirmModal.type && <Loader2 className="h-4 w-4 animate-spin" />}
                 Confirm

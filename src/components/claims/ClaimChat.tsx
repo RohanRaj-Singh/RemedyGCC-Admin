@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MessageSquare, Megaphone, Loader2, Send } from 'lucide-react';
+import { MessageSquare, Megaphone, Info, Loader2, Send } from 'lucide-react';
 
 interface ChatMessage {
   messageId: string;
-  type: 'text' | 'official_update';
+  type: 'message' | 'official_update' | 'system';
   participant: { role: string; id: string; name: string };
   body: string;
   createdAt: string;
@@ -118,21 +118,38 @@ export function ClaimChat({ claimId, apiBase, readOnly = true }: ClaimChatProps)
             No messages yet on this claim.
           </p>
         )}
-        {messages.map((msg) =>
-          msg.type === 'official_update' ? (
-            <div key={msg.messageId} className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-              <div className="mb-1 flex items-center gap-1.5">
-                <Megaphone className="w-3.5 h-3.5 text-blue-600" />
-                <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-                  Official update
-                </span>
-                <span className="ml-auto text-[11px] text-blue-400">
-                  {msg.participant.name} · {formatTime(msg.createdAt)}
+        {messages.map((msg) => {
+          if (msg.type === 'official_update') {
+            return (
+              <div key={msg.messageId} className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <Megaphone className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Official update
+                  </span>
+                  <span className="ml-auto text-[11px] text-blue-400">
+                    {msg.participant.name} · {formatTime(msg.createdAt)}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{msg.body}</p>
+              </div>
+            );
+          }
+          if (msg.type === 'system') {
+            return (
+              <div key={msg.messageId} className="flex justify-center">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px]"
+                  style={{ backgroundColor: 'var(--secondary)', color: 'var(--muted-foreground)' }}
+                >
+                  <Info className="w-3 h-3" />
+                  {msg.body}
+                  <span style={{ color: 'var(--muted-foreground)' }}>· {formatTime(msg.createdAt)}</span>
                 </span>
               </div>
-              <p className="text-sm text-gray-800 whitespace-pre-wrap">{msg.body}</p>
-            </div>
-          ) : (
+            );
+          }
+          return (
             <div key={msg.messageId} className="rounded-lg bg-white p-3 shadow-sm border" style={{ borderColor: 'var(--border)' }}>
               <div className="mb-1 flex items-center gap-2">
                 <span className="text-xs font-semibold" style={{ color: 'var(--foreground)' }}>
@@ -146,8 +163,8 @@ export function ClaimChat({ claimId, apiBase, readOnly = true }: ClaimChatProps)
                 {msg.body}
               </p>
             </div>
-          ),
-        )}
+          );
+        })}
       </div>
 
       {!readOnly && (
@@ -155,6 +172,13 @@ export function ClaimChat({ claimId, apiBase, readOnly = true }: ClaimChatProps)
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter sends; Shift+Enter inserts a newline
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
             rows={2}
             placeholder="Write a message…"
             className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2"

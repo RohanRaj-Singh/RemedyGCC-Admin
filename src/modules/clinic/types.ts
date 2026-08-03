@@ -33,6 +33,10 @@ export interface Clinic {
   acceptsInPerson?: boolean;
   redirectUrl?: string | null;
 
+  /** Payout details — used by the super-admin payment queue. */
+  bankName?: string | null;
+  bankAccountNumber?: string | null;
+
   status: ClinicStatus;
   createdAt: string;
   updatedAt: string;
@@ -59,6 +63,8 @@ export interface CreateClinicDto {
   workingHoursAr?: WorkingHoursEntry[] | null;
   acceptsInPerson?: boolean;
   redirectUrl?: string | null;
+  bankName?: string | null;
+  bankAccountNumber?: string | null;
   status?: ClinicStatus;
 }
 
@@ -82,6 +88,8 @@ export interface UpdateClinicDto {
   workingHoursAr?: WorkingHoursEntry[] | null;
   acceptsInPerson?: boolean;
   redirectUrl?: string | null;
+  bankName?: string | null;
+  bankAccountNumber?: string | null;
   status?: ClinicStatus;
 }
 

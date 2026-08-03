@@ -5,7 +5,6 @@ import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Loader2, FileText, ExternalLink, Clock, CheckCircle, XCircle, Snowflake, Eye, EyeOff, Banknote } from 'lucide-react';
 import ClaimTimeline from '@/components/claims/ClaimTimeline';
 import { ClaimChat } from '@/components/claims/ClaimChat';
-import { ClaimRequests } from '@/components/claims/ClaimRequests';
 
 interface ClaimHistoryEntry {
   status: string;
@@ -37,7 +36,7 @@ interface Claim {
   contactNumber?: string;
   bankAccountNumber?: string;
   bankName?: string;
-  status: 'pending' | 'in_progress' | 'approved' | 'rejected' | 'frozen' | 'paid';
+  status: 'pending' | 'in_progress' | 'approved' | 'to_be_paid' | 'rejected' | 'frozen' | 'paid';
   reviewedBy?: string;
   reviewedAt?: string;
   notes?: string;
@@ -64,6 +63,12 @@ const STATUS_CONFIG: Record<string, { label: string; description: string; icon: 
     description: 'Approved by the tenant.',
     icon: <CheckCircle className="h-5 w-5" />,
     color: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  to_be_paid: {
+    label: 'To Be Paid',
+    description: 'Queued for payout. Awaiting the super admin to send the payment.',
+    icon: <Banknote className="h-5 w-5" />,
+    color: 'bg-orange-50 text-orange-700 border-orange-200',
   },
   rejected: {
     label: 'Rejected',
@@ -348,20 +353,41 @@ export default function ReimbursementDetailPage() {
           readOnly
         />
 
-        {/* Requests — read-only oversight */}
-        <ClaimRequests
-          claimId={claim.reimbursementId}
-          apiBase={`/api/super-admin/reimbursements/${claim.reimbursementId}/requests`}
-        />
-
         {/* Super Admin Actions */}
         {claim.status === 'approved' && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-emerald-800">Queue for Payment</h3>
+                <p className="mt-0.5 text-xs text-emerald-600">
+                  This claim is approved by the tenant. Queue it for payment to add it to the payout queue.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/super-admin/reimbursements/${claim.reimbursementId}/queue-payment`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    });
+                    if (res.ok) window.location.reload();
+                  } catch { /* ignore */ }
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 transition"
+              >
+                <Banknote className="h-4 w-4" />
+                Queue for Payment
+              </button>
+            </div>
+          </div>
+        )}
+        {claim.status === 'to_be_paid' && (
           <div className="rounded-xl border border-purple-200 bg-purple-50 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-purple-800">Approve Payout</h3>
+                <h3 className="text-sm font-semibold text-purple-800">Mark as Paid</h3>
                 <p className="mt-0.5 text-xs text-purple-600">
-                  This claim is approved by the tenant and ready for payment. Mark as paid to complete the lifecycle.
+                  This claim is queued for payout. Mark as paid to complete the lifecycle once the money is sent.
                 </p>
               </div>
               <button

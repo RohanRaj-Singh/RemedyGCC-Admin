@@ -5,12 +5,11 @@ import { apiErrorResponse } from '@/app/api/super-admin/tenants/_utils';
 export const runtime = 'nodejs';
 
 /**
- * Super Admin Claim Requests (read-only)
+ * Super Admin — Mark Invoice Paid
  *
- * Proxies to the Tenant App claim requests endpoint with the shared API key.
- * The Tenant App resolves the caller as the platform-wide super admin.
+ * Proxies to the Tenant App's `/api/invoices/:id/pay` endpoint.
  */
-export async function GET(
+export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
@@ -22,21 +21,24 @@ export async function GET(
     const tenantAppUrl = process.env.TENANT_APP_URL ?? 'http://localhost:3100';
     const apiKey = process.env.ADMIN_API_KEY ?? '';
 
-    const res = await fetch(`${tenantAppUrl}/api/reimbursements/${id}/requests`, {
-      method: 'GET',
-      headers: { 'x-admin-api-key': apiKey },
+    const response = await fetch(`${tenantAppUrl}/api/invoices/${id}/pay`, {
+      method: 'POST',
+      headers: {
+        'x-admin-api-key': apiKey,
+        'Content-Type': 'application/json',
+      },
       signal: AbortSignal.timeout(15_000),
     });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => null);
       return NextResponse.json(
-        { error: body?.error ?? `Tenant App returned ${res.status}` },
-        { status: res.status },
+        { error: errorBody?.error ?? `Tenant App returned ${response.status}` },
+        { status: response.status },
       );
     }
 
-    const data = await res.json();
+    const data = await response.json();
     return NextResponse.json(data, { status: 200 });
   } catch (error) {
     return apiErrorResponse(error, 502);

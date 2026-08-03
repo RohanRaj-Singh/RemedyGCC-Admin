@@ -24,6 +24,8 @@ export interface ClinicDocument {
   workingHoursAr?: { day: string; hours: string }[] | null;
   acceptsInPerson?: boolean;
   redirectUrl?: string | null;
+  bankName?: string | null;
+  bankAccountNumber?: string | null;
   status: 'active' | 'inactive' | 'archived';
   createdAt: string;
   updatedAt: string;

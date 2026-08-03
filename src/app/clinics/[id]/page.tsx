@@ -336,6 +336,23 @@ export default function ClinicDetailPage() {
           </div>
         </div>
 
+        {/* Payout Details */}
+        {(clinic.bankName || clinic.bankAccountNumber) && (
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">Payout Details</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <span className="text-xs font-medium text-gray-500">Bank Name</span>
+                <p className="text-sm mt-0.5">{clinic.bankName || '—'}</p>
+              </div>
+              <div>
+                <span className="text-xs font-medium text-gray-500">Bank Account Number</span>
+                <p className="text-sm mt-0.5 font-mono">{clinic.bankAccountNumber || '—'}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Operations */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-4">Operations</h3>

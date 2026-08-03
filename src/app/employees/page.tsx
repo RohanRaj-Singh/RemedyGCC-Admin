@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Loader2, Search, ChevronLeft, ChevronRight, AlertCircle, AlertTriangle,
   Lock, Users, UserPlus, XCircle, Clock, CheckCircle, Ban,
-  KeyRound, ShieldX, ShieldCheck, Mail,
+  KeyRound, ShieldX, ShieldCheck, Mail, Archive, Trash2,
 } from 'lucide-react';
 
 interface Employee {
@@ -16,7 +16,7 @@ interface Employee {
   phoneNumber?: string | null;
   bankAccountNumber?: string | null;
   bankName?: string | null;
-  status: 'not_registered' | 'active' | 'inactive' | 'suspended';
+  status: 'not_registered' | 'active' | 'inactive' | 'suspended' | 'archived';
   tenantId: string;
   tenantName: string;
   failedLoginAttempts: number;
@@ -39,6 +39,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   active: { label: 'Active', color: 'bg-emerald-100 text-emerald-700' },
   inactive: { label: 'Inactive', color: 'bg-amber-100 text-amber-700' },
   suspended: { label: 'Suspended', color: 'bg-red-100 text-red-700' },
+  archived: { label: 'Archived', color: 'bg-slate-200 text-slate-700' },
 };
 
 function formatDate(iso: string | null) {
@@ -64,11 +65,15 @@ export default function EmployeesPage() {
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [tenantFilter, setTenantFilter] = useState('');
+  const [hideArchived, setHideArchived] = useState(false);
   const [skip, setSkip] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<Employee | null>(null);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
 
-  useEffect(() => { setSelectedIds(new Set()); }, [statusFilter, searchFilter, tenantFilter, skip]);
+  useEffect(() => { setSelectedIds(new Set()); }, [statusFilter, searchFilter, tenantFilter, hideArchived, skip]);
 
   const fetchEmployees = useCallback(async () => {
     setLoading(true); setError(null);
@@ -77,6 +82,7 @@ export default function EmployeesPage() {
       if (searchFilter) p.set('search', searchFilter);
       if (statusFilter) p.set('status', statusFilter);
       if (tenantFilter) p.set('tenantId', tenantFilter);
+      if (hideArchived) p.set('excludeArchived', 'true');
       p.set('skip', String(skip)); p.set('limit', String(PAGE_SIZE));
       const res = await fetch(`/api/super-admin/employees?${p.toString()}`);
       if (!res.ok) throw new Error('Failed to load employees.');
@@ -85,7 +91,7 @@ export default function EmployeesPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unexpected error.');
     } finally { setLoading(false); }
-  }, [searchFilter, statusFilter, tenantFilter, skip]);
+  }, [searchFilter, statusFilter, tenantFilter, hideArchived, skip]);
 
   useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
 
@@ -95,6 +101,7 @@ export default function EmployeesPage() {
     active: employees.filter((e) => e.status === 'active').length,
     inactive: employees.filter((e) => e.status === 'inactive').length,
     suspended: employees.filter((e) => e.status === 'suspended').length,
+    archived: employees.filter((e) => e.status === 'archived').length,
     locked: employees.filter((e) => e.lockedUntil && new Date(e.lockedUntil) > new Date()).length,
   };
 
@@ -113,6 +120,28 @@ export default function EmployeesPage() {
     setSelectedIds(new Set()); setActionLoading(false); fetchEmployees();
   }
 
+  async function confirmArchive() {
+    if (!archiveTarget) return;
+    setArchiveLoading(true);
+    setArchiveError(null);
+    try {
+      const res = await fetch(`/api/super-admin/employees/${archiveTarget.employeeId}/archive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `Archive failed with status ${res.status}`);
+      }
+      setArchiveTarget(null);
+      fetchEmployees();
+    } catch (err) {
+      setArchiveError(err instanceof Error ? err.message : 'An unexpected error occurred.');
+    } finally {
+      setArchiveLoading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200">
@@ -129,7 +158,7 @@ export default function EmployeesPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Summary Cards */}
         {!loading && !error && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-7">
             <div className="rounded-xl border border-gray-200 bg-white p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Total</p>
               <p className="mt-1 text-2xl font-bold text-gray-900">{stats.total}</p>
@@ -154,6 +183,11 @@ export default function EmployeesPage() {
               <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Suspended</p>
               <p className="mt-1 text-2xl font-bold text-red-800">{stats.suspended}</p>
               <p className="text-xs text-red-600 mt-0.5">Admin suspended</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Archived</p>
+              <p className="mt-1 text-2xl font-bold text-slate-800">{stats.archived}</p>
+              <p className="text-xs text-slate-600 mt-0.5">Soft-deleted</p>
             </div>
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">Locked</p>
@@ -187,7 +221,19 @@ export default function EmployeesPage() {
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
               <option value="suspended">Suspended</option>
+              <option value="archived">Archived</option>
             </select>
+          </div>
+          <div className="flex items-end min-w-[140px] pb-0.5">
+            <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-gray-500">
+              <input
+                type="checkbox"
+                checked={hideArchived}
+                onChange={(e) => { setHideArchived(e.target.checked); setSkip(0); }}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600"
+              />
+              Hide Archived
+            </label>
           </div>
         </div>
 
@@ -252,6 +298,7 @@ export default function EmployeesPage() {
                   <th className="hidden px-4 py-3 font-semibold text-gray-600 lg:table-cell">Organization</th>
                   <th className="px-4 py-3 font-semibold text-gray-600">Status</th>
                   <th className="hidden px-4 py-3 font-semibold text-gray-600 lg:table-cell">Last Access</th>
+                  <th className="px-4 py-3 font-semibold text-gray-600">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -278,6 +325,24 @@ export default function EmployeesPage() {
                         </span>
                       </td>
                       <td className="hidden px-4 py-3 text-gray-500 lg:table-cell">{formatDate(emp.lastAccessAt)}</td>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        {emp.status !== 'archived' ? (
+                          <button
+                            onClick={() => setArchiveTarget(emp)}
+                            disabled={actionLoading !== null}
+                            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            title="Archive employee"
+                          >
+                            <Archive className="h-3.5 w-3.5" />
+                            Archive
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs text-slate-400">
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Archived
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -304,6 +369,48 @@ export default function EmployeesPage() {
           </div>
         )}
       </div>
+
+      {/* ── Archive Confirmation Modal ────────────────────────────────────── */}
+      {archiveTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle className="h-6 w-6 text-red-500" />
+              <h3 className="text-lg font-semibold text-gray-900">Archive Employee</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-2">
+              Archive <span className="font-semibold text-gray-900">{archiveTarget.name || archiveTarget.email}</span>?
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              The employee will be prevented from logging in. Their claims and history remain intact. This is not a hard delete.
+            </p>
+            {archiveError && (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {archiveError}
+              </div>
+            )}
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => { setArchiveTarget(null); setArchiveError(null); }}
+                disabled={archiveLoading}
+                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmArchive}
+                disabled={archiveLoading}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                {archiveLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                Archive
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

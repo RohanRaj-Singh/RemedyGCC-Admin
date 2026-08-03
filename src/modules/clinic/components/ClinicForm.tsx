@@ -72,6 +72,10 @@ export function ClinicForm({ clinic, onSubmit, onCancel, isLoading, error }: Cli
   const [acceptsInPerson, setAcceptsInPerson] = useState(clinic?.acceptsInPerson ?? true);
   const [redirectUrl, setRedirectUrl] = useState(clinic?.redirectUrl || '');
 
+  // Payout details
+  const [bankName, setBankName] = useState(clinic?.bankName || '');
+  const [bankAccountNumber, setBankAccountNumber] = useState(clinic?.bankAccountNumber || '');
+
   const [formError, setFormError] = useState('');
   const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -228,6 +232,8 @@ export function ClinicForm({ clinic, onSubmit, onCancel, isLoading, error }: Cli
       workingHoursAr: workingHoursAr.some((h) => h.hours.trim()) ? workingHoursAr : null,
       acceptsInPerson,
       redirectUrl: redirectUrl.trim() || null,
+      bankName: bankName.trim() || null,
+      bankAccountNumber: bankAccountNumber.trim() || null,
     });
   };
 
@@ -491,6 +497,26 @@ export function ClinicForm({ clinic, onSubmit, onCancel, isLoading, error }: Cli
             <p className="mt-1 text-xs text-gray-500">
               If set, clicking this clinic on the directory will redirect to this URL instead of the detail page.
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== SECTION: Payout Details ===== */}
+      <section className={sectionClass}>
+        <h2 className={sectionTitleClass}>Payout Details</h2>
+        <p className={sectionDescClass}>
+          Bank information used for clinic payouts in the payment queue.
+        </p>
+        <div className="mt-5 grid gap-5 md:grid-cols-2">
+          <div>
+            <label className={labelClass}>Bank Name</label>
+            <input type="text" value={bankName} onChange={(e) => setBankName(e.target.value)}
+              disabled={isArchived} placeholder="e.g., Bank Muscat" className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Bank Account Number</label>
+            <input type="text" value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)}
+              disabled={isArchived} placeholder="e.g., 0107 1234 5678 9012" className={inputClass} />
           </div>
         </div>
       </section>
