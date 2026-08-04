@@ -5,7 +5,6 @@
 
 import type { Metadata } from 'next';
 import './globals.css';
-import { DevBanner } from '@/components/layout/DevBanner';
 import { ThemeProvider } from '@/context/ThemeProvider';
 import { DEFAULT_BRANDING } from '@/types/branding';
 import { AppShell } from './AppShell';
@@ -23,7 +22,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <DevBanner />
         <ThemeProvider defaultBranding={DEFAULT_BRANDING}>
           <AppShell>{children}</AppShell>
         </ThemeProvider>

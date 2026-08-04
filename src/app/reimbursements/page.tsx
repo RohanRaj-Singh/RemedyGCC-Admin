@@ -3,8 +3,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Loader2, Search, ChevronLeft, ChevronRight, AlertCircle, AlertTriangle, Banknote, X,
+  Loader2, Search, ChevronLeft, ChevronRight, AlertCircle, AlertTriangle, Banknote, X, Wallet, Landmark,
 } from 'lucide-react';
+import WorkflowStepper from '@/components/financial/WorkflowStepper';
+import SuccessBanner from '@/components/financial/SuccessBanner';
 
 interface Claim {
   reimbursementId: string;
@@ -17,6 +19,8 @@ interface Claim {
   description: string;
   receiptUrl?: string;
   status: 'pending' | 'in_progress' | 'approved' | 'to_be_paid' | 'rejected' | 'frozen' | 'paid';
+  bankAccountNumber?: string;
+  bankName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -50,12 +54,30 @@ function formatDate(iso: string) {
   });
 }
 
+/**
+ * Financial pipeline position for the Super Admin. Only approved/queued/paid
+ * claims are "in" the payment pipeline; all earlier statuses are pre-pipeline.
+ */
+function paymentStage(status: string): { label: string; cls: string } {
+  switch (status) {
+    case 'approved':
+      return { label: 'Awaiting Queue', cls: 'bg-emerald-50 text-emerald-700' };
+    case 'to_be_paid':
+      return { label: 'Queued for Payout', cls: 'bg-orange-50 text-orange-700' };
+    case 'paid':
+      return { label: 'Paid', cls: 'bg-purple-50 text-purple-700' };
+    default:
+      return { label: 'Not in pipeline', cls: 'bg-gray-100 text-gray-500' };
+  }
+}
+
 export default function SuperAdminClaimsPage() {
   const router = useRouter();
   const [claims, setClaims] = useState<Claim[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
   const [tenantFilter, setTenantFilter] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
@@ -123,33 +145,25 @@ export default function SuperAdminClaimsPage() {
   const allSelected = claims.length > 0 && claims.every((c) => selectedIds.has(c.reimbursementId));
 
   /**
-   * Phase 5 payout flow: approved claims are first queued for payment
-   * (`approved → to_be_paid`) and then paid (`to_be_paid → paid`). Claims that
-   * are already `to_be_paid` are paid directly.
+   * Derive bulk-action eligibility from the *selected* claims' statuses only.
+   *
+   * Approved canonical workflow: the Claims page is monitor/review only. It does
+   * NOT change payment state — `approved → to_be_paid` happens automatically when
+   * an invoice is marked paid, and `to_be_paid → paid` happens in the Payments
+   * workspace. The only bulk actions here are communication (Send Update) and a
+   * navigation hint toward Invoices for approved claims.
    */
-  async function paySelected() {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
-    setActionLoading(true);
-    for (const id of ids) {
-      try {
-        const claim = claims.find((c) => c.reimbursementId === id);
-        if (claim?.status === 'approved') {
-          await fetch(`/api/super-admin/reimbursements/${id}/queue-payment`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-        await fetch(`/api/super-admin/reimbursements/${id}/pay`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-      } catch { /* continue */ }
-    }
-    setSelectedIds(new Set());
-    setActionLoading(false);
-    fetchClaims();
-  }
+  const selectedClaims = useMemo(
+    () => claims.filter((c) => selectedIds.has(c.reimbursementId)),
+    [claims, selectedIds],
+  );
+
+  const selection = useMemo(() => {
+    const statuses = [...new Set(selectedClaims.map((c) => c.status))];
+    const hasApproved = selectedClaims.length > 0 && statuses.length === 1 && statuses[0] === 'approved';
+    const hasBlockingMix = statuses.length > 1;
+    return { statuses, hasApproved, hasBlockingMix };
+  }, [selectedClaims]);
 
   /**
    * Bulk progress update (FR-046): send one update message to the selected
@@ -202,6 +216,14 @@ export default function SuperAdminClaimsPage() {
     setUpdateError('');
     setSelectedIds(new Set());
     setActionLoading(false);
+    if (updated > 0) {
+      const orgCount = byTenant.size;
+      setSuccess(
+        `${updated} claim${updated === 1 ? '' : 's'} updated. ${skipped > 0 ? `${skipped} skipped. ` : ''}Notified employees across ${orgCount} organization${orgCount === 1 ? '' : 's'}.`,
+      );
+    } else if (skipped > 0) {
+      setError('Update failed — no claims could be updated. Please try again.');
+    }
     fetchClaims();
   }
 
@@ -225,6 +247,8 @@ export default function SuperAdminClaimsPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        <WorkflowStepper current="claims" />
+
         {/* Summary Cards with Amounts */}
         {!loading && !error && (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-8">
@@ -271,24 +295,25 @@ export default function SuperAdminClaimsPage() {
           </div>
         )}
 
-        {/* Payout Hub — Quick action for approved / to_be_paid claims */}
-        {(stats.approved > 0 || stats.to_be_paid > 0) && !loading && (
+        {/* Finance Queue — approved claims await billing; billing happens in Invoices */}
+        {stats.approved > 0 && !loading && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Banknote className="h-6 w-6 text-emerald-600" />
                 <div>
-                  <p className="text-sm font-semibold text-emerald-800">
-                    {stats.approved} approved claims ready to queue for payout
-                  </p>
-                  <p className="text-xs text-emerald-600">
-                    {stats.to_be_paid > 0
-                      ? `${stats.to_be_paid} queued claims (${formatCurrency(stats.toBePaidAmount)}) awaiting payout. `
-                      : ''}
-                    Select claims below and queue approved ones for payment, then mark queued claims as paid.
+                  <p className="text-sm font-semibold text-emerald-800">Ready for billing.</p>
+                  <p className="text-xs text-emerald-600 mt-0.5">
+                    {stats.approved} approved claim{stats.approved === 1 ? '' : 's'} {stats.approved === 1 ? 'is' : 'are'} waiting to be invoiced. Billing happens in the Invoices module.
                   </p>
                 </div>
               </div>
+              <button
+                onClick={() => router.push('/invoices')}
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 transition"
+              >
+                <Landmark className="h-4 w-4" /> Go To Invoices
+              </button>
             </div>
           </div>
         )}
@@ -347,13 +372,31 @@ export default function SuperAdminClaimsPage() {
         {/* Bulk Actions Bar */}
         {selectedIds.size > 0 && (
           <div className="sticky top-0 z-10 rounded-xl bg-gray-900 px-5 py-3 shadow-lg">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-white">{selectedIds.size} selected</p>
-              <div className="flex gap-2">
-                <button onClick={paySelected} disabled={actionLoading}
-                  className="rounded-lg bg-purple-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-600 disabled:opacity-50">
-                  {actionLoading ? 'Processing...' : 'Queue & Mark Paid'}
-                </button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium text-white">
+                {selectedIds.size} selected
+                {selection.statuses.length === 1 && (
+                  <span className="ml-2 text-xs text-gray-400">
+                    · {STATUS_CONFIG[selection.statuses[0]]?.label ?? selection.statuses[0]}
+                  </span>
+                )}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {selection.hasBlockingMix ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-300"
+                    title="Selected claims span multiple workflow stages. Filter to a single stage.">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Mixed statuses — filter to one stage
+                  </span>
+                ) : selection.hasApproved ? (
+                  <button onClick={() => router.push('/invoices')}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600">
+                    <Landmark className="h-3.5 w-3.5" />
+                    Go To Invoices
+                  </button>
+                ) : (
+                  <span className="text-xs text-gray-400">No financial action for this status</span>
+                )}
                 <button onClick={openUpdateModal} disabled={actionLoading}
                   className="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-600 disabled:opacity-50">
                   Send Update
@@ -373,6 +416,10 @@ export default function SuperAdminClaimsPage() {
         )}
 
         {/* Error */}
+        {success && !loading && (
+          <SuccessBanner message={success} />
+        )}
+
         {error && !loading && (
           <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
             <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
@@ -405,6 +452,8 @@ export default function SuperAdminClaimsPage() {
                   <th className="px-4 py-3 font-semibold text-gray-600">Employee</th>
                   <th className="hidden px-4 py-3 font-semibold text-gray-600 md:table-cell">Amount</th>
                   <th className="px-4 py-3 font-semibold text-gray-600">Status</th>
+                  <th className="hidden px-4 py-3 font-semibold text-gray-600 lg:table-cell">Payment Stage</th>
+                  <th className="hidden px-4 py-3 font-semibold text-gray-600 xl:table-cell">Bank</th>
                   <th className="hidden px-4 py-3 font-semibold text-gray-600 lg:table-cell">Age</th>
                 </tr>
               </thead>
@@ -426,6 +475,30 @@ export default function SuperAdminClaimsPage() {
                       <td className="hidden px-4 py-3 font-medium text-gray-900 md:table-cell">{formatCurrency(claim.amount)}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${sc.color}`}>{sc.label}</span>
+                      </td>
+                      <td className="hidden px-4 py-3 lg:table-cell">
+                        {(() => {
+                          const stage = paymentStage(claim.status);
+                          return (
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${stage.cls}`}>
+                              {claim.status === 'approved' && <Landmark className="h-3 w-3" />}
+                              {claim.status === 'to_be_paid' && <Wallet className="h-3 w-3" />}
+                              {claim.status === 'paid' && <Banknote className="h-3 w-3" />}
+                              {stage.label}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td className="hidden px-4 py-3 xl:table-cell">
+                        {(() => {
+                          const hasBank = Boolean(claim.bankAccountNumber?.trim() && claim.bankName?.trim());
+                          return (
+                            <span className={`inline-flex items-center gap-1 text-xs font-medium ${hasBank ? 'text-emerald-600' : 'text-amber-600'}`}>
+                              {hasBank ? <Landmark className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                              {hasBank ? claim.bankName : 'No bank'}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="hidden px-4 py-3 lg:table-cell">
                         {(() => {

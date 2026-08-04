@@ -146,3 +146,49 @@ h1, h2, h3, h4, h5, h6 {
   opacity: 0.5;
   background: rgba(255, 255, 255, 0.8) !important;
 }
+
+/* ── Print / PDF financial documents ─────────────────────────────────────────
+ * Templates rendered on Invoice Detail, Payment Detail and Claim Detail. The
+ * ".print-area" document is styled like A4 paper; on print the app chrome
+ * (sidebar, toolbar, buttons) is hidden and only the document is emitted, so
+ * "Download PDF" (window.print → Save as PDF) yields a clean financial document.
+ */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+  body {
+    background: white !important;
+  }
+  /* Hide app chrome (Sidebar is the only <aside>; toolbar/buttons are .print-hide). */
+  aside {
+    display: none !important;
+  }
+  main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+  .print-hide {
+    display: none !important;
+  }
+  /* Flatten the on-screen paper card into a clean page. */
+  .print-area {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+  /* Avoid orphaned table rows across pages. */
+  table {
+    break-inside: auto;
+  }
+  tr {
+    break-inside: avoid;
+  }
+  thead {
+    display: table-header-group;
+  }
+}

@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ArrowLeft, Loader2, FileText, ExternalLink, Clock, CheckCircle, XCircle, Snowflake, Eye, EyeOff, Banknote } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText, ExternalLink, Clock, CheckCircle, XCircle, Snowflake, Eye, EyeOff, Banknote, Printer } from 'lucide-react';
+import PrintableClaimReceipt from '@/components/financial/PrintableClaimReceipt';
 import ClaimTimeline from '@/components/claims/ClaimTimeline';
+import FinancialTimeline from '@/components/claims/FinancialTimeline';
 import { ClaimChat } from '@/components/claims/ClaimChat';
 
 interface ClaimHistoryEntry {
@@ -109,6 +111,13 @@ export default function ReimbursementDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
+  // Light financial linkage: funding invoice + payment reference (best-effort).
+  const [paymentLink, setPaymentLink] = useState<{
+    invoiceId?: string;
+    invoiceNumber?: string;
+    paymentReference?: string;
+    paymentStatus?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!claimId) return;
@@ -119,6 +128,23 @@ export default function ReimbursementDetailPage() {
         if (!res.ok) throw new Error('Claim not found.');
         const found = await res.json();
         setClaim(found);
+        // Best-effort: does this claim have a payment record (queued or paid)?
+        try {
+          const pRes = await fetch(`/api/super-admin/payments/${claimId}`);
+          if (pRes.ok) {
+            const p = await pRes.json();
+            if (p?.paymentRecord) {
+              setPaymentLink({
+                invoiceId: p.paymentRecord.invoiceId,
+                invoiceNumber: p.invoiceNumber,
+                paymentReference: p.paymentRecord.paymentReference,
+                paymentStatus: p.paymentRecord.status,
+              });
+            }
+          }
+        } catch {
+          // Ignore — linkage is best-effort.
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load claim.');
       } finally {
@@ -151,7 +177,7 @@ export default function ReimbursementDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-3xl mx-auto px-4 py-6 space-y-6 print:hidden">
         <button onClick={() => router.push('/reimbursements')} className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900">
           <ArrowLeft className="h-4 w-4" /> Back to Claims
         </button>
@@ -165,6 +191,13 @@ export default function ReimbursementDetailPage() {
             {sc.icon}
             <span className="text-sm font-semibold">{sc.label}</span>
           </div>
+        </div>
+
+        <div className="print-hide flex items-center gap-2">
+          <button onClick={() => window.print()}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90">
+            <Printer className="h-4 w-4" /> Download Receipt (PDF)
+          </button>
         </div>
 
         {sc.description && (
@@ -338,6 +371,13 @@ export default function ReimbursementDetailPage() {
           </div>
         )}
 
+        {/* Financial Timeline — payment-pipeline milestones (financial oversight) */}
+        {claim.history && claim.history.length > 0 && (
+          <div className="rounded-xl border border-gray-200 bg-white p-5">
+            <FinancialTimeline history={claim.history} />
+          </div>
+        )}
+
         {/* Notes */}
         {claim.notes && (
           <div className="rounded-xl border border-gray-200 bg-white p-5">
@@ -353,30 +393,23 @@ export default function ReimbursementDetailPage() {
           readOnly
         />
 
-        {/* Super Admin Actions */}
+        {/* Super Admin Guidance — approved canonical workflow */}
         {claim.status === 'approved' && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-emerald-800">Queue for Payment</h3>
+                <h3 className="text-sm font-semibold text-emerald-800">Ready for billing.</h3>
                 <p className="mt-0.5 text-xs text-emerald-600">
-                  This claim is approved by the tenant. Queue it for payment to add it to the payout queue.
+                  This claim is approved and waiting to be invoiced. Billing happens in the Invoices module.
                 </p>
               </div>
               <button
                 type="button"
-                onClick={async () => {
-                  try {
-                    const res = await fetch(`/api/super-admin/reimbursements/${claim.reimbursementId}/queue-payment`, {
-                      method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    });
-                    if (res.ok) window.location.reload();
-                  } catch { /* ignore */ }
-                }}
+                onClick={() => router.push('/invoices')}
                 className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 transition"
               >
                 <Banknote className="h-4 w-4" />
-                Queue for Payment
+                Go To Invoices
               </button>
             </div>
           </div>
@@ -385,29 +418,99 @@ export default function ReimbursementDetailPage() {
           <div className="rounded-xl border border-purple-200 bg-purple-50 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-purple-800">Mark as Paid</h3>
+                <h3 className="text-sm font-semibold text-purple-800">Awaiting payout</h3>
                 <p className="mt-0.5 text-xs text-purple-600">
-                  This claim is queued for payout. Mark as paid to complete the lifecycle once the money is sent.
+                  This claim is queued for payout. Payments are processed in the Payments workspace.
                 </p>
               </div>
               <button
                 type="button"
-                onClick={async () => {
-                  try {
-                    const res = await fetch(`/api/super-admin/reimbursements/${claim.reimbursementId}/pay`, {
-                      method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    });
-                    if (res.ok) window.location.reload();
-                  } catch { /* ignore */ }
-                }}
+                onClick={() => router.push('/payments')}
                 className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-purple-700 transition"
               >
                 <Banknote className="h-4 w-4" />
-                Mark as Paid
+                Go To Payments
               </button>
             </div>
           </div>
         )}
+        {claim.status === 'paid' && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-emerald-800">Financial process complete.</h3>
+                <p className="mt-0.5 text-xs text-emerald-600">
+                  This claim has been paid. The approved workflow (approved → invoiced → paid) is finished for this claim.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => router.push('/payments')}
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 transition"
+              >
+                <CheckCircle className="h-4 w-4" />
+                View Payment History
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Financial linkage — light block: funding invoice + payment reference */}
+        {paymentLink && (
+          <div className="rounded-xl border border-gray-200 bg-white p-5">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Financial</h3>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <p className="text-xs font-medium text-gray-400">Invoice</p>
+                {paymentLink.invoiceNumber ? (
+                  <a href={`/invoices/${paymentLink.invoiceId}`}
+                    className="mt-0.5 inline-flex items-center gap-1 font-mono text-sm font-semibold text-blue-600 hover:text-blue-800">
+                    {paymentLink.invoiceNumber}
+                  </a>
+                ) : (
+                  <p className="mt-0.5 text-sm text-gray-400">—</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-400">Payment</p>
+                {paymentLink.paymentReference ? (
+                  <a href={`/payments/${claimId}`}
+                    className="mt-0.5 inline-flex items-center gap-1 font-mono text-sm font-semibold text-blue-600 hover:text-blue-800">
+                    {paymentLink.paymentReference}
+                  </a>
+                ) : (
+                  <p className="mt-0.5 text-sm text-gray-400">—</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-400">Status</p>
+                <p className="mt-0.5 text-sm font-medium text-gray-900">
+                  {paymentLink.paymentStatus === 'paid' ? 'Paid' : 'Queued for payout'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Claim Payment Receipt — printable PDF (only rendered on print) */}
+      <div className="hidden print:block">
+        <PrintableClaimReceipt
+          claimNumber={claim.claimNumber}
+          reimbursementId={claim.reimbursementId}
+          employeeName={claim.employeeName}
+          clinicName={claim.clinicName}
+          amount={claim.amount}
+          serviceDate={claim.serviceDate}
+          sessionCount={claim.sessionCount}
+          sessionTypes={claim.sessionTypes}
+          status={claim.status}
+          invoiceNumber={paymentLink?.invoiceNumber}
+          invoiceId={paymentLink?.invoiceId}
+          paymentReference={paymentLink?.paymentReference}
+          paymentClaimId={claim.reimbursementId}
+          paymentStatus={paymentLink?.paymentStatus}
+        />
       </div>
     </div>
   );
