@@ -82,7 +82,8 @@ const __strip = (value) => {
   return next;
 };
 
-try {
+(function() {
+  try {
     ${dbSwitch}${scriptBody}
   } catch (error) {
     __emit({
@@ -96,6 +97,7 @@ try {
     });
     quit(1);
   }
+})();
 `;
 }
 

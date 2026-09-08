@@ -1,10 +1,10 @@
 'use client';
 
-  import { useState, useEffect, useCallback } from 'react';
+  import { useState, useEffect, useCallback, type ReactNode } from 'react';
   import { useRouter, useSearchParams } from 'next/navigation';
   import {
-      ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download,
-      Receipt, RefreshCw, Search, FileText, Wallet,
+      Archive, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download,
+      Printer, Receipt, RefreshCw, Search, Send, FileText, Wallet, X,
     } from 'lucide-react';
   import WorkflowStepper from '@/components/financial/WorkflowStepper';
   import WorkspaceSegments from '@/components/financial/WorkspaceSegments';
@@ -17,6 +17,16 @@
   import SuccessBanner from '@/components/financial/SuccessBanner';
   import { formatCurrency, formatDate } from '@/lib/financial/format';
   import { INVOICE_STATUS_DISPLAY, INVOICE_STATUS_TONE, type InvoiceStatus } from '@/lib/financial/status';
+  import PrintableInvoicePackage from '@/components/financial/PrintableInvoicePackage';
+  import {
+    deselectPageInvoices,
+    distinctOrgCount,
+    planBulkTransition,
+    planInvoicePackage,
+    selectPageInvoices,
+    selectedInvoices,
+    toggleInvoiceSelection,
+  } from '@/lib/financial/invoiceSelection';
   import { useTenants } from '@/context/TenantsProvider';
 
 // ── A/R lifecycle (frozen: draft → issued → paid → archived) ───────────────
@@ -77,6 +87,52 @@ function getErrorMessage(err: unknown): string {
   return 'An unexpected error occurred.';
 }
 
+/** Minimal inline confirmation modal (the page convention — no dialog kit). */
+function ConfirmDialog({
+  title,
+  children,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+  busy,
+}: {
+  title: string;
+  children: ReactNode;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  busy?: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4 print:hidden">
+      <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-lg">
+        <div className="px-5 py-4">
+          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+          <div className="mt-2 space-y-2 text-sm text-gray-600">{children}</div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? 'Working…' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 async function readError(res: Response): Promise<string> {
   try {
     const body = await res.json();
@@ -124,6 +180,26 @@ export default function InvoicesPage() {
   const [payError, setPayError] = useState<string | null>(null);
   const [paySuccess, setPaySuccess] = useState<string | null>(null);
 
+  // ── Bulk selection (bulk-invoice audit Phases A–C) ──────────────────────────
+  // Selection is scoped to the current page and cleared whenever the list scope
+  // (organization / status / pagination) changes, so a selection can never
+  // silently span organizations or stale rows. Bulk issue/archive reuse the
+  // per-invoice state rules (the backend re-validates every invoice); the PDF
+  // package is an organization-scoped delivery convenience, never a financial
+  // document — it changes no state.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkResult, setBulkResult] = useState<{
+    kind: 'issue' | 'archive';
+    ok: number;
+    skipped: Array<{ invoiceNumber: string; reason: string }>;
+  } | null>(null);
+  const [confirmBulkIssue, setConfirmBulkIssue] = useState(false);
+  const [confirmBulkArchive, setConfirmBulkArchive] = useState(false);
+  const [confirmPackage, setConfirmPackage] = useState(false);
+  const [packageOpen, setPackageOpen] = useState(false);
+
   async function recordOrganizationPayment(invoice: ArInvoice) {
     if (payingInvoiceId) return;
     setPayingInvoiceId(invoice.invoiceId);
@@ -146,6 +222,60 @@ export default function InvoicesPage() {
       setPayError(err instanceof Error ? err.message : 'Failed to record payment.');
       setPayingInvoiceId(null);
     }
+  }
+
+  // ── Bulk plan + handlers (bulk-invoice audit Phases A–C) ────────────────────
+  // The plan is advisory (pure, unit-tested helpers) — the backend re-validates
+  // every invoice individually with the same rules as the single-invoice
+  // workflow and reports per-item outcomes. Nothing is silently partial: the
+  // confirmation shows exactly what will happen and the result lists every
+  // skipped invoice with its reason.
+  const selected = selectedInvoices(invoices, selectedIds);
+  const issuePlan = planBulkTransition(selected, ['draft'], 'Issue');
+  const archivePlan = planBulkTransition(selected, ['paid'], 'Archive');
+  const packagePlan = planInvoicePackage(selected);
+  const visibleIds = invoices.map((invoice) => invoice.invoiceId);
+  const pageFullySelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+
+  async function runBulkTransition(kind: 'issue' | 'archive', invoiceIds: string[]) {
+    if (invoiceIds.length === 0 || bulkBusy) return;
+    setBulkBusy(true);
+    setBulkError(null);
+    setBulkResult(null);
+    setConfirmBulkIssue(false);
+    setConfirmBulkArchive(false);
+    try {
+      const res = await fetch(`/api/super-admin/invoices/bulk-${kind}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoiceIds }),
+      });
+      if (!res.ok) {
+        throw new Error(await readError(res));
+      }
+      const data: { processed?: string[]; rejected?: Array<{ invoiceId: string; reason: string }> } =
+        await res.json();
+      const skipped = (data.rejected ?? []).map((r) => ({
+        invoiceNumber:
+          invoices.find((invoice) => invoice.invoiceId === r.invoiceId)?.invoiceNumber ??
+          r.invoiceId,
+        reason: r.reason,
+      }));
+      setBulkResult({ kind, ok: (data.processed ?? []).length, skipped });
+      setSelectedIds([]);
+      setInvSkip(0);
+      void fetchInvoices();
+    } catch (err) {
+      setBulkError(getErrorMessage(err));
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  function openPackagePreview() {
+    setConfirmPackage(false);
+    setPackageOpen(true);
   }
 
   // Ledger state (with its own pagination).
@@ -254,6 +384,7 @@ export default function InvoicesPage() {
     setOrgFilter(org.orgId);
     setInvStatusFilter('');
     setInvSkip(0);
+    setSelectedIds([]);
   }
 
   const invTotalPages = Math.max(1, Math.ceil(invTotal / PAGE_SIZE));
@@ -262,7 +393,8 @@ export default function InvoicesPage() {
   const ledgerCurrentPage = Math.floor(ledgerSkip / PAGE_SIZE) + 1;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
+      <div className={`min-h-screen bg-gray-50 ${packageOpen ? 'print:hidden' : ''}`}>
       <FinancialWorkflowHeader
         icon={<Receipt className="h-6 w-6 text-primary" />}
         iconContainerClass="bg-primary/10"
@@ -314,6 +446,7 @@ export default function InvoicesPage() {
                   setOrgFilter(e.target.value);
                   setInvSkip(0);
                   setLedgerSkip(0);
+                  setSelectedIds([]);
                 }}
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
               >
@@ -333,6 +466,7 @@ export default function InvoicesPage() {
                 onChange={(e) => {
                   setInvStatusFilter(e.target.value);
                   setInvSkip(0);
+                  setSelectedIds([]);
                 }}
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
               >
@@ -399,6 +533,115 @@ export default function InvoicesPage() {
             </div>
           )}
 
+          {/* ── Bulk result + selection toolbar (bulk-invoice audit Phases A–C) ── */}
+          {!invLoading && !invError && bulkError && (
+            <FinancialExceptionBanner
+              title="Bulk action failed"
+              exceptions={[bulkError]}
+              onDismiss={() => setBulkError(null)}
+            />
+          )}
+          {!invLoading && !invError && bulkResult && (
+            <div className="print-hide rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-emerald-900">
+                    {bulkResult.ok} invoice{bulkResult.ok === 1 ? '' : 's'}{' '}
+                    {bulkResult.kind === 'issue' ? 'issued' : 'archived'} successfully.
+                    {bulkResult.skipped.length > 0
+                      ? ` ${bulkResult.skipped.length} were not changed.`
+                      : ''}
+                  </p>
+                  {bulkResult.skipped.length > 0 && (
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-amber-800">
+                      {bulkResult.skipped.map((skip) => (
+                        <li key={skip.invoiceNumber}>
+                          {skip.invoiceNumber} — {skip.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBulkResult(null)}
+                  className="text-xs font-medium text-emerald-700 hover:text-emerald-900"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+          {selectedIds.length > 0 && !invLoading && !invError && (
+            <div className="print-hide rounded-xl border border-primary/30 bg-white px-4 py-3 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {selectedIds.length} invoice{selectedIds.length === 1 ? '' : 's'} selected
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Total{' '}
+                    {formatCurrency(selected.reduce((s, invoice) => s + invoice.totalAmount, 0))}
+                    {distinctOrgCount(selected) > 1
+                      ? ' — multiple organizations selected'
+                      : ` — ${orgNameOf(selected[0].tenantId)}`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {issuePlan.eligible.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmBulkIssue(true)}
+                      disabled={bulkBusy}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                    >
+                      <Send className="h-4 w-4" />
+                      Issue {issuePlan.eligible.length}
+                    </button>
+                  )}
+                  {archivePlan.eligible.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmBulkArchive(true)}
+                      disabled={bulkBusy}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <Archive className="h-4 w-4" />
+                      Archive {archivePlan.eligible.length}
+                    </button>
+                  )}
+                  {packagePlan.ok && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmPackage(true)}
+                      disabled={bulkBusy}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <Printer className="h-4 w-4" />
+                      Download PDF package
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(deselectPageInvoices(visibleIds, selectedIds))}
+                    disabled={bulkBusy}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                  >
+                    <X className="h-4 w-4" />
+                    Clear
+                  </button>
+                </div>
+              </div>
+              {(issuePlan.ineligible.length > 0 || archivePlan.ineligible.length > 0) && (
+                <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Some selected invoices cannot take every action — each action re-validates every
+                  invoice and skips the ones it does not apply to. Details are shown before you
+                  confirm.
+                </p>
+              )}
+            </div>
+          )}
+
           {!invLoading && !invError && invoices.length === 0 && (
             <FinancialEmptyState
               icon={<Receipt className="h-5 w-5" />}
@@ -412,6 +655,21 @@ export default function InvoicesPage() {
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="print-hide w-10 px-4 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all invoices on this page"
+                        checked={pageFullySelected}
+                        onChange={() =>
+                          setSelectedIds((current) =>
+                            pageFullySelected
+                              ? deselectPageInvoices(visibleIds, current)
+                              : selectPageInvoices(visibleIds, current),
+                          )
+                        }
+                        className="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                    </th>
                     <th className="px-4 py-3 font-semibold text-gray-600">Invoice #</th>
                     <th className="px-4 py-3 font-semibold text-gray-600">Organization</th>
                     <th className="px-4 py-3 font-semibold text-gray-600">Amount</th>
@@ -426,6 +684,19 @@ export default function InvoicesPage() {
                 <tbody>
                   {invoices.map((invoice) => (
                     <tr key={invoice.invoiceId} className="border-b border-gray-50 hover:bg-gray-50">
+                      <td className="print-hide px-4 py-3">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select invoice ${invoice.invoiceNumber}`}
+                          checked={selectedIds.includes(invoice.invoiceId)}
+                          onChange={() =>
+                            setSelectedIds((current) =>
+                              toggleInvoiceSelection(current, invoice.invoiceId),
+                            )
+                          }
+                          className="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <FinancialRecordLink
                           kind="invoice"
@@ -700,5 +971,172 @@ export default function InvoicesPage() {
     </section>
   </div>
 </div>
+
+      {/* ── Bulk confirmations — show exactly what will happen before it does ── */}
+      {confirmBulkIssue && (
+        <ConfirmDialog
+          title="Issue invoices?"
+          confirmLabel={`Issue ${issuePlan.eligible.length}`}
+          busy={bulkBusy}
+          onConfirm={() =>
+            runBulkTransition(
+              'issue',
+              issuePlan.eligible.map((invoice) => invoice.invoiceId),
+            )
+          }
+          onCancel={() => setConfirmBulkIssue(false)}
+        >
+          <p>
+            {issuePlan.eligible.length} invoice{issuePlan.eligible.length === 1 ? '' : 's'} will
+            move from “Ready to Send” to “Awaiting Organization Payment”.
+          </p>
+          <p>
+            Total{' '}
+            {formatCurrency(issuePlan.eligible.reduce((s, invoice) => s + invoice.totalAmount, 0))}
+            {distinctOrgCount(issuePlan.eligible) === 1
+              ? ` — ${orgNameOf(issuePlan.eligible[0].tenantId)}`
+              : ' — multiple organizations'}
+          </p>
+          {issuePlan.ineligible.length > 0 && (
+            <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <p className="font-semibold">
+                {issuePlan.ineligible.length} selected invoice
+                {issuePlan.ineligible.length === 1 ? '' : 's'} cannot be issued and will not change:
+              </p>
+              <ul className="mt-1 list-disc pl-4">
+                {issuePlan.ineligible.map(({ invoice, reason }) => (
+                  <li key={invoice.invoiceId}>{reason}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </ConfirmDialog>
+      )}
+      {confirmBulkArchive && (
+        <ConfirmDialog
+          title="Archive invoices?"
+          confirmLabel={`Archive ${archivePlan.eligible.length}`}
+          busy={bulkBusy}
+          onConfirm={() =>
+            runBulkTransition(
+              'archive',
+              archivePlan.eligible.map((invoice) => invoice.invoiceId),
+            )
+          }
+          onCancel={() => setConfirmBulkArchive(false)}
+        >
+          <p>
+            {archivePlan.eligible.length} paid invoice
+            {archivePlan.eligible.length === 1 ? '' : 's'} will move to “Closed”. Archiving does not
+            change any amounts.
+          </p>
+          <p>
+            Total{' '}
+            {formatCurrency(archivePlan.eligible.reduce((s, invoice) => s + invoice.totalAmount, 0))}
+            {distinctOrgCount(archivePlan.eligible) === 1
+              ? ` — ${orgNameOf(archivePlan.eligible[0].tenantId)}`
+              : ' — multiple organizations'}
+          </p>
+          {archivePlan.ineligible.length > 0 && (
+            <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <p className="font-semibold">
+                {archivePlan.ineligible.length} selected invoice
+                {archivePlan.ineligible.length === 1 ? '' : 's'} cannot be archived and will not
+                change:
+              </p>
+              <ul className="mt-1 list-disc pl-4">
+                {archivePlan.ineligible.map(({ invoice, reason }) => (
+                  <li key={invoice.invoiceId}>{reason}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </ConfirmDialog>
+      )}
+      {confirmPackage && packagePlan.ok && (
+        <ConfirmDialog
+          title="Create invoice package?"
+          confirmLabel="Create PDF package"
+          onConfirm={openPackagePreview}
+          onCancel={() => setConfirmPackage(false)}
+        >
+          <p>
+            <span className="font-semibold text-gray-900">Organization:</span>{' '}
+            {orgNameOf(packagePlan.orgId ?? '')}
+          </p>
+          <p>
+            <span className="font-semibold text-gray-900">Invoices:</span>{' '}
+            {packagePlan.invoices.length}
+          </p>
+          <p>
+            <span className="font-semibold text-gray-900">Total:</span>{' '}
+            {formatCurrency(packagePlan.total)}
+          </p>
+          <p>
+            <span className="font-semibold text-gray-900">Documents:</span>{' '}
+            {packagePlan.invoices.length} invoice
+            {packagePlan.invoices.length === 1 ? '' : 's'} plus a cover page — one page per invoice.
+          </p>
+          <p className="text-xs text-gray-500">
+            The package is a delivery document only. It does not change any invoice status.
+          </p>
+        </ConfirmDialog>
+      )}
+
+      {/* ── Package preview overlay ────────────────────────────────────────────
+          A sibling of the page root: the root carries print:hidden while the
+          package is open, so the printable package must live outside it for
+          window.print() to emit only the package documents. */}
+      {packageOpen && packagePlan.ok && (
+        <div className="fixed inset-0 z-50 overflow-auto bg-gray-100 p-4 print:static print:bg-white print:p-0">
+          <div className="print-hide mx-auto mb-4 flex max-w-4xl flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Invoice package ready</p>
+              <p className="text-xs text-gray-500">
+                {packagePlan.invoices.length} invoice{packagePlan.invoices.length === 1 ? '' : 's'} for{' '}
+                {orgNameOf(packagePlan.orgId ?? '')} · Total {formatCurrency(packagePlan.total)} —
+                choose “Save as PDF” in the print dialog.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:opacity-90"
+              >
+                <Printer className="h-4 w-4" />
+                Download PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => setPackageOpen(false)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+          <div className="mx-auto max-w-4xl space-y-6">
+            <PrintableInvoicePackage
+              orgName={orgNameOf(packagePlan.orgId ?? '')}
+              tenantId={packagePlan.orgId ?? ''}
+              generatedAt={new Date().toISOString()}
+              invoices={selected.map((invoice) => ({
+                invoiceNumber: invoice.invoiceNumber,
+                status: invoice.status,
+                tenantId: invoice.tenantId,
+                orgName: orgNameOf(invoice.tenantId),
+                period: invoice.period,
+                generatedAt: invoice.generatedAt,
+                issuedAt: invoice.issuedAt,
+                paidAt: invoice.paidAt,
+                totalAmount: invoice.totalAmount,
+                lineItems: invoice.lineItems,
+              }))}
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 }

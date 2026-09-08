@@ -77,7 +77,13 @@ export default function SuperAdminClaimsPage() {
 
   // PA2-A item 4: tenants list now comes from shared TenantsProvider so we
   // don't refetch /api/super-admin/tenants on every workspace navigation.
-  const { tenants } = useTenants();
+  const { tenants, error: tenantsError, isLoading: tenantsLoading, refresh: refreshTenants } = useTenants();
+
+  // Refresh tenants on mount to ensure the dropdown reflects any organizations
+  // added since the provider first loaded (e.g. after login or navigation).
+  useEffect(() => {
+    void refreshTenants();
+  }, [refreshTenants]);
   const [orgFilter, setOrgFilter] = useState('');
 
   const [claims, setClaims] = useState<Claim[]>([]);
@@ -274,9 +280,37 @@ export default function SuperAdminClaimsPage() {
   }
 
   function openGenerate() {
-    if (shortlistCount === 0) return;
     const tenantId = orgFilter || selectedTenantContext?.tenantId;
     if (!tenantId) return;
+    // Auto-select all eligible claims if nothing is manually selected, so the
+    // banner's "Generate Invoice" works without requiring manual checkboxes.
+    if (shortlistCount === 0) {
+      const next = new Map(selectedIds);
+      const nextClaimsMap = new Map(selectedClaimsMap);
+      for (const c of eligibleClaims) {
+        next.set(c.reimbursementId, c.amount);
+        nextClaimsMap.set(c.reimbursementId, {
+          reimbursementId: c.reimbursementId,
+          claimNumber: c.claimNumber ?? undefined,
+          tenantId,
+          tenantName: orgName,
+          employeeName: '',
+          clinicName: c.clinicName ?? undefined,
+          amount: c.amount,
+          description: '',
+          serviceDate: c.serviceDate ?? undefined,
+          sessionCount: c.sessionCount ?? undefined,
+          status: 'approved',
+          createdAt: '',
+          updatedAt: '',
+          invoiceId: null,
+          invoiceNumber: null,
+          invoiceStatus: null,
+        });
+      }
+      setSelectedIds(next);
+      setSelectedClaimsMap(nextClaimsMap);
+    }
     setSuccess(null);
     setGenerateOpen(true);
   }
@@ -371,6 +405,7 @@ export default function SuperAdminClaimsPage() {
                 id="org-select"
                 value={orgFilter}
                 onChange={(e) => handleOrgChange(e.target.value)}
+                disabled={tenantsLoading}
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
               >
                 <option value="">All organizations</option>
@@ -380,6 +415,17 @@ export default function SuperAdminClaimsPage() {
                   </option>
                 ))}
               </select>
+              {tenantsError && (
+                <p className="mt-1 text-xs text-red-600">
+                  Couldn't load organizations.{' '}
+                  <button
+                    onClick={() => void refreshTenants()}
+                    className="font-medium text-red-700 underline hover:text-red-800"
+                  >
+                    Retry
+                  </button>
+                </p>
+              )}
             </div>
             <p className="pb-1 text-xs text-gray-500">
               Billing happens one organization at a time. Select an organization to

@@ -14,7 +14,7 @@ interface PrintableLineItem {
   serviceDate?: string;
 }
 
-interface PrintableInvoiceProps {
+export interface PrintableInvoiceProps {
   invoiceNumber: string;
   status: string;
   tenantId: string;
