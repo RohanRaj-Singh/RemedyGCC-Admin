@@ -12,6 +12,8 @@ const DEFAULT_DEVELOPMENT_MONGODB_URI = 'mongodb://127.0.0.1:27017/remedygcc';
 
 interface RunMongoScriptOptions {
   label?: string;
+  /** When set, the script runs against this database via getSiblingDB(). */
+  targetDb?: string;
 }
 
 interface MongoshScriptErrorPayload {
@@ -52,8 +54,9 @@ function getMongoshPath(): string {
   return process.platform === 'win32' ? 'C:\\mongosh\\bin\\mongosh.exe' : 'mongosh';
 }
 
-function buildScript(scriptBody: string, payload: unknown): string {
+function buildScript(scriptBody: string, payload: unknown, options: RunMongoScriptOptions = {}): string {
   const encodedPayload = Buffer.from(JSON.stringify(payload ?? null), 'utf8').toString('base64url');
+  const dbSwitch = options.targetDb ? `\ndb = db.getSiblingDB('${options.targetDb}');\n` : '';
 
   return `
 const __payload = JSON.parse(Buffer.from(${JSON.stringify(encodedPayload)}, 'base64url').toString('utf8'));
@@ -79,9 +82,8 @@ const __strip = (value) => {
   return next;
 };
 
-(async () => {
-  try {
-    ${scriptBody}
+try {
+    ${dbSwitch}${scriptBody}
   } catch (error) {
     __emit({
       __error: {
@@ -94,7 +96,6 @@ const __strip = (value) => {
     });
     quit(1);
   }
-})();
 `;
 }
 
@@ -173,7 +174,7 @@ export async function runMongoScript<T>(
   try {
   // Use a temp file instead of --eval so large branding payloads do not exceed
   // Windows command-line limits when tenants include uploaded data URLs.
-  await writeFile(scriptPath, buildScript(scriptBody, payload ?? null), 'utf8');
+  await writeFile(scriptPath, buildScript(scriptBody, payload ?? null, options), 'utf8');
 
   const { stdout, stderr } = await execFileAsync(
     mongoshPath,
@@ -195,6 +196,17 @@ export async function runMongoScript<T>(
 
   if (stderr?.trim()) {
     console.error(`MONGOSH STDERR [${label}]:`, stderr);
+  }
+
+  // DIAG: log raw stdout for debugging empty results
+  const cleanLines = stdout.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (cleanLines.length > 0) {
+    console.log(`[DIAG-MONGO-RAW-${label}] last line:`, JSON.stringify(cleanLines[cleanLines.length - 1]));
+    if (cleanLines.length > 3) {
+      console.log(`[DIAG-MONGO-RAW-${label}] total lines:`, cleanLines.length);
+    }
+  } else {
+    console.warn(`[DIAG-MONGO-EMPTY-${label}] no output from mongosh`);
   }
 
   const parsed = parseMongoshPayload<T | MongoshParsedError>(stdout);

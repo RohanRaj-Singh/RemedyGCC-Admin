@@ -9,7 +9,11 @@ interface PrintablePaymentProps {
   paymentStatus: 'to_be_paid' | 'paid';
   amount?: number;
   paidAt?: string;
+  /** Operator-entered transfer date (the actual payout date). Falls back to `paidAt`. */
+  paymentDate?: string;
   paidBy?: string;
+  /** Payment method (e.g. "Bank transfer"). */
+  method?: string;
   bankReference?: string;
   notes?: string;
   invoiceNumber?: string;
@@ -49,7 +53,9 @@ export default function PrintablePayment({
   paymentStatus,
   amount,
   paidAt,
+  paymentDate,
   paidBy,
+  method,
   bankReference,
   notes,
   invoiceNumber,
@@ -73,8 +79,9 @@ export default function PrintablePayment({
     { label: 'Account', value: maskAccount(claim?.bankAccountNumber) },
     { label: 'Funding Invoice', value: invoiceNumber ? `${invoiceNumber}` : 'Not invoice-funded' },
     { label: 'Bank Reference', value: bankReference || '—' },
+    { label: 'Method', value: isPaid ? method || '—' : '—' },
     { label: 'Paid By', value: isPaid ? paidBy || '—' : '—' },
-    { label: 'Paid Date', value: isPaid ? fmtDate(paidAt) : '—' },
+    { label: 'Paid Date', value: isPaid ? fmtDate(paymentDate ?? paidAt) : '—' },
   ];
 
   return (
@@ -82,7 +89,7 @@ export default function PrintablePayment({
       {/* Brand header */}
       <div className="bg-primary text-white px-8 py-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-lg font-bold tracking-wide">REMEDY HEALTHCARE GROUP</p>
+          <p className="text-lg font-bold tracking-wide">REMEDY</p>
           <p className="text-xs text-white/70">Healthcare Reimbursement Services</p>
         </div>
         <div className="text-right">
@@ -139,7 +146,7 @@ export default function PrintablePayment({
 
       {/* Footer */}
       <div className="px-8 py-4 bg-gray-50 border-t border-gray-200 text-xs text-gray-500 flex flex-wrap justify-between gap-2">
-        <span>Remedy Healthcare Group · Clinic Payout</span>
+        <span>Remedy · Clinic Payout</span>
         <span className="font-mono">{paymentReference || ''}</span>
       </div>
     </div>

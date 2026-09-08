@@ -23,6 +23,16 @@
   --color-ring: hsl(156 63% 16%);
   --color-background: hsl(0 0% 100%);
   --color-foreground: hsl(0 0% 43%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(0 0% 43%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(0 0% 43%);
+  --color-success: hsl(152 60% 36%);
+  --color-success-foreground: hsl(0 0% 100%);
+  --color-warning: hsl(38 92% 50%);
+  --color-warning-foreground: hsl(0 0% 100%);
+  --color-info: hsl(212 95% 50%);
+  --color-info-foreground: hsl(0 0% 100%);
   
   /* Border radius */
   --radius-lg: 0.5rem;

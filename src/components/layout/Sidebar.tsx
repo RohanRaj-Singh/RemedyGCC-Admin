@@ -1,150 +1,385 @@
 'use client';
 
-import { LayoutDashboard, Building2, Heart, Scan, FileText, Settings, FileStack, Receipt, Users, ChevronLeft, ChevronRight, Loader2, FileSpreadsheet, Wallet } from 'lucide-react';
+import * as React from 'react';
 import Link from 'next/link';
-import { useState } from 'react';
 import { usePathname } from 'next/navigation';
+import {
+  ChevronLeft,
+  LogOut,
+  Settings,
+  User as UserIcon,
+  ChevronsUpDown,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthProvider';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { useLayout } from './LayoutContext';
+import {
+  BrandMark,
+  NAV_GROUPS,
+  UserAvatar,
+  initialsFor,
+  resolveActiveNav,
+} from './primitives';
 
 interface SidebarProps {
+  /** Override the active item id (used by pages that embed a sub-sidebar). */
   activeTab?: string;
   onTabChange?: (tab: string) => void;
+  /** When true, the sidebar is rendered as a fixed drawer (mobile). */
+  asDrawer?: boolean;
+  onNavigate?: () => void;
 }
 
-const menuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/' },
-  { id: 'tenants', label: 'Tenants', icon: Building2, href: '/tenants' },
-  { id: 'clinics', label: 'Clinics', icon: Heart, href: '/clinics' },
-  { id: 'reimbursements', label: 'Claims', icon: Receipt, href: '/reimbursements' },
-  { id: 'payments', label: 'Payments', icon: Wallet, href: '/payments' },
-  { id: 'invoices', label: 'Invoices', icon: FileSpreadsheet, href: '/invoices' },
-  { id: 'employees', label: 'Employees', icon: Users, href: '/employees' },
-  { id: 'scanners', label: 'Scanners', icon: Scan, href: '/scanners' },
-  { id: 'logs', label: 'System Logs', icon: FileText, href: '/logs' },
-  { id: 'attribute-templates', label: 'Attribute Templates', icon: FileStack, href: '/attribute-templates' },
-  { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
-];
-
-export function Sidebar({ activeTab: forcedActiveTab, onTabChange }: SidebarProps) {
-  const [collapsed, setCollapsed] = useState(false);
+export function Sidebar({
+  activeTab: forcedActiveTab,
+  onTabChange,
+  asDrawer = false,
+  onNavigate,
+}: SidebarProps) {
+  const { sidebarCollapsed, setMobileNavOpen } = useLayout();
   const pathname = usePathname();
-  const { admin, isLoading, logout } = useAuth();
+  const { admin, logout } = useAuth();
 
-  // Derive active tab from pathname if not forced
-  const activeTab = forcedActiveTab ?? menuItems.find((item) =>
-    item.href === '/'
-      ? pathname === '/'
-      : pathname?.startsWith(item.href),
-  )?.id;
+  const activeId = forcedActiveTab ?? resolveActiveNav(pathname ?? null)?.id;
 
-  if (isLoading) {
-    return (
+  const widthClass = sidebarCollapsed ? 'w-[4.25rem]' : 'w-64';
+  const roleLabel = (admin?.role ?? '').replace('_', ' ');
+  const initials = initialsFor(admin?.email);
+
+  return (
+    <TooltipProvider delayDuration={250}>
       <aside
-        className="fixed left-0 top-0 h-full flex items-center justify-center"
-        style={{
-          width: '16rem',
-          minWidth: '16rem',
-          backgroundColor: 'var(--primary)',
-        }}
+        data-collapsed={sidebarCollapsed}
+        data-drawer={asDrawer}
+        className={cn(
+          'flex h-full flex-col border-r bg-card transition-[width] duration-300 ease-out',
+          widthClass,
+          asDrawer && 'shadow-xl',
+        )}
       >
-        <Loader2 className="h-8 w-8 animate-spin text-white/60" />
+        {/* Brand — single source of truth. The collapse toggle lives in
+            the Header (single source) — never here, to avoid the duplicate
+            button bug. */}
+        <div
+          className={cn(
+            'flex h-16 items-center gap-2 border-b border-border px-3',
+            sidebarCollapsed && 'justify-center px-2',
+          )}
+        >
+          <BrandMark size="md" iconOnly={sidebarCollapsed} showLabel={!sidebarCollapsed} />
+          {asDrawer && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setMobileNavOpen(false)}
+              aria-label="Close navigation"
+              className="ml-auto"
+            >
+              <ChevronLeft />
+            </Button>
+          )}
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 overflow-y-auto px-2 py-3">
+          {NAV_GROUPS.map((group, idx) => (
+            <div key={group.label} className={cn(idx > 0 && 'mt-4')}>
+              {!sidebarCollapsed && (
+                <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group.label}
+                </p>
+              )}
+              <ul className="space-y-0.5">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeId === item.id;
+                  const link = (
+                    <Link
+                      href={item.href}
+                      onClick={() => {
+                        onTabChange?.(item.id);
+                        onNavigate?.();
+                      }}
+                      aria-current={isActive ? 'page' : undefined}
+                      title={sidebarCollapsed ? item.label : undefined}
+                      className={cn(
+                        'group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-secondary text-foreground'
+                          : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary transition-opacity',
+                          isActive ? 'opacity-100' : 'opacity-0',
+                        )}
+                      />
+                      <Icon
+                        className={cn(
+                          'h-4 w-4 shrink-0 transition-colors',
+                          isActive
+                            ? 'text-primary'
+                            : 'text-muted-foreground group-hover:text-foreground',
+                        )}
+                      />
+                      {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                    </Link>
+                  );
+                  if (!sidebarCollapsed) return <li key={item.id}>{link}</li>;
+                  return (
+                    <li key={item.id}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>{link}</TooltipTrigger>
+                        <TooltipContent side="right">{item.label}</TooltipContent>
+                      </Tooltip>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+
+        {/* Footer — user card + logout. Always present, regardless of
+            collapsed state. The whole card is the account trigger; logout
+            gets its own visible button on the right when expanded. */}
+        {admin && (
+          <div
+            className={cn(
+              'border-t border-border p-2',
+              asDrawer && 'pb-3',
+            )}
+          >
+            <UserFooter
+              email={admin.email}
+              roleLabel={roleLabel}
+              initials={initials}
+              collapsed={sidebarCollapsed}
+              asDrawer={asDrawer}
+              onSignOut={() => void logout()}
+              onNavigate={onNavigate}
+            />
+          </div>
+        )}
       </aside>
+    </TooltipProvider>
+  );
+}
+
+/* ------------------------------------------------------------------------ */
+/*                          Sidebar user footer                              */
+/* ------------------------------------------------------------------------ */
+
+interface UserFooterProps {
+  email: string;
+  roleLabel: string;
+  initials: string;
+  collapsed: boolean;
+  asDrawer: boolean;
+  onSignOut: () => void;
+  onNavigate?: () => void;
+}
+
+/**
+ * Prominent user card pinned to the bottom of the sidebar.
+ *
+ * - Expanded: avatar + email + role chip + visible "Sign out" button.
+ * - Collapsed: avatar becomes a DropdownMenu trigger with Profile / Settings
+ *   / Sign out.
+ * - Drawer (mobile): same as expanded but no collapse consideration.
+ */
+function UserFooter({
+  email,
+  roleLabel,
+  initials,
+  collapsed,
+  asDrawer,
+  onSignOut,
+  onNavigate,
+}: UserFooterProps) {
+  // Collapsed — the avatar itself is a DropdownMenu trigger.
+  if (collapsed && !asDrawer) {
+    return (
+      <div className="flex flex-col items-center gap-2">
+        <UserAccountMenu
+          email={email}
+          roleLabel={roleLabel}
+          initials={initials}
+          onSignOut={onSignOut}
+          align="end"
+          side="right"
+        >
+          <button
+            type="button"
+            aria-label={`Account menu for ${email}`}
+            className="rounded-full ring-2 ring-transparent transition-all hover:ring-primary/30 focus-visible:outline-none focus-visible:ring-primary"
+          >
+            <UserAvatar email={email} size="md" />
+          </button>
+        </UserAccountMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={onSignOut}
+              aria-label="Sign out"
+              className="text-muted-foreground hover:text-destructive"
+            >
+              <LogOut />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Sign out</TooltipContent>
+        </Tooltip>
+      </div>
     );
   }
 
-  const handleLogout = async () => {
-    await logout();
-  };
-
+  // Expanded (or drawer) — show the full card.
   return (
-    <aside
-      className={cn(
-        "fixed left-0 top-0 h-full transition-all duration-300 z-50",
-        collapsed ? "w-16" : "w-64"
-      )}
-      style={{
-        width: collapsed ? '4rem' : '16rem',
-        minWidth: collapsed ? '4rem' : '16rem',
-        backgroundColor: 'var(--primary)',
-      }}
+    <UserAccountMenu
+      email={email}
+      roleLabel={roleLabel}
+      initials={initials}
+      onSignOut={onSignOut}
+      align="start"
+      side="top"
     >
-      <div className="h-16 flex items-center justify-between px-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
-        {!collapsed && (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--primary-foreground)' }}>
-              <span className="font-bold text-sm" style={{ color: 'var(--primary)' }}>R</span>
-            </div>
-            <span className="font-bold text-lg text-white">RemedyGCC</span>
-          </div>
+      <div
+        role="button"
+        tabIndex={0}
+        className={cn(
+          'group flex w-full cursor-pointer items-center gap-3 rounded-lg p-2 text-left transition-colors',
+          'hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
         )}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-1.5 rounded-lg transition-colors"
-          style={{ color: 'rgba(255,255,255,0.7)' }}
-        >
-          {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
-        </button>
-      </div>
-
-      <nav className="p-3 space-y-1">
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <Link
-              key={item.id}
-              href={item.href}
-              onClick={() => onTabChange?.(item.id)}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
-                isActive ? "text-white shadow-lg" : "text-white/60 hover:text-white hover:bg-white/10"
-              )}
-              style={isActive ? { background: 'rgba(255,255,255,0.15)' } : {}}
-              title={collapsed ? item.label : undefined}
-            >
-              <Icon className="w-5 h-5 shrink-0" />
-              {!collapsed && <span className="font-medium">{item.label}</span>}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <div className="absolute bottom-0 left-0 right-0 p-3 border-t space-y-2" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
-        {admin && (
-          <div className={cn(
-            "px-3 py-2 rounded-lg",
-            collapsed && "text-center px-1"
-          )}
-          style={{ background: 'rgba(255,255,255,0.05)' }}
+      >
+        <UserAvatar email={email} size="md" />
+        <div className="min-w-0 flex-1">
+          <p
+            className="truncate text-xs font-semibold text-foreground"
+            title={email}
           >
-            {!collapsed && (
-              <>
-                <p className="text-white text-sm font-medium truncate">{admin.email}</p>
-                <p className="text-white/50 text-xs capitalize">{admin.role.replace('_', ' ')}</p>
-              </>
-            )}
-            {collapsed && (
-              <div className="text-white/50 text-xs font-medium">
-                {admin.email.charAt(0).toUpperCase()}
-              </div>
-            )}
-          </div>
-        )}
-        <button
-          onClick={handleLogout}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/60 hover:text-red-400 hover:bg-white/10 transition-all duration-200",
-            collapsed && "justify-center"
-          )}
-          title={collapsed ? "Logout" : undefined}
-        >
-          <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          {!collapsed && <span className="font-medium">Logout</span>}
-        </button>
+            {email}
+          </p>
+          <Badge variant="secondary" className="mt-0.5">
+            {roleLabel || 'User'}
+          </Badge>
+        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onSignOut();
+              }}
+              aria-label="Sign out"
+              className="text-muted-foreground opacity-70 transition-opacity hover:text-destructive group-hover:opacity-100"
+            >
+              <LogOut />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">Sign out</TooltipContent>
+        </Tooltip>
       </div>
-    </aside>
+    </UserAccountMenu>
   );
 }
+
+interface UserAccountMenuProps {
+  email: string;
+  roleLabel: string;
+  initials: string;
+  onSignOut: () => void;
+  align?: 'start' | 'end' | 'center';
+  side?: 'top' | 'right' | 'bottom' | 'left';
+  children: React.ReactNode;
+}
+
+/**
+ * Reusable account menu — used by both the sidebar user card and the
+ * header user menu (when triggered from the avatar).
+ */
+export function UserAccountMenu({
+  email,
+  roleLabel,
+  initials,
+  onSignOut,
+  align = 'end',
+  side = 'bottom',
+  children,
+}: UserAccountMenuProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
+      <DropdownMenuContent
+        align={align}
+        side={side}
+        sideOffset={8}
+        className="min-w-[16rem] p-0"
+      >
+        <DropdownMenuLabel className="font-normal">
+          <div className="flex items-center gap-3 px-1 py-1">
+            <UserAvatar email={email} size="lg" className="h-10 w-10" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-foreground" title={email}>
+                {email}
+              </p>
+              <Badge variant="secondary" className="mt-1">
+                {roleLabel || 'User'}
+              </Badge>
+            </div>
+          </div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem onSelect={() => (window.location.href = '/settings')}>
+            <UserIcon />
+            Profile
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => (window.location.href = '/settings')}>
+            <Settings />
+            Settings
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={onSignOut}
+          className="text-destructive focus:text-destructive data-[highlighted]:text-destructive"
+        >
+          <LogOut />
+          Sign out
+          <span className="ml-auto inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+            ⌘Q
+          </span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// Suppress unused warning for helper retained for callers that still use it.
+export const _initialsFor = initialsFor;
+// Keep the divider icon exported for future use.
+export { ChevronsUpDown as _ChevronsUpDown };

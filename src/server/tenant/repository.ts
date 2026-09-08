@@ -309,6 +309,39 @@ __emit({
 `);
 }
 
+/**
+ * Lightweight tenant counts by status.
+ *
+ * PA2-C: replaces the previous "find every tenant, then count in memory"
+ * implementation in `getTenantStats` with four indexed `countDocuments`
+ * queries. The `tenant_status_idx` index (declared in this file's index
+ * script) makes each query a single B-tree walk.
+ *
+ * Used by the Super Admin dashboard summary (hot path) and by the
+ * Tenants workspace. Other counts that still need tenant data
+ * (branding summary, total submissions) are not in this helper.
+ */
+export interface TenantStatusCounts {
+  total: number;
+  draft: number;
+  active: number;
+  disabled: number;
+  archived: number;
+}
+
+export async function getTenantStatusCounts(): Promise<TenantStatusCounts> {
+  return runMongoScript<TenantStatusCounts>(`
+const [total, draft, active, disabled, archived] = [
+  db.tenants.countDocuments({}),
+  db.tenants.countDocuments({ status: "draft" }),
+  db.tenants.countDocuments({ status: "active" }),
+  db.tenants.countDocuments({ status: "disabled" }),
+  db.tenants.countDocuments({ status: "archived" }),
+];
+__emit({ total, draft, active, disabled, archived });
+`);
+}
+
 export async function getTenantDetailData(
   tenantId: string,
 ): Promise<TenantDetailData> {

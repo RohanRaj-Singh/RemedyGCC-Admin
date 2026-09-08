@@ -28,6 +28,7 @@ import {
   getTenantDetailData,
   getTenantDocumentBySlug,
   getTenantListData,
+  getTenantStatusCounts,
   insertTenantDocument,
   publishTenantRuntimeDocuments,
   updateTenantDocument,
@@ -1491,14 +1492,21 @@ export async function getTenantStats(): Promise<{
   totalSubmissions: number;
 }> {
   await ensureTenantModuleIndexes();
-  const listData = await getTenantListData();
+  // PA2-C: status counts come from a direct, indexed countDocuments pass
+  // (cheap). Branding summary and total submissions still need the
+  // tenant list and the raw-responses aggregate, which `getTenantListData`
+  // provides. The two calls are independent, so we run them in parallel.
+  const [statusCounts, listData] = await Promise.all([
+    getTenantStatusCounts(),
+    getTenantListData(),
+  ]);
 
   return {
-    total: listData.tenants.length,
-    draft: listData.tenants.filter((tenant) => tenant.status === 'draft').length,
-    active: listData.tenants.filter((tenant) => tenant.status === 'active').length,
-    disabled: listData.tenants.filter((tenant) => tenant.status === 'disabled').length,
-    archived: listData.tenants.filter((tenant) => tenant.status === 'archived').length,
+    total: statusCounts.total,
+    draft: statusCounts.draft,
+    active: statusCounts.active,
+    disabled: statusCounts.disabled,
+    archived: statusCounts.archived,
     activeRuntimeConfigs: listData.tenants.filter((tenant) => Boolean(tenant.activeRuntimeConfigId)).length,
     byBranding: {
       custom: listData.tenants.filter((tenant) =>

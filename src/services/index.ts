@@ -13,4 +13,3 @@ export type {
 export { tenantService, type TenantFilters } from './tenant-service';
 export { clinicService, type ClinicFilters } from './clinic-service';
 export { scannerService, type ScannerFilters } from './scanner-service';
-export { logService, type LogFilters } from './log-service';

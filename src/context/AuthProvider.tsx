@@ -1,9 +1,19 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { ToastProvider } from '@/components/ui/toast';
+import { installUnauthorizedHandler } from '@/lib/api-client';
 
-interface AdminInfo {
+export interface AdminInfo {
   id: string;
   email: string;
   role: string;
@@ -22,19 +32,54 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 interface AuthProviderProps {
   children: ReactNode;
+  /** Admin info resolved server-side from the session cookie. */
+  initialAdmin?: AdminInfo | null;
 }
 
-export function AuthProvider({ children }: AuthProviderProps) {
+/**
+ * Pages reachable without a session — used to short-circuit the auto-redirect
+ * and prevent loops (e.g. when the user lands on /login after their session
+ * expired, we must NOT immediately bounce them back to /login).
+ */
+const PUBLIC_PATHS = new Set(['/login', '/forgot-password', '/reset-password']);
+
+function buildLoginRedirect(currentPath: string): string {
+  const safePath = currentPath && currentPath.startsWith('/') ? currentPath : '/';
+  const params = new URLSearchParams({ reason: 'session-expired', next: safePath });
+  return `/login?${params.toString()}`;
+}
+
+export function AuthProvider({ children, initialAdmin }: AuthProviderProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [admin, setAdmin] = useState<AdminInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [admin, setAdmin] = useState<AdminInfo | null>(initialAdmin ?? null);
+  const [isLoading, setIsLoading] = useState(initialAdmin ? false : true);
+  const redirectingRef = useRef(false);
+
+  // Install the global 401 interceptor once on mount.
+  useEffect(() => {
+    installUnauthorizedHandler();
+  }, []);
+
+  // Auto-redirect to /login whenever the user loses their session.
+  // - Skips public paths (login, etc.) to avoid bounce loops.
+  // - Skips while still loading the initial auth check.
+  // - Skips when we already started redirecting.
+  useEffect(() => {
+    if (isLoading) return;
+    if (admin) return;
+    if (redirectingRef.current) return;
+    if (!pathname) return;
+    if (PUBLIC_PATHS.has(pathname)) return;
+    redirectingRef.current = true;
+    router.replace(buildLoginRedirect(pathname));
+  }, [admin, isLoading, pathname, router]);
 
   const checkAuth = useCallback(async () => {
     try {
       const response = await fetch('/api/auth/me', {
         method: 'GET',
-        credentials: 'include'
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -51,8 +96,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   useEffect(() => {
+    // If we were hydrated with an admin from the server, no need to re-check.
+    if (initialAdmin) return;
     checkAuth();
-  }, [checkAuth]);
+  }, [checkAuth, initialAdmin]);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
@@ -72,7 +119,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setAdmin(data.admin);
       return { success: true };
-    } catch (error) {
+    } catch {
       return { success: false, error: 'An unexpected error occurred' };
     } finally {
       setIsLoading(false);
@@ -89,13 +136,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Continue with redirect even if API fails
     } finally {
       setAdmin(null);
+      // Reset the redirect-guard so a future expired session can bounce again.
+      redirectingRef.current = false;
       router.push('/login');
     }
   };
 
   return (
-    <AuthContext.Provider value={{ admin, isLoading, isAuthenticated: !!admin, login, logout, checkAuth }}>
-      {children}
+    <AuthContext.Provider
+      value={{
+        admin,
+        isLoading,
+        isAuthenticated: !!admin,
+        login,
+        logout,
+        checkAuth,
+      }}
+    >
+      <ToastProvider>{children}</ToastProvider>
     </AuthContext.Provider>
   );
 }

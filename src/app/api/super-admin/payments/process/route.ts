@@ -8,8 +8,9 @@ export const runtime = 'nodejs';
  * Super Admin Payout Processing
  *
  * Proxies to the Tenant App's `/api/admin/payments/process` endpoint with the
- * shared API key. Body: `{ claimIds?: string[] }` (empty = process every
- * `to_be_paid` claim). Returns `{ processed: number }`.
+ * shared API key. Body: `{ claimIds?: string[] }` — `claimIds` is required and
+ * must name at least one claim; an empty/absent selection is rejected with
+ * `NO_CLAIMS_SELECTED`. Returns `{ processed: number, rejected: { claimId, reason }[] }`.
  */
 export async function POST(request: NextRequest) {
   const auth = await requireApiAuth(request);

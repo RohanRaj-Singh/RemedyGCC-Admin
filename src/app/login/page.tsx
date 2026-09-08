@@ -1,40 +1,46 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock, Mail, Loader2, AlertCircle } from 'lucide-react';
+import { Lock, Mail, Loader2, AlertCircle, Clock } from 'lucide-react';
+import { useAuth } from '@/context/AuthProvider';
+
+/**
+ * Read query params synchronously from window.location so the banner renders
+ * on first paint (without waiting for the useSearchParams() hook, which
+ * requires a Suspense boundary in Next 15).
+ */
+function readQueryParam(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get(key);
+}
 
 export default function LoginPage() {
   const router = useRouter();
+  const { admin, isLoading: authLoading, login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Read query params lazily so the initial render isn't suspended.
+  const [reason, setReason] = useState<string | null>(null);
+  const [nextPath, setNextPath] = useState<string>('/');
+
   useEffect(() => {
-    // Check if already authenticated
-    checkAuth();
+    setReason(readQueryParam('reason'));
+    setNextPath(readQueryParam('next') || '/');
   }, []);
 
-  const checkAuth = async () => {
-    try {
-      const response = await fetch('/api/auth/me', {
-        method: 'GET',
-        credentials: 'include',
-      });
+  const sessionExpired = reason === 'session-expired';
 
-      if (response.ok) {
-        // Already authenticated - redirect to dashboard
-        router.push('/scanners');
-        return;
-      }
-    } catch {
-      // Continue to login
-    } finally {
-      setIsLoading(false);
+  // If the user is already signed in (server-resolved or client-resolved),
+  // skip the form and head straight to the original destination.
+  useEffect(() => {
+    if (!authLoading && admin) {
+      router.replace(nextPath.startsWith('/') ? nextPath : '/');
     }
-  };
+  }, [admin, authLoading, nextPath, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,47 +50,32 @@ export default function LoginPage() {
       setError('Please enter your email address.');
       return;
     }
-
     if (!password) {
       setError('Please enter your password.');
       return;
     }
 
     setIsSubmitting(true);
-
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-        credentials: 'include',
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setError(data.error || 'Login failed. Please try again.');
+      const result = await login(email, password);
+      if (!result.success) {
+        setError(result.error ?? 'Login failed. Please try again.');
         return;
       }
-
-      // Login successful - redirect to dashboard
-      router.push('/scanners');
-    } catch (err) {
-      console.error('Login error:', err);
+      router.replace(nextPath.startsWith('/') ? nextPath : '/');
+    } catch {
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (isLoading) {
+  if (authLoading || admin) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-gray-500">Loading...</p>
+          <p className="text-gray-500">Loading…</p>
         </div>
       </div>
     );
@@ -102,10 +93,27 @@ export default function LoginPage() {
           <p className="text-gray-500 mt-1">Sign in to manage your platform</p>
         </div>
 
+        {/* Session-expired banner */}
+        {sessionExpired && (
+          <div
+            role="alert"
+            className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900"
+          >
+            <div className="flex items-start gap-3">
+              <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">Your session has expired</p>
+                <p className="mt-0.5 text-xs text-amber-800/80">
+                  Please sign in again to continue where you left off.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Login Form */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email Field */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address
@@ -127,7 +135,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Password Field */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 Password
@@ -149,7 +156,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Error Message */}
             {error && (
               <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3">
                 <div className="flex items-center gap-2">
@@ -159,7 +165,6 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={isSubmitting}
@@ -177,7 +182,6 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Footer */}
         <p className="text-center text-sm text-gray-400 mt-6">
           Protected area. Authorized access only.
         </p>

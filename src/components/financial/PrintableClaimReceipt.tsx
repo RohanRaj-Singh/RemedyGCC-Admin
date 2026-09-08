@@ -64,7 +64,7 @@ export default function PrintableClaimReceipt({
       {/* Brand header */}
       <div className="bg-primary text-white px-8 py-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-lg font-bold tracking-wide">REMEDY HEALTHCARE GROUP</p>
+          <p className="text-lg font-bold tracking-wide">REMEDY</p>
           <p className="text-xs text-white/70">Healthcare Reimbursement Services</p>
         </div>
         <div className="text-right">
@@ -125,7 +125,7 @@ export default function PrintableClaimReceipt({
 
       {/* Footer */}
       <div className="px-8 py-4 bg-gray-50 border-t border-gray-200 text-xs text-gray-500 flex flex-wrap justify-between gap-2">
-        <span>Remedy Healthcare Group · Claim Payment Receipt</span>
+        <span>Remedy · Claim Payment Receipt</span>
         <span className="font-mono">{claimNumber || reimbursementId}</span>
       </div>
     </div>

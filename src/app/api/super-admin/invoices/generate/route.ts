@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
  * Super Admin — Generate Invoice
  *
  * Proxies to the Tenant App's `/api/invoices/generate` endpoint with the shared
- * API key. Body: `{ tenantId, from, to }`.
+ * API key. Body: `{ tenantId, claimIds, generatedBy }`.
  */
 export async function POST(request: NextRequest) {
   const auth = await requireApiAuth(request);

@@ -20,7 +20,6 @@ import {
   deleteAllAdminSessions,
   updateAdminLastLogin,
   updateAdminPassword,
-  updateSessionAccess,
   getAdminSessionCount,
 } from '@/server/auth/repository';
 
@@ -162,8 +161,10 @@ export async function validateSession(sessionToken: string): Promise<SessionInfo
       return null;
     }
 
-    // Update last accessed time
-    await updateSessionAccess(sessionToken);
+    // PA2-A: previously this also wrote `lastAccessedAt` on every validate via
+    // `updateSessionAccess`. That write was never read by any consumer — the
+    // TTL index on `expiresAt` is the only session-lifetime control. Removing
+    // it drops one Mongo write per `/api/auth/me` poll and per workspace nav.
 
     return {
       admin: {

@@ -167,17 +167,6 @@ __emit(__strip(session));
 `, { sessionToken });
 }
 
-export async function updateSessionAccess(sessionToken: string): Promise<void> {
-  await ensureAuthIndexes();
-  await runMongoScript(`
-db.adminSessions.updateOne(
-  { sessionToken: __payload.sessionToken },
-  { $set: { lastAccessedAt: new Date().toISOString() } }
-);
-__emit(true);
-`, { sessionToken });
-}
-
 export async function deleteSession(sessionToken: string): Promise<void> {
   await ensureAuthIndexes();
   await runMongoScript(`
@@ -192,16 +181,6 @@ export async function deleteAllAdminSessions(adminId: string): Promise<void> {
 db.adminSessions.deleteMany({ adminId: __payload.adminId });
 __emit(true);
 `, { adminId });
-}
-
-export async function cleanupExpiredSessions(): Promise<number> {
-  await ensureAuthIndexes();
-  return runMongoScript<number>(`
-const result = db.adminSessions.deleteMany({
-  expiresAt: { $lt: new Date().toISOString() }
-});
-__emit(result.deletedCount);
-`, {});
 }
 
 export async function getAdminSessionCount(adminId: string): Promise<number> {

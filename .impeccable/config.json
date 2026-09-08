@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "ai-color-palette",
+        "value": "*",
+        "files": [
+          "src/app/reimbursements/[id]/page.tsx"
+        ],
+        "createdAt": "2026-08-26T13:16:13.862Z",
+        "reason": "Claude: flat semantic status tint (purple-50/600) distinguishing to_be_paid state; no gradient or cyan-on-dark present; pre-existing code outside Phase 3 scope, palette harmonization deferred to visual-modernization phase"
+      }
+    ]
+  }
+}
