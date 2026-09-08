@@ -390,7 +390,7 @@ function EmptyState({ filter, hasAny }: { filter: Filter; hasAny: boolean }) {
           <CheckCheck className="h-6 w-6" />
         </div>
         <div>
-          <p className="text-sm font-medium text-foreground">You're all caught up</p>
+          <p className="text-sm font-medium text-foreground">You&apos;re all caught up</p>
           <p className="mt-1 text-xs text-muted-foreground">No unread notifications.</p>
         </div>
       </div>

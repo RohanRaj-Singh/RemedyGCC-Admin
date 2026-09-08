@@ -417,7 +417,7 @@ export default function SuperAdminClaimsPage() {
               </select>
               {tenantsError && (
                 <p className="mt-1 text-xs text-red-600">
-                  Couldn't load organizations.{' '}
+                  Couldn&apos;t load organizations.{' '}
                   <button
                     onClick={() => void refreshTenants()}
                     className="font-medium text-red-700 underline hover:text-red-800"
